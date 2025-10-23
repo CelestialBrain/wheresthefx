@@ -236,6 +236,84 @@ export type Database = {
           },
         ]
       }
+      events_enriched: {
+        Row: {
+          comments_count: number
+          created_at: string
+          description: string | null
+          end_time: string | null
+          event_date: string
+          event_time: string | null
+          event_title: string
+          id: string
+          instagram_post_id: string | null
+          is_free: boolean
+          likes_count: number
+          location_id: string | null
+          needs_review: boolean
+          price: number | null
+          signup_url: string | null
+          status: string
+          updated_at: string
+          verified: boolean
+        }
+        Insert: {
+          comments_count?: number
+          created_at?: string
+          description?: string | null
+          end_time?: string | null
+          event_date: string
+          event_time?: string | null
+          event_title: string
+          id?: string
+          instagram_post_id?: string | null
+          is_free?: boolean
+          likes_count?: number
+          location_id?: string | null
+          needs_review?: boolean
+          price?: number | null
+          signup_url?: string | null
+          status?: string
+          updated_at?: string
+          verified?: boolean
+        }
+        Update: {
+          comments_count?: number
+          created_at?: string
+          description?: string | null
+          end_time?: string | null
+          event_date?: string
+          event_time?: string | null
+          event_title?: string
+          id?: string
+          instagram_post_id?: string | null
+          is_free?: boolean
+          likes_count?: number
+          location_id?: string | null
+          needs_review?: boolean
+          price?: number | null
+          signup_url?: string | null
+          status?: string
+          updated_at?: string
+          verified?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_enriched_instagram_post_id_fkey"
+            columns: ["instagram_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_enriched_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instagram_accounts: {
         Row: {
           bio: string | null
@@ -395,6 +473,51 @@ export type Database = {
           created_at?: string | null
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      locations: {
+        Row: {
+          created_at: string
+          floor_note: string | null
+          formatted_address: string | null
+          id: string
+          location_lat: number | null
+          location_lng: number | null
+          location_name: string
+          needs_review: boolean
+          place_id: string | null
+          total_events: number
+          updated_at: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          floor_note?: string | null
+          formatted_address?: string | null
+          id?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name: string
+          needs_review?: boolean
+          place_id?: string | null
+          total_events?: number
+          updated_at?: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          floor_note?: string | null
+          formatted_address?: string | null
+          id?: string
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string
+          needs_review?: boolean
+          place_id?: string | null
+          total_events?: number
+          updated_at?: string
+          verified?: boolean
         }
         Relationships: []
       }

@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Plus, RefreshCw, Instagram } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList } from "lucide-react";
+import { ReviewQueue } from "@/components/ReviewQueue";
 
 interface InstagramAccount {
   id: string;
@@ -237,8 +239,16 @@ const Admin = () => {
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold mb-4">Instagram Account Management</h1>
+        <h1 className="text-3xl font-bold mb-4">Admin Dashboard</h1>
+        
+        <Tabs defaultValue="scraping">
+          <TabsList>
+            <TabsTrigger value="scraping"><Instagram className="w-4 h-4 mr-2" />Scraping</TabsTrigger>
+            <TabsTrigger value="review"><ClipboardList className="w-4 h-4 mr-2" />Review Queue</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="scraping" className="space-y-6">
+            <div>
           
           {/* Last Scrape Status */}
           {lastRun && (
@@ -432,6 +442,13 @@ const Admin = () => {
             )}
           </div>
         </Card>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="review">
+            <ReviewQueue />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
