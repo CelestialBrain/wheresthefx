@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 240 10% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 15%;
+
+    --primary: 240 10% 15%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 240 10% 15%;
+
+    --muted: 0 0% 94%;
+    --muted-foreground: 240 5% 50%;
+
+    --accent: 280 85% 55%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 10% 88%;
+    --input: 240 10% 88%;
+    --ring: 280 85% 55%;
+
+    --radius: 0.5rem;
+
+    /* Custom tokens for mathematical theme */
+    --math-primary: 240 10% 15%;
+    --math-accent: 280 85% 55%;
+    --math-muted: 240 5% 65%;
+    
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 240 10% 10%;
+    --foreground: 0 0% 95%;
+
+    --card: 240 8% 12%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 240 8% 12%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 0 0% 95%;
+    --primary-foreground: 240 10% 15%;
+
+    --secondary: 240 8% 18%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 240 8% 18%;
+    --muted-foreground: 240 5% 60%;
+
+    --accent: 280 85% 60%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 8% 20%;
+    --input: 240 8% 20%;
+    --ring: 280 85% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  /* Math notation styling */
+  .math-function {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-style: italic;
+  }
+}
