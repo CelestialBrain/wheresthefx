@@ -9,14 +9,33 @@ import { useEventMarkers, useMostPopularEvent } from "@/hooks/useEventMarkers";
 import { MapFilters } from "./MapFilters";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-function MapCenterController({ center }: { center: LatLngExpression }) {
+function MapUpdater({ center }: { center: LatLngExpression }) {
   const map = useMap();
   
   useEffect(() => {
-    map.setView(center, 12);
+    if (map) {
+      map.setView(center, 12);
+    }
   }, [center, map]);
   
   return null;
+}
+
+function MapMarkers({ markers, onMarkerClick }: { markers: LocationMarker[]; onMarkerClick: (marker: LocationMarker) => void }) {
+  return (
+    <>
+      {markers.map((marker, index) => (
+        <Marker
+          key={`${marker.lat}-${marker.lng}-${index}`}
+          position={[marker.lat, marker.lng]}
+          icon={createMiddleFingerIcon(marker.eventCount)}
+          eventHandlers={{
+            click: () => onMarkerClick(marker),
+          }}
+        />
+      ))}
+    </>
+  );
 }
 
 interface EventMapProps {
@@ -70,22 +89,12 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
         className="w-full h-full"
         zoomControl={true}
       >
-        <MapCenterController center={mapCenter} />
+        <MapUpdater center={mapCenter} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        
-        {markers.map((marker, index) => (
-          <Marker
-            key={`${marker.lat}-${marker.lng}-${index}`}
-            position={[marker.lat, marker.lng]}
-            icon={createMiddleFingerIcon(marker.eventCount)}
-            eventHandlers={{
-              click: () => setSelectedMarker(marker),
-            }}
-          />
-        ))}
+        <MapMarkers markers={markers} onMarkerClick={setSelectedMarker} />
       </MapContainer>
 
       {selectedMarker && (
