@@ -39,11 +39,6 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       zoomControl: false,
     });
 
-    // Add zoom control in bottom-left
-    L.control.zoom({
-      position: 'bottomleft'
-    }).addTo(map);
-
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
       {

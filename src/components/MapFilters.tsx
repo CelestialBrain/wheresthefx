@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Calendar, User, Bookmark, Settings } from "lucide-react";
+import { Search, Calendar, User, Bookmark, Settings, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -124,7 +124,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
             <Select value={selectedPrice} onValueChange={handlePriceChange}>
               <SelectTrigger className="md:w-[150px] w-10 frosted-glass-button border-0 [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
                 <div className="flex items-center gap-2 w-full">
-                  <span className="text-sm font-bold shrink-0">₱</span>
+                  <DollarSign className="h-4 w-4 shrink-0" />
                   <span className="hidden md:block">
                     <SelectValue placeholder="Price" />
                   </span>
