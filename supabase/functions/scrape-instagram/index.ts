@@ -5,36 +5,71 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Interface for instagram-post-scraper actor output
-interface InstagramPostScraperOutput {
-  id: string;
-  shortCode: string;
-  type: 'Sidecar' | 'Image' | 'Video';
+// Interface for Apify dataset items
+interface ApifyDatasetItem {
+  id?: string;
+  shortCode?: string;
+  type?: 'Sidecar' | 'Image' | 'Video';
   caption?: string;
-  commentsCount: number;
-  dimensionsHeight: number;
-  dimensionsWidth: number;
-  displayUrl: string;
-  likesCount: number;
-  timestamp: string;
+  commentsCount?: number;
+  likesCount?: number;
+  timestamp?: string;
   locationName?: string | null;
-  locationSlug?: string | null;
   ownerFullName?: string;
-  ownerUsername: string;
-  ownerIsVerified: boolean;
-  url: string;
+  ownerUsername?: string;
+  ownerId?: string;
+  url?: string;
+  inputUrl?: string;
   hashtags?: string[];
   mentions?: string[];
+  error?: string;
+  errorDescription?: string;
+  childPosts?: any[];
 }
 
-// Extract dataset ID from full Apify URL or just the ID
-function extractDatasetId(input: string): string {
-  const match = input.match(/datasets\/([a-zA-Z0-9]+)/);
-  return match ? match[1] : input.trim();
+// Extract dataset ID and token from input
+function parseDatasetInput(input: string): { datasetId: string; token: string | undefined } {
+  const datasetMatch = input.match(/datasets\/([a-zA-Z0-9]+)/);
+  const datasetId = datasetMatch ? datasetMatch[1] : input.trim();
+  
+  const tokenMatch = input.match(/[?&]token=([^&]+)/);
+  const token = tokenMatch ? tokenMatch[1] : undefined;
+  
+  return { datasetId, token };
 }
 
-// Enhanced event parser for captions
-function parseEventFromCaption(caption: string): {
+// Extract username from Instagram URL
+function extractUsernameFromUrl(url: string): string | undefined {
+  if (!url) return undefined;
+  const match = url.match(/instagram\.com\/([^/?]+)/);
+  if (!match) return undefined;
+  let username = decodeURIComponent(match[1]).trim().toLowerCase();
+  if (username.startsWith('@')) username = username.slice(1);
+  return username || undefined;
+}
+
+// Convert relative date terms to actual dates
+function parseRelativeDate(text: string): string | null {
+  const now = new Date();
+  const lowercaseText = text.toLowerCase();
+  
+  if (lowercaseText.includes('tonight') || lowercaseText.includes('today')) {
+    return now.toISOString().split('T')[0];
+  }
+  
+  if (lowercaseText.includes('this weekend')) {
+    const dayOfWeek = now.getDay();
+    const daysUntilFriday = dayOfWeek <= 5 ? 5 - dayOfWeek : 0;
+    const friday = new Date(now);
+    friday.setDate(now.getDate() + daysUntilFriday);
+    return friday.toISOString().split('T')[0];
+  }
+  
+  return null;
+}
+
+// Enhanced event parser with strict filtering
+function parseEventFromCaption(caption: string, locationName?: string | null): {
   eventTitle?: string;
   eventDate?: string;
   eventTime?: string;
@@ -49,20 +84,66 @@ function parseEventFromCaption(caption: string): {
 
   const lowercaseCaption = caption.toLowerCase();
   
-  // Event indicators
+  // STEP 1: Check for exclusion patterns (skip generic celebrations)
+  const exclusionPatterns = [
+    /happy\s+birthday(?!\s+(party|celebration|bash|event))/i,
+    /#tbt\b/i,
+    /#throwback/i,
+    /thank\s+you\s+(to|for)/i,
+    /congratulations(?!\s+on\s+.*?\s+(opening|launch|event))/i,
+    /welcome\s+to\s+the\s+team/i,
+  ];
+  
+  for (const pattern of exclusionPatterns) {
+    if (pattern.test(caption)) {
+      // Unless it's an anniversary with a date and location
+      const hasAnniversary = /anniversary/i.test(caption);
+      if (hasAnniversary) {
+        // Check if there's a date
+        const datePatterns = [
+          /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?/i,
+          /\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/,
+          /(?:january|february|march|april|may|june|july|august|september|october|november|december) \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?/i,
+          /\d{1,2}-\d{1,2}-\d{2,4}/,
+        ];
+        const hasDate = datePatterns.some(p => p.test(caption));
+        const hasLocation = locationName || /(?:at|@|location:|venue:|place:)\s*([^\n,]+)/i.test(caption);
+        
+        if (!hasDate || !hasLocation) {
+          return { isEvent: false };
+        }
+        // Continue to event parsing
+      } else {
+        return { isEvent: false };
+      }
+    }
+  }
+  
+  // STEP 2: Check for event indicators
   const eventKeywords = [
     'party', 'event', 'happening', 'tonight', 'tomorrow', 'this weekend',
     'join us', 'rsvp', 'free entry', 'entrance', 'tickets', 'doors open',
     'gig', 'concert', 'show', 'performance', 'dj', 'live music',
-    'workshop', 'seminar', 'meetup', 'gathering', 'celebration'
+    'workshop', 'seminar', 'meetup', 'gathering', 'celebration',
+    'anniversary', 'opening', 'launch', 'festival', 'market'
   ];
-  const isEvent = eventKeywords.some(keyword => lowercaseCaption.includes(keyword));
+  const hasEventKeyword = eventKeywords.some(keyword => lowercaseCaption.includes(keyword));
 
-  if (!isEvent) {
+  if (!hasEventKeyword) {
     return { isEvent: false };
   }
 
-  // Extract title (first line or first sentence, max 100 chars)
+  // STEP 3: Check for location (required for events)
+  const locationPattern = /(?:at|@|location:|venue:|place:)\s*([^\n,]+)/i;
+  const locationMatch = caption.match(locationPattern);
+  const extractedLocation = locationMatch?.[1]?.trim();
+  const finalLocation = extractedLocation || locationName;
+  
+  if (!finalLocation) {
+    return { isEvent: false };
+  }
+
+  // STEP 4: Extract event details
   const lines = caption.split('\n').filter(line => line.trim());
   const eventTitle = lines[0]?.substring(0, 100) || undefined;
 
@@ -87,25 +168,42 @@ function parseEventFromCaption(caption: string): {
       break;
     }
   }
+  
+  // Handle relative dates
+  if (!eventDate) {
+    const relativeDate = parseRelativeDate(caption);
+    if (relativeDate) {
+      eventDate = relativeDate;
+    }
+  }
 
   // Enhanced time patterns
   const timePattern = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b/;
   const timeMatch = caption.match(timePattern);
   const eventTime = timeMatch?.[0];
 
-  // Extract location (look for common location indicators)
-  const locationPattern = /(?:at|@|location:|venue:|place:)\s*([^\n,]+)/i;
-  const locationMatch = caption.match(locationPattern);
-  const locationName = locationMatch?.[1]?.trim();
-
   return {
     eventTitle,
     eventDate,
     eventTime,
-    locationName,
+    locationName: finalLocation,
     signupUrl,
     isEvent: true,
   };
+}
+
+// Check if event date is in the past
+function isEventInPast(eventDateStr: string | undefined): boolean {
+  if (!eventDateStr) return false;
+  
+  try {
+    const eventDate = new Date(eventDateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return eventDate < today;
+  } catch {
+    return false;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -114,10 +212,12 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let runId: string | undefined;
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const apifyApiKey = Deno.env.get('APIFY_API_KEY')!;
+    const apifyApiKeySecret = Deno.env.get('APIFY_API_KEY');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -126,12 +226,39 @@ Deno.serve(async (req) => {
     try {
       body = await req.json();
     } catch {
-      // No body provided, that's okay
+      // No body provided
     }
 
-    const rawDatasetId = body.datasetId;
+    const rawDatasetInput = body.datasetId;
     const isAutomated = body.automated || false;
-    const datasetId = rawDatasetId ? extractDatasetId(rawDatasetId) : undefined;
+    
+    let datasetId: string | undefined;
+    let datasetToken: string | undefined;
+    
+    if (rawDatasetInput) {
+      const parsed = parseDatasetInput(rawDatasetInput);
+      datasetId = parsed.datasetId;
+      datasetToken = parsed.token;
+    }
+
+    // Determine which token to use
+    let finalToken: string | undefined;
+    if (datasetToken) {
+      finalToken = datasetToken;
+      console.log('Using token from dataset URL');
+    } else if (apifyApiKeySecret) {
+      finalToken = apifyApiKeySecret;
+      console.log('Using APIFY_API_KEY secret');
+    }
+
+    if (datasetId && !finalToken) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'No Apify token available. Either include token=... in the dataset URL or set APIFY_API_KEY in backend secrets.' 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Determine run type
     const runType = datasetId ? 'manual_dataset' : (isAutomated ? 'automated' : 'manual_scrape');
@@ -151,24 +278,25 @@ Deno.serve(async (req) => {
       console.error('Failed to create scrape run record:', runError);
     }
 
-    const runId = scrapeRun?.id;
+    runId = scrapeRun?.id;
 
     console.log(`Starting Instagram data import... Run ID: ${runId}, Type: ${runType}`);
 
     let totalScrapedPosts = 0;
     let totalUpdatedPosts = 0;
+    let totalSkipped = 0;
     const accountsFound = new Set<string>();
 
     // MODE 1: Dataset Import
-    if (datasetId) {
+    if (datasetId && finalToken) {
       console.log(`Fetching data from dataset: ${datasetId}`);
       
       const apifyResponse = await fetch(
-        `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyApiKey}`
+        `https://api.apify.com/v2/datasets/${datasetId}/items?token=${finalToken}&clean=1`
       );
 
       if (!apifyResponse.ok) {
-        const errorMsg = `Failed to fetch dataset: ${apifyResponse.statusText}`;
+        const errorMsg = `Failed to fetch dataset (${apifyResponse.status}): ${apifyResponse.statusText}`;
         console.error(errorMsg);
         
         if (runId) {
@@ -182,30 +310,73 @@ Deno.serve(async (req) => {
         throw new Error(errorMsg);
       }
 
-      const apifyData = await apifyResponse.json();
+      const apifyData: ApifyDatasetItem[] = await apifyResponse.json();
       console.log(`Dataset returned ${apifyData.length} items`);
 
-      const posts: InstagramPostScraperOutput[] = apifyData;
-
-      // Group posts by username and auto-create accounts
-      const postsByUsername = new Map<string, InstagramPostScraperOutput[]>();
-      for (const post of posts) {
-        const username = post.ownerUsername?.toLowerCase();
-        if (username) {
-          if (!postsByUsername.has(username)) {
-            postsByUsername.set(username, []);
-          }
-          postsByUsername.get(username)!.push(post);
+      // Process each item
+      for (const item of apifyData) {
+        // Skip error items
+        if (item.error || item.errorDescription) {
+          totalSkipped++;
+          console.log(`Skipping error item: ${item.error || item.errorDescription}`);
+          continue;
         }
-      }
 
-      console.log(`Found ${postsByUsername.size} unique accounts in dataset`);
+        // Skip if no ID or shortCode
+        if (!item.id && !item.shortCode) {
+          totalSkipped++;
+          console.log('Skipping item without ID or shortCode');
+          continue;
+        }
 
-      // Process posts for each username found
-      for (const [username, accountPosts] of postsByUsername.entries()) {
+        const postId = item.id || item.shortCode || 'unknown';
+
+        // Resolve username
+        let username = item.ownerUsername?.trim().toLowerCase();
+        if (!username) {
+          username = extractUsernameFromUrl(item.inputUrl || item.url || '');
+        }
+        if (!username) {
+          totalSkipped++;
+          console.log(`Skipping post ${postId} - no username found`);
+          continue;
+        }
+
         accountsFound.add(username);
+
+        // Normalize fields
+        const likesCount = (item.likesCount === -1 || !item.likesCount) ? 0 : item.likesCount;
+        const commentsCount = item.commentsCount || 0;
+        const postedAt = item.timestamp;
         
-        // Check if account exists, if not create it
+        if (!postedAt) {
+          totalSkipped++;
+          console.log(`Skipping post ${postId} - no timestamp`);
+          continue;
+        }
+
+        const hashtags = item.hashtags || [];
+        const mentions = item.mentions || [];
+        const postUrl = item.url || `https://www.instagram.com/p/${item.shortCode}/`;
+
+        // Parse event information
+        const eventInfo = parseEventFromCaption(item.caption || '', item.locationName);
+
+        // Skip non-events
+        if (!eventInfo.isEvent) {
+          totalSkipped++;
+          console.log(`Skipping post ${postId} - not an event`);
+          continue;
+        }
+
+        // Skip past events
+        if (isEventInPast(eventInfo.eventDate)) {
+          totalSkipped++;
+          console.log(`Skipping post ${postId} - event is in the past`);
+          continue;
+        }
+
+        // Ensure account exists
         let { data: account } = await supabase
           .from('instagram_accounts')
           .select('id')
@@ -214,13 +385,11 @@ Deno.serve(async (req) => {
 
         if (!account) {
           console.log(`Creating new account for @${username}`);
-          const firstPost = accountPosts[0];
           const { data: newAccount, error: createError } = await supabase
             .from('instagram_accounts')
             .insert({
               username: username,
-              display_name: firstPost.ownerFullName,
-              is_verified: firstPost.ownerIsVerified || false,
+              display_name: item.ownerFullName,
               is_active: true,
               last_scraped_at: new Date().toISOString(),
             })
@@ -233,91 +402,101 @@ Deno.serve(async (req) => {
           }
           account = newAccount;
         } else {
-          // Update existing account info
-          const firstPost = accountPosts[0];
+          // Update existing account
           await supabase
             .from('instagram_accounts')
             .update({
-              display_name: firstPost.ownerFullName,
-              is_verified: firstPost.ownerIsVerified || false,
+              display_name: item.ownerFullName,
               last_scraped_at: new Date().toISOString(),
             })
             .eq('id', account.id);
         }
 
-        console.log(`Processing ${accountPosts.length} posts for @${username}`);
+        // Check if post exists
+        const { data: existingPost } = await supabase
+          .from('instagram_posts')
+          .select('id, caption, event_date, event_time, location_name, location_address')
+          .eq('post_id', postId)
+          .maybeSingle();
 
-        // Process each post
-        for (const post of accountPosts) {
-          const postId = post.id || post.shortCode || 'unknown';
-          
-          try {
-            // Check if post already exists
-            const { data: existingPost } = await supabase
-              .from('instagram_posts')
-              .select('id, likes_count, comments_count')
-              .eq('post_id', postId)
-              .maybeSingle();
-
-            if (existingPost) {
-              // Update likes and comments if they changed
-              if (existingPost.likes_count !== post.likesCount || 
-                  existingPost.comments_count !== post.commentsCount) {
-                await supabase
-                  .from('instagram_posts')
-                  .update({
-                    likes_count: post.likesCount || 0,
-                    comments_count: post.commentsCount || 0,
-                    updated_at: new Date().toISOString(),
-                  })
-                  .eq('id', existingPost.id);
-                
-                totalUpdatedPosts++;
-                console.log(`Updated post ${postId} engagement metrics`);
-              } else {
-                console.log(`Post ${postId} already exists, no changes`);
-              }
-              continue;
-            }
-
-            // Parse event information from caption
-            const eventInfo = parseEventFromCaption(post.caption || '');
-
-            // Insert new post
-            const { error: insertError } = await supabase
-              .from('instagram_posts')
-              .insert({
-                instagram_account_id: account.id,
-                post_id: postId,
-                caption: post.caption,
-                post_url: post.url || `https://www.instagram.com/p/${post.shortCode}/`,
-                posted_at: post.timestamp,
-                likes_count: post.likesCount || 0,
-                comments_count: post.commentsCount || 0,
-                hashtags: post.hashtags,
-                mentions: post.mentions,
-                is_event: eventInfo.isEvent,
-                event_title: eventInfo.eventTitle,
-                event_date: eventInfo.eventDate,
-                event_time: eventInfo.eventTime,
-                location_name: eventInfo.locationName || post.locationName,
-                location_address: eventInfo.locationAddress,
-                signup_url: eventInfo.signupUrl,
-              });
-
-            if (insertError) {
-              console.error(`Failed to insert post ${postId}:`, insertError.message);
+        if (existingPost) {
+          // Check if caption changed (indicating potential update)
+          if (existingPost.caption !== item.caption) {
+            const newEventInfo = parseEventFromCaption(item.caption || '', item.locationName);
+            
+            // Only update if new event info is valid
+            if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
+              await supabase
+                .from('instagram_posts')
+                .update({
+                  caption: item.caption,
+                  event_date: newEventInfo.eventDate,
+                  event_time: newEventInfo.eventTime,
+                  location_name: newEventInfo.locationName,
+                  location_address: newEventInfo.locationAddress,
+                  likes_count: likesCount,
+                  comments_count: commentsCount,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', existingPost.id);
+              
+              totalUpdatedPosts++;
+              console.log(`Updated post ${postId} with new event info`);
             } else {
-              totalScrapedPosts++;
-              console.log(`Successfully inserted post ${postId}`);
+              // Just update engagement metrics
+              await supabase
+                .from('instagram_posts')
+                .update({
+                  likes_count: likesCount,
+                  comments_count: commentsCount,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', existingPost.id);
+              
+              totalUpdatedPosts++;
+              console.log(`Updated post ${postId} engagement only`);
             }
-          } catch (postError) {
-            console.error(`Error processing post ${postId}:`, postError);
+          } else {
+            console.log(`Post ${postId} already exists, no changes`);
           }
+          continue;
+        }
+
+        // Insert new post
+        const { error: insertError } = await supabase
+          .from('instagram_posts')
+          .insert({
+            instagram_account_id: account.id,
+            post_id: postId,
+            caption: item.caption,
+            post_url: postUrl,
+            posted_at: postedAt,
+            likes_count: likesCount,
+            comments_count: commentsCount,
+            hashtags: hashtags,
+            mentions: mentions,
+            is_event: true,
+            event_title: eventInfo.eventTitle,
+            event_date: eventInfo.eventDate,
+            event_time: eventInfo.eventTime,
+            location_name: eventInfo.locationName,
+            location_address: eventInfo.locationAddress,
+            signup_url: eventInfo.signupUrl,
+          });
+
+        if (insertError) {
+          console.error(`Failed to insert post ${postId}:`, insertError.message);
+        } else {
+          totalScrapedPosts++;
+          console.log(`Successfully inserted event post ${postId}`);
         }
       }
     } else {
       // MODE 2 & 3: Manual or Automated Scraping
+      if (!apifyApiKeySecret) {
+        throw new Error('APIFY_API_KEY secret not configured. Please add it in backend settings.');
+      }
+
       // Get active Instagram accounts
       const { data: accounts, error: accountsError } = await supabase
         .from('instagram_accounts')
@@ -350,7 +529,7 @@ Deno.serve(async (req) => {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Scrape each account using instagram-post-scraper actor
+      // Scrape each account
       for (const account of accounts) {
         accountsFound.add(account.username);
         
@@ -358,13 +537,13 @@ Deno.serve(async (req) => {
           console.log(`Scraping account: @${account.username}`);
 
           const apifyResponse = await fetch(
-            `https://api.apify.com/v2/acts/nH2AHrwxeTRJoN5hX/run-sync-get-dataset-items?token=${apifyApiKey}`,
+            `https://api.apify.com/v2/acts/nH2AHrwxeTRJoN5hX/run-sync-get-dataset-items?token=${apifyApiKeySecret}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 username: [account.username],
-                resultsLimit: 5, // Last 5 posts per account
+                resultsLimit: 5,
               }),
             }
           );
@@ -374,22 +553,21 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          const apifyData = await apifyResponse.json();
+          const apifyData: ApifyDatasetItem[] = await apifyResponse.json();
           console.log(`Apify returned ${apifyData.length} results for @${account.username}`);
 
           if (!apifyData || apifyData.length === 0) {
             continue;
           }
 
-          const posts: InstagramPostScraperOutput[] = apifyData;
-
-          // Filter posts from last 30 days
-          const recentPosts = posts.filter(post => {
+          // Filter recent posts
+          const recentPosts = apifyData.filter(post => {
+            if (!post.timestamp) return false;
             const postDate = new Date(post.timestamp);
             return postDate >= thirtyDaysAgo;
           });
 
-          console.log(`Processing ${recentPosts.length} recent posts (last 30 days) for @${account.username}`);
+          console.log(`Processing ${recentPosts.length} recent posts for @${account.username}`);
 
           // Update account info
           if (recentPosts.length > 0) {
@@ -398,7 +576,6 @@ Deno.serve(async (req) => {
               .from('instagram_accounts')
               .update({
                 display_name: firstPost.ownerFullName,
-                is_verified: firstPost.ownerIsVerified || false,
                 last_scraped_at: new Date().toISOString(),
               })
               .eq('id', account.id);
@@ -408,66 +585,86 @@ Deno.serve(async (req) => {
           for (const post of recentPosts) {
             const postId = post.id || post.shortCode || 'unknown';
             
-            try {
-              // Check if post already exists
-              const { data: existingPost } = await supabase
-                .from('instagram_posts')
-                .select('id, likes_count, comments_count')
-                .eq('post_id', postId)
-                .maybeSingle();
+            const likesCount = (post.likesCount === -1 || !post.likesCount) ? 0 : post.likesCount;
+            const commentsCount = post.commentsCount || 0;
+            const hashtags = post.hashtags || [];
+            const mentions = post.mentions || [];
+            const postUrl = post.url || `https://www.instagram.com/p/${post.shortCode}/`;
 
-              if (existingPost) {
-                // Update engagement metrics if changed
-                if (existingPost.likes_count !== post.likesCount || 
-                    existingPost.comments_count !== post.commentsCount) {
+            // Parse event information
+            const eventInfo = parseEventFromCaption(post.caption || '', post.locationName);
+
+            // Skip non-events
+            if (!eventInfo.isEvent) {
+              totalSkipped++;
+              continue;
+            }
+
+            // Skip past events
+            if (isEventInPast(eventInfo.eventDate)) {
+              totalSkipped++;
+              continue;
+            }
+
+            // Check if post exists
+            const { data: existingPost } = await supabase
+              .from('instagram_posts')
+              .select('id, caption')
+              .eq('post_id', postId)
+              .maybeSingle();
+
+            if (existingPost) {
+              // Check for caption changes
+              if (existingPost.caption !== post.caption) {
+                const newEventInfo = parseEventFromCaption(post.caption || '', post.locationName);
+                
+                if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
                   await supabase
                     .from('instagram_posts')
                     .update({
-                      likes_count: post.likesCount || 0,
-                      comments_count: post.commentsCount || 0,
+                      caption: post.caption,
+                      event_date: newEventInfo.eventDate,
+                      event_time: newEventInfo.eventTime,
+                      location_name: newEventInfo.locationName,
+                      location_address: newEventInfo.locationAddress,
+                      likes_count: likesCount,
+                      comments_count: commentsCount,
                       updated_at: new Date().toISOString(),
                     })
                     .eq('id', existingPost.id);
                   
                   totalUpdatedPosts++;
-                  console.log(`Updated post ${postId} engagement metrics`);
                 }
-                continue;
               }
+              continue;
+            }
 
-              // Parse event information
-              const eventInfo = parseEventFromCaption(post.caption || '');
+            // Insert new post
+            const { error: insertError } = await supabase
+              .from('instagram_posts')
+              .insert({
+                instagram_account_id: account.id,
+                post_id: postId,
+                caption: post.caption,
+                post_url: postUrl,
+                posted_at: post.timestamp,
+                likes_count: likesCount,
+                comments_count: commentsCount,
+                hashtags: hashtags,
+                mentions: mentions,
+                is_event: true,
+                event_title: eventInfo.eventTitle,
+                event_date: eventInfo.eventDate,
+                event_time: eventInfo.eventTime,
+                location_name: eventInfo.locationName,
+                location_address: eventInfo.locationAddress,
+                signup_url: eventInfo.signupUrl,
+              });
 
-              // Insert new post
-              const { error: insertError } = await supabase
-                .from('instagram_posts')
-                .insert({
-                  instagram_account_id: account.id,
-                  post_id: postId,
-                  caption: post.caption,
-                  post_url: post.url || `https://www.instagram.com/p/${post.shortCode}/`,
-                  posted_at: post.timestamp,
-                  likes_count: post.likesCount || 0,
-                  comments_count: post.commentsCount || 0,
-                  hashtags: post.hashtags,
-                  mentions: post.mentions,
-                  is_event: eventInfo.isEvent,
-                  event_title: eventInfo.eventTitle,
-                  event_date: eventInfo.eventDate,
-                  event_time: eventInfo.eventTime,
-                  location_name: eventInfo.locationName || post.locationName,
-                  location_address: eventInfo.locationAddress,
-                  signup_url: eventInfo.signupUrl,
-                });
-
-              if (insertError) {
-                console.error(`Failed to insert post ${postId}:`, insertError.message);
-              } else {
-                totalScrapedPosts++;
-                console.log(`Successfully inserted post ${postId}`);
-              }
-            } catch (postError) {
-              console.error(`Error processing post ${postId}:`, postError);
+            if (insertError) {
+              console.error(`Failed to insert post ${postId}:`, insertError.message);
+            } else {
+              totalScrapedPosts++;
             }
           }
         } catch (accountError) {
@@ -476,7 +673,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Import completed. New posts: ${totalScrapedPosts}, Updated: ${totalUpdatedPosts}`);
+    console.log(`Import completed. New: ${totalScrapedPosts}, Updated: ${totalUpdatedPosts}, Skipped: ${totalSkipped}`);
 
     // Update scrape run record
     if (runId) {
@@ -495,6 +692,7 @@ Deno.serve(async (req) => {
         accountsProcessed: accountsFound.size,
         newPostsAdded: totalScrapedPosts,
         postsUpdated: totalUpdatedPosts,
+        postsSkipped: totalSkipped,
         datasetId: datasetId || null,
         runId: runId,
       }),
@@ -505,23 +703,20 @@ Deno.serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     
     // Update scrape run as failed if we have a runId
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      
-      // Try to extract runId from earlier in the function
-      const bodyText = await new Response(req.body).text();
-      let runId: string | undefined;
+    if (runId) {
       try {
-        const parsedBody = JSON.parse(bodyText);
-        // We'd need to track this better, but for now just log the error
-      } catch {}
-      
-      // Log the error for debugging
-      console.error('Failed scrape run, error:', errorMessage);
-    } catch (updateError) {
-      console.error('Failed to update scrape run status:', updateError);
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        
+        await supabase.from('scrape_runs').update({
+          status: 'failed',
+          error_message: errorMessage,
+          completed_at: new Date().toISOString(),
+        }).eq('id', runId);
+      } catch (updateError) {
+        console.error('Failed to update scrape run status:', updateError);
+      }
     }
     
     return new Response(

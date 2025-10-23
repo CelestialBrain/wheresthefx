@@ -14,16 +14,442 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      event_attendees: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          status: Database["public"]["Enums"]["attendee_status"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          status?: Database["public"]["Enums"]["attendee_status"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          status?: Database["public"]["Enums"]["attendee_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_attendees_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_attendees_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_images: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          image_url: string
+          order_index: number
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          image_url: string
+          order_index?: number
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          image_url?: string
+          order_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_images_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          capacity: number | null
+          cover_image_url: string | null
+          created_at: string
+          description: string
+          end_time: string | null
+          event_date: string
+          event_time: string
+          host_id: string
+          id: string
+          is_featured: boolean
+          is_free: boolean
+          location_address: string
+          location_lat: number
+          location_lng: number
+          location_name: string
+          price: number | null
+          status: Database["public"]["Enums"]["event_status"]
+          title: string
+          type: Database["public"]["Enums"]["event_type"]
+          updated_at: string
+          visibility: Database["public"]["Enums"]["event_visibility"]
+        }
+        Insert: {
+          capacity?: number | null
+          cover_image_url?: string | null
+          created_at?: string
+          description: string
+          end_time?: string | null
+          event_date: string
+          event_time: string
+          host_id: string
+          id?: string
+          is_featured?: boolean
+          is_free?: boolean
+          location_address: string
+          location_lat: number
+          location_lng: number
+          location_name: string
+          price?: number | null
+          status?: Database["public"]["Enums"]["event_status"]
+          title: string
+          type: Database["public"]["Enums"]["event_type"]
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["event_visibility"]
+        }
+        Update: {
+          capacity?: number | null
+          cover_image_url?: string | null
+          created_at?: string
+          description?: string
+          end_time?: string | null
+          event_date?: string
+          event_time?: string
+          host_id?: string
+          id?: string
+          is_featured?: boolean
+          is_free?: boolean
+          location_address?: string
+          location_lat?: number
+          location_lng?: number
+          location_name?: string
+          price?: number | null
+          status?: Database["public"]["Enums"]["event_status"]
+          title?: string
+          type?: Database["public"]["Enums"]["event_type"]
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["event_visibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instagram_accounts: {
+        Row: {
+          bio: string | null
+          created_at: string
+          display_name: string | null
+          follower_count: number | null
+          id: string
+          is_active: boolean | null
+          is_verified: boolean | null
+          last_scraped_at: string | null
+          profile_pic_url: string | null
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          bio?: string | null
+          created_at?: string
+          display_name?: string | null
+          follower_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_verified?: boolean | null
+          last_scraped_at?: string | null
+          profile_pic_url?: string | null
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          bio?: string | null
+          created_at?: string
+          display_name?: string | null
+          follower_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_verified?: boolean | null
+          last_scraped_at?: string | null
+          profile_pic_url?: string | null
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      instagram_posts: {
+        Row: {
+          caption: string | null
+          comments_count: number | null
+          created_at: string
+          event_date: string | null
+          event_time: string | null
+          event_title: string | null
+          hashtags: string[] | null
+          id: string
+          instagram_account_id: string
+          is_event: boolean | null
+          likes_count: number | null
+          location_address: string | null
+          location_lat: number | null
+          location_lng: number | null
+          location_name: string | null
+          mentions: string[] | null
+          post_id: string
+          post_url: string
+          posted_at: string
+          signup_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          caption?: string | null
+          comments_count?: number | null
+          created_at?: string
+          event_date?: string | null
+          event_time?: string | null
+          event_title?: string | null
+          hashtags?: string[] | null
+          id?: string
+          instagram_account_id: string
+          is_event?: boolean | null
+          likes_count?: number | null
+          location_address?: string | null
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          mentions?: string[] | null
+          post_id: string
+          post_url: string
+          posted_at: string
+          signup_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          caption?: string | null
+          comments_count?: number | null
+          created_at?: string
+          event_date?: string | null
+          event_time?: string | null
+          event_title?: string | null
+          hashtags?: string[] | null
+          id?: string
+          instagram_account_id?: string
+          is_event?: boolean | null
+          likes_count?: number | null
+          location_address?: string | null
+          location_lat?: number | null
+          location_lng?: number | null
+          location_name?: string | null
+          mentions?: string[] | null
+          post_id?: string
+          post_url?: string
+          posted_at?: string
+          signup_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_posts_instagram_account_id_fkey"
+            columns: ["instagram_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          is_host: boolean
+          location_lat: number | null
+          location_lng: number | null
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          is_host?: boolean
+          location_lat?: number | null
+          location_lng?: number | null
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          is_host?: boolean
+          location_lat?: number | null
+          location_lng?: number | null
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          created_at: string
+          event_id: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          status: Database["public"]["Enums"]["report_status"]
+        }
+        Insert: {
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+          status?: Database["public"]["Enums"]["report_status"]
+        }
+        Update: {
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+          status?: Database["public"]["Enums"]["report_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scrape_runs: {
+        Row: {
+          accounts_found: number
+          completed_at: string | null
+          dataset_id: string | null
+          error_message: string | null
+          id: string
+          posts_added: number
+          posts_updated: number
+          run_type: Database["public"]["Enums"]["scrape_run_type"]
+          started_at: string
+          status: Database["public"]["Enums"]["scrape_run_status"]
+        }
+        Insert: {
+          accounts_found?: number
+          completed_at?: string | null
+          dataset_id?: string | null
+          error_message?: string | null
+          id?: string
+          posts_added?: number
+          posts_updated?: number
+          run_type: Database["public"]["Enums"]["scrape_run_type"]
+          started_at?: string
+          status?: Database["public"]["Enums"]["scrape_run_status"]
+        }
+        Update: {
+          accounts_found?: number
+          completed_at?: string | null
+          dataset_id?: string | null
+          error_message?: string | null
+          id?: string
+          posts_added?: number
+          posts_updated?: number
+          run_type?: Database["public"]["Enums"]["scrape_run_type"]
+          started_at?: string
+          status?: Database["public"]["Enums"]["scrape_run_status"]
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "host" | "user"
+      attendee_status: "interested" | "going" | "maybe" | "cancelled"
+      event_status: "draft" | "published" | "cancelled" | "completed"
+      event_type: "party" | "thrift" | "market" | "concert" | "other"
+      event_visibility: "public" | "private" | "unlisted"
+      report_status: "pending" | "reviewed" | "resolved"
+      scrape_run_status: "running" | "completed" | "failed"
+      scrape_run_type: "manual_dataset" | "manual_scrape" | "automated"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +576,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "host", "user"],
+      attendee_status: ["interested", "going", "maybe", "cancelled"],
+      event_status: ["draft", "published", "cancelled", "completed"],
+      event_type: ["party", "thrift", "market", "concert", "other"],
+      event_visibility: ["public", "private", "unlisted"],
+      report_status: ["pending", "reviewed", "resolved"],
+      scrape_run_status: ["running", "completed", "failed"],
+      scrape_run_type: ["manual_dataset", "manual_scrape", "automated"],
+    },
   },
 } as const
