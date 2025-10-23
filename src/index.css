@@ -156,4 +156,21 @@ All colors MUST be HSL.
   .animate-slide-in-from-top {
     animation: slide-in-from-top 0.3s ease-out;
   }
+  
+  /* Remove search input decorations */
+  input[type="search"]::-webkit-search-decoration,
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-results-button,
+  input[type="search"]::-webkit-search-results-decoration {
+    display: none;
+  }
+  
+  /* Stable focus styles for frosted glass inputs */
+  .frosted-glass-button:focus {
+    background-color: rgba(255, 255, 255, 0.10);
+  }
+  
+  .dark .frosted-glass-button:focus {
+    background-color: rgba(0, 0, 0, 0.30);
+  }
 }

@@ -40,11 +40,15 @@ export function MobileSearchBar({ isOpen, onClose, value, onChange }: MobileSear
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
             ref={inputRef}
+            type="text"
             placeholder="Search events, places, or accounts..."
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+            className="w-full pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none appearance-none"
             autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
         </div>
         <Button

@@ -154,13 +154,15 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
             </div>
             
             {/* Mobile Search Icon */}
-            <Button
-              size="icon"
-              className="md:hidden frosted-glass-button"
-              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-            >
-              <Search className="h-4 w-4" />
-            </Button>
+            {!mobileSearchOpen && (
+              <Button
+                size="icon"
+                className="md:hidden frosted-glass-button"
+                onClick={() => setMobileSearchOpen(true)}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            )}
 
             {/* Date Filter */}
             <Select value={selectedDate} onValueChange={handleDateChange}>
