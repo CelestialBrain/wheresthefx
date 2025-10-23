@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Calendar, DollarSign, User, Bookmark, Settings } from "lucide-react";
+import { Search, Calendar, User, Bookmark, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -75,7 +75,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[1000] blur-gradient-bottom">
+    <div className="fixed top-0 left-0 right-0 z-[1000]">
       <div className="container mx-auto px-4 py-3">
         {/* Desktop and Mobile Row */}
         <div className="flex items-center justify-between gap-2">
@@ -121,7 +121,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
             {/* Price Filter */}
             <Select value={selectedPrice} onValueChange={handlePriceChange}>
               <SelectTrigger className="md:w-[150px] w-10 frosted-glass-button border-0">
-                <DollarSign className="h-4 w-4 md:mr-2" />
+                <span className="text-sm font-bold md:mr-2">₱</span>
                 <span className="hidden md:inline">
                   <SelectValue placeholder="Price" />
                 </span>
@@ -138,7 +138,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
           <div className="flex items-center gap-2">
             <Button
               size="icon"
-              className="frosted-glass-button relative"
+              className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 relative shadow-none"
               onClick={() => navigate('/auth')}
             >
               <User className="h-4 w-4" />
@@ -146,7 +146,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
             <Button
               size="icon"
-              className="frosted-glass-button relative"
+              className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 relative shadow-none"
             >
               <Bookmark className="h-4 w-4" />
               {savedCount && savedCount > 0 && (
@@ -161,7 +161,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
             <Button
               size="icon"
-              className="frosted-glass-button"
+              className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 shadow-none"
             >
               <Settings className="h-4 w-4" />
             </Button>

@@ -122,9 +122,22 @@ All colors MUST be HSL.
     @apply backdrop-blur-md bg-purple-500/20 border border-purple-400/30 text-white;
   }
   
-  .frosted-glass-button {
-    @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 hover:bg-white/20 dark:hover:bg-black/40 transition-all duration-200;
-  }
+.frosted-glass-button {
+  @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 hover:bg-white/20 dark:hover:bg-black/40 transition-all duration-200 shadow-none;
+}
+
+/* Leaflet zoom control styling */
+.leaflet-control-zoom {
+  margin-left: 10px !important;
+  margin-bottom: 10px !important;
+}
+
+.leaflet-control-zoom a {
+  width: 26px !important;
+  height: 26px !important;
+  line-height: 26px !important;
+  font-size: 16px !important;
+}
   
   /* Gradient blur for bottom edges */
   .blur-gradient-bottom {

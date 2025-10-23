@@ -36,8 +36,13 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     const map = L.map(containerRef.current, {
       center: mapCenter as [number, number],
       zoom: 12,
-      zoomControl: true,
+      zoomControl: false,
     });
+
+    // Add zoom control in bottom-left
+    L.control.zoom({
+      position: 'bottomleft'
+    }).addTo(map);
 
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
