@@ -462,8 +462,69 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Check for duplicate events (same location, date within 1 day)
+        if (eventInfo.eventDate && eventInfo.locationName) {
+          const eventDateObj = new Date(eventInfo.eventDate);
+          const dayBefore = new Date(eventDateObj);
+          dayBefore.setDate(dayBefore.getDate() - 1);
+          const dayAfter = new Date(eventDateObj);
+          dayAfter.setDate(dayAfter.getDate() + 1);
+
+          const { data: similarEvents } = await supabase
+            .from('instagram_posts')
+            .select('id, post_id, event_title, likes_count')
+            .eq('location_name', eventInfo.locationName)
+            .gte('event_date', dayBefore.toISOString().split('T')[0])
+            .lte('event_date', dayAfter.toISOString().split('T')[0])
+            .eq('is_event', true);
+
+          if (similarEvents && similarEvents.length > 0) {
+            console.log(`Found ${similarEvents.length} similar event(s) for post ${postId}, checking for duplicates`);
+            
+            // If this is likely a duplicate, link them in event_groups
+            for (const similar of similarEvents) {
+              if (similar.post_id !== postId) {
+                // Check if already in a group
+                const { data: existingGroup } = await supabase
+                  .from('event_groups')
+                  .select('*')
+                  .or(`primary_post_id.eq.${similar.id},merged_post_ids.cs.{${similar.id}}`)
+                  .maybeSingle();
+
+                if (existingGroup) {
+                  // Add to existing group
+                  const updatedMergedIds = [...(existingGroup.merged_post_ids || [])];
+                  if (!updatedMergedIds.includes(postId)) {
+                    updatedMergedIds.push(postId);
+                    await supabase
+                      .from('event_groups')
+                      .update({ merged_post_ids: updatedMergedIds })
+                      .eq('id', existingGroup.id);
+                    console.log(`Added post ${postId} to existing event group`);
+                  }
+                } else {
+                  // Create new group with the higher engagement post as primary
+                  const primaryId = likesCount > similar.likes_count ? postId : similar.post_id;
+                  const mergedId = likesCount > similar.likes_count ? similar.post_id : postId;
+                  
+                  await supabase
+                    .from('event_groups')
+                    .insert({
+                      primary_post_id: primaryId,
+                      merged_post_ids: [mergedId]
+                    });
+                  console.log(`Created new event group for posts ${primaryId} and ${mergedId}`);
+                }
+              }
+            }
+          }
+        }
+
+        // Detect incomplete data
+        const hasIncompleteData = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
+
         // Insert new post
-        const { error: insertError } = await supabase
+        const { data: insertedPost, error: insertError } = await supabase
           .from('instagram_posts')
           .insert({
             instagram_account_id: account.id,
@@ -482,13 +543,30 @@ Deno.serve(async (req) => {
             location_name: eventInfo.locationName,
             location_address: eventInfo.locationAddress,
             signup_url: eventInfo.signupUrl,
-          });
+            needs_review: hasIncompleteData,
+            ocr_processed: false,
+          })
+          .select()
+          .single();
 
         if (insertError) {
           console.error(`Failed to insert post ${postId}:`, insertError.message);
         } else {
           totalScrapedPosts++;
           console.log(`Successfully inserted event post ${postId}`);
+
+          // Trigger OCR for incomplete posts
+          if (hasIncompleteData && insertedPost) {
+            console.log(`Post ${postId} has incomplete data, triggering OCR enrichment`);
+            try {
+              await supabase.functions.invoke('enrich-post-ocr', {
+                body: { postId: insertedPost.id }
+              });
+              console.log(`OCR enrichment triggered for post ${postId}`);
+            } catch (ocrError) {
+              console.error(`Failed to trigger OCR for post ${postId}:`, ocrError);
+            }
+          }
         }
       }
     } else {
@@ -639,8 +717,61 @@ Deno.serve(async (req) => {
               continue;
             }
 
+            // Check for duplicate events
+            if (eventInfo.eventDate && eventInfo.locationName) {
+              const eventDateObj = new Date(eventInfo.eventDate);
+              const dayBefore = new Date(eventDateObj);
+              dayBefore.setDate(dayBefore.getDate() - 1);
+              const dayAfter = new Date(eventDateObj);
+              dayAfter.setDate(dayAfter.getDate() + 1);
+
+              const { data: similarEvents } = await supabase
+                .from('instagram_posts')
+                .select('id, post_id, event_title, likes_count')
+                .eq('location_name', eventInfo.locationName)
+                .gte('event_date', dayBefore.toISOString().split('T')[0])
+                .lte('event_date', dayAfter.toISOString().split('T')[0])
+                .eq('is_event', true);
+
+              if (similarEvents && similarEvents.length > 0) {
+                for (const similar of similarEvents) {
+                  if (similar.post_id !== postId) {
+                    const { data: existingGroup } = await supabase
+                      .from('event_groups')
+                      .select('*')
+                      .or(`primary_post_id.eq.${similar.id},merged_post_ids.cs.{${similar.id}}`)
+                      .maybeSingle();
+
+                    if (existingGroup) {
+                      const updatedMergedIds = [...(existingGroup.merged_post_ids || [])];
+                      if (!updatedMergedIds.includes(postId)) {
+                        updatedMergedIds.push(postId);
+                        await supabase
+                          .from('event_groups')
+                          .update({ merged_post_ids: updatedMergedIds })
+                          .eq('id', existingGroup.id);
+                      }
+                    } else {
+                      const primaryId = likesCount > similar.likes_count ? postId : similar.post_id;
+                      const mergedId = likesCount > similar.likes_count ? similar.post_id : postId;
+                      
+                      await supabase
+                        .from('event_groups')
+                        .insert({
+                          primary_post_id: primaryId,
+                          merged_post_ids: [mergedId]
+                        });
+                    }
+                  }
+                }
+              }
+            }
+
+            // Detect incomplete data
+            const hasIncompleteData = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
+
             // Insert new post
-            const { error: insertError } = await supabase
+            const { data: insertedPost, error: insertError } = await supabase
               .from('instagram_posts')
               .insert({
                 instagram_account_id: account.id,
@@ -659,12 +790,27 @@ Deno.serve(async (req) => {
                 location_name: eventInfo.locationName,
                 location_address: eventInfo.locationAddress,
                 signup_url: eventInfo.signupUrl,
-              });
+                needs_review: hasIncompleteData,
+                ocr_processed: false,
+              })
+              .select()
+              .single();
 
             if (insertError) {
               console.error(`Failed to insert post ${postId}:`, insertError.message);
             } else {
               totalScrapedPosts++;
+
+              // Trigger OCR for incomplete posts
+              if (hasIncompleteData && insertedPost) {
+                try {
+                  await supabase.functions.invoke('enrich-post-ocr', {
+                    body: { postId: insertedPost.id }
+                  });
+                } catch (ocrError) {
+                  console.error(`Failed to trigger OCR for post ${postId}:`, ocrError);
+                }
+              }
             }
           }
         } catch (accountError) {

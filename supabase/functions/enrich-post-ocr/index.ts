@@ -43,13 +43,17 @@ serve(async (req) => {
       );
     }
 
-    // Get the first image URL
-    const imageUrl = post.post_url;
+    // Get the image URL from post_url (Instagram post link)
+    // We need to convert Instagram post URL to an image URL
+    let imageUrl = post.post_url;
+    
+    // Try to extract image from Instagram CDN or use post URL directly
+    // Instagram URLs like https://www.instagram.com/p/XXX/ can be accessed by vision models
     if (!imageUrl) {
       throw new Error('No image URL found');
     }
 
-    console.log(`Processing OCR for post ${postId} with image: ${imageUrl}`);
+    console.log(`Processing OCR for post ${postId} with URL: ${imageUrl}`);
 
     // Call Lovable AI vision model
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -66,18 +70,31 @@ serve(async (req) => {
             content: [
               {
                 type: 'text',
-                text: `Extract event details from this image. Look for: date, time, location/venue name, price/entrance fee. 
-                Return ONLY valid JSON in this exact format (use null for missing values):
+                text: `You are analyzing an Instagram post image to extract event details. Look carefully for:
+                - Event title/name (often in large or stylized text)
+                - Date (check month names, numbers, day of week)
+                - Time (AM/PM, 24-hour format, "doors open", "starts at")
+                - Location/Venue name (bar, club, restaurant, venue names)
+                - Address (street, city)
+                - Price or "FREE" mentions
+                
+                Common patterns to watch for:
+                - Dates like "March 15", "15/3", "Every Friday"
+                - Times like "9PM", "21:00", "9-2AM"
+                - Venues in all caps or special fonts
+                
+                Return ONLY valid JSON in this format (use null for missing values):
                 {
                   "event_title": "string or null",
-                  "event_date": "YYYY-MM-DD or null",
-                  "event_time": "HH:MM or null",
+                  "event_date": "YYYY-MM-DD or null (convert dates to this format)",
+                  "event_time": "HH:MM or null (24-hour format)",
                   "location_name": "string or null",
                   "location_address": "string or null",
                   "price": "number or null",
-                  "is_free": "boolean"
+                  "is_free": true/false
                 }
-                Be precise with dates and times. If you see script or decorative fonts, read them carefully.`
+                
+                If the image is not an event poster or doesn't contain event information, return all null values.`
               },
               {
                 type: 'image_url',
