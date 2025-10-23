@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface MobileSearchBarProps {
   isOpen: boolean;
@@ -34,22 +35,25 @@ export function MobileSearchBar({ isOpen, onClose, value, onChange }: MobileSear
   
   return (
     <div className="w-full animate-slide-in-from-top">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <input
-          ref={inputRef}
-          placeholder="Search events, places, or accounts..."
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full pl-9 pr-9 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-          autoComplete="off"
-        />
-        <button
+      <div className="relative flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <input
+            ref={inputRef}
+            placeholder="Search events, places, or accounts..."
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+            autoComplete="off"
+          />
+        </div>
+        <Button
+          size="icon"
           onClick={onClose}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 shadow-none h-10 w-10 shrink-0"
         >
           <X className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
     </div>
   );
