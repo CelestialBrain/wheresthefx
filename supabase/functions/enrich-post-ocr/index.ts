@@ -91,15 +91,16 @@ serve(async (req) => {
                 - Times like "9PM", "21:00", "9-2AM"
                 - Venues in all caps or special fonts
                 
+                IMPORTANT: Extract the EVENT DATE (when the event happens), not the post date.
+                
                 Return ONLY valid JSON in this format (use null for missing values):
                 {
                   "event_title": "string or null",
-                  "event_date": "YYYY-MM-DD or null (convert dates to this format)",
+                  "event_date": "YYYY-MM-DD or null (convert dates to this format, use current year if not specified)",
                   "event_time": "HH:MM or null (24-hour format)",
                   "location_name": "string or null",
                   "location_address": "string or null",
-                  "price": "number or null",
-                  "is_free": true/false
+                  "price": "number or null"
                 }
                 
                 If the image is not an event poster or doesn't contain event information, return all null values.`
@@ -157,7 +158,7 @@ serve(async (req) => {
 
     // Calculate confidence based on how many fields were extracted
     const fieldsExtracted = Object.values(extractedData).filter(v => v !== null).length;
-    const confidence = (fieldsExtracted / 7) * 100;
+    const confidence = (fieldsExtracted / 6) * 100; // 6 fields total (removed is_free)
 
     // Determine if this is a complete event
     const isComplete = extractedData.event_date && extractedData.location_name;
@@ -177,8 +178,7 @@ serve(async (req) => {
     if (extractedData.event_time) updateData.event_time = extractedData.event_time;
     if (extractedData.location_name) updateData.location_name = extractedData.location_name;
     if (extractedData.location_address) updateData.location_address = extractedData.location_address;
-    if (extractedData.price !== undefined) updateData.price = extractedData.price;
-    if (extractedData.is_free !== undefined) updateData.is_free = extractedData.is_free;
+    if (extractedData.price !== undefined && extractedData.price !== null) updateData.price = extractedData.price;
 
     // Mark as event if we have enough data
     if (isComplete) {

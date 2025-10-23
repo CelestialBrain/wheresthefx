@@ -42,6 +42,7 @@ const Admin = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
 
   useEffect(() => {
     fetchAccounts();
@@ -236,6 +237,39 @@ const Admin = () => {
     return `${diffDays}d ago`;
   };
 
+  const purgeAllPosts = async () => {
+    if (!confirm("Are you sure you want to delete ALL posts? This cannot be undone!")) {
+      return;
+    }
+
+    try {
+      setIsPurging(true);
+
+      // Delete all instagram_posts (cascade will handle events_enriched)
+      const { error } = await supabase
+        .from("instagram_posts")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000"); // Delete all
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "All posts have been deleted",
+      });
+
+      fetchScrapeRuns();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to purge posts",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -248,6 +282,26 @@ const Admin = () => {
           </TabsList>
           
           <TabsContent value="scraping" className="space-y-6">
+          
+          {/* Danger Zone - Purge All Posts */}
+          <Card className="p-4 border-destructive">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-destructive">Danger Zone</h3>
+                <p className="text-sm text-muted-foreground">
+                  Delete all posts and events from the database
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                onClick={purgeAllPosts}
+                disabled={isPurging}
+              >
+                <Trash2 className={`h-4 w-4 mr-2 ${isPurging ? "animate-pulse" : ""}`} />
+                {isPurging ? "Purging..." : "Purge All Posts"}
+              </Button>
+            </div>
+          </Card>
           
           {/* Last Scrape Status */}
           {lastRun && (

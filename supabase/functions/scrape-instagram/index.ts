@@ -438,12 +438,9 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Skip past events (unless force import)
-        if (!forceImport && isEventInPast(eventInfo.eventDate)) {
-          totalSkipped++;
-          console.log(`Skipping post ${postId} - event is in the past (${eventInfo.eventDate})`);
-          continue;
-        }
+        // Note: We don't filter by past event dates during import
+        // The OCR will extract the actual event date from the image
+        // Past posts may still have future events advertised in them
 
         console.log(`Processing event: ${postId}, Date: ${eventInfo.eventDate || 'TBD'}, Time: ${eventInfo.eventTime || 'TBD'}, Location: ${eventInfo.locationName || 'TBD'}`);
 
@@ -781,11 +778,9 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Skip past events
-            if (isEventInPast(eventInfo.eventDate)) {
-              totalSkipped++;
-              continue;
-            }
+            // Note: We don't filter by past event dates during direct scraping
+            // The OCR will extract the actual event date from the image
+            // Past posts may still have future events advertised in them
 
             // Check if post exists
             const { data: existingPost } = await supabase

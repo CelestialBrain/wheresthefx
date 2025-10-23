@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useState } from "react";
-import { MapPin, Calendar, Clock, AlertCircle, CheckCircle, X, Navigation } from "lucide-react";
+import { MapPin, Calendar, Clock, AlertCircle, CheckCircle, X, Navigation, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ReviewItem {
@@ -188,6 +188,20 @@ export function ReviewQueue() {
     onSuccess: () => {
       toast.success("Event rejected");
       queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+    },
+  });
+
+  const deletePostMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      const { error } = await supabase
+        .from("instagram_posts")
+        .delete()
+        .eq("id", postId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Post deleted");
+      queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
     },
   });
 
@@ -449,13 +463,28 @@ export function ReviewQueue() {
                       {new Date(post.event_date).toLocaleDateString()}
                     </div>
                   )}
-                  <Button
-                    size="sm"
-                    onClick={() => enrichEventMutation.mutate(post.id)}
-                    disabled={enrichEventMutation.isPending}
-                  >
-                    Create Event
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => enrichEventMutation.mutate(post.id)}
+                      disabled={enrichEventMutation.isPending}
+                    >
+                      Create Event
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => {
+                        if (confirm("Delete this post? This cannot be undone.")) {
+                          deletePostMutation.mutate(post.id);
+                        }
+                      }}
+                      disabled={deletePostMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Post
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
