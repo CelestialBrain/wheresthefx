@@ -50,13 +50,19 @@ function extractUsernameFromUrl(url: string): string | undefined {
   return username || undefined;
 }
 
-// Convert relative date terms to actual dates
+// Convert relative date terms to actual dates with improved year detection
 function parseRelativeDate(text: string): string | null {
   const now = new Date();
   const lowercaseText = text.toLowerCase();
   
   if (lowercaseText.includes('tonight') || lowercaseText.includes('today')) {
     return now.toISOString().split('T')[0];
+  }
+  
+  if (lowercaseText.includes('tomorrow')) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
   }
   
   if (lowercaseText.includes('this weekend')) {
@@ -70,7 +76,19 @@ function parseRelativeDate(text: string): string | null {
   return null;
 }
 
-// Enhanced event parser with strict filtering
+// Validate time format (must be HH:MM with valid hours 0-23, minutes 0-59)
+function isValidTime(timeStr: string): boolean {
+  if (!timeStr) return false;
+  const parts = timeStr.split(':');
+  if (parts.length !== 2) return false;
+  
+  const hour = parseInt(parts[0]);
+  const minute = parseInt(parts[1]);
+  
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+// Enhanced event parser with improved detection
 function parseEventFromCaption(caption: string, locationName?: string | null): {
   eventTitle?: string;
   eventDate?: string;
@@ -79,6 +97,7 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
   locationAddress?: string;
   signupUrl?: string;
   isEvent: boolean;
+  timeValidationFailed?: boolean;
 } {
   if (!caption) {
     return { isEvent: false };
@@ -121,13 +140,16 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
     }
   }
   
-  // STEP 2: Check for event indicators
+  // STEP 2: Check for event indicators (expanded and more permissive)
   const eventKeywords = [
     'party', 'event', 'happening', 'tonight', 'tomorrow', 'this weekend',
     'join us', 'rsvp', 'free entry', 'entrance', 'tickets', 'doors open',
     'gig', 'concert', 'show', 'performance', 'dj', 'live music',
     'workshop', 'seminar', 'meetup', 'gathering', 'celebration',
-    'anniversary', 'opening', 'launch', 'festival', 'market'
+    'anniversary', 'opening', 'launch', 'festival', 'market',
+    'book now', 'reservations', 'save the date', 'see you', 'come by',
+    'drop by', 'visit us', 'limited slots', 'register', 'sign up',
+    'admission', 'cover charge', 'entry fee', 'open to public'
   ];
   const hasEventKeyword = eventKeywords.some(keyword => lowercaseCaption.includes(keyword));
 
@@ -175,15 +197,23 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
     }
   }
 
-// Enhanced time patterns and normalization
+  // Enhanced time patterns and normalization with validation
   const timePattern = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b/gi;
   const timeMatches = caption.matchAll(timePattern);
   let eventTime: string | undefined;
+  let timeValidationFailed = false;
   
   for (const match of timeMatches) {
     const hour = parseInt(match[1]);
-    const minute = match[2] || '00';
+    const minute = parseInt(match[2] || '00');
     const period = match[3]?.toUpperCase();
+    
+    // Validate minute first
+    if (minute > 59) {
+      console.log(`Invalid minute detected: ${minute}`);
+      timeValidationFailed = true;
+      continue;
+    }
     
     // Normalize to HH:MM format
     let normalizedHour = hour;
@@ -191,16 +221,27 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
       normalizedHour = hour + 12;
     } else if (period === 'AM' && hour === 12) {
       normalizedHour = 0;
-    } else if (!period && hour > 12) {
+    } else if (!period && hour > 12 && hour < 24) {
       // Already 24-hour format
       normalizedHour = hour;
     } else if (!period && hour <= 12) {
       // Assume PM for nightlife context (after 6PM is common)
       normalizedHour = hour >= 6 ? hour : hour + 12;
+    } else if (hour >= 24) {
+      console.log(`Invalid hour detected: ${hour}`);
+      timeValidationFailed = true;
+      continue;
     }
     
-    eventTime = `${normalizedHour.toString().padStart(2, '0')}:${minute}`;
-    break; // Take first valid time
+    const candidateTime = `${normalizedHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    
+    // Final validation check
+    if (isValidTime(candidateTime)) {
+      eventTime = candidateTime;
+      break; // Take first valid time
+    } else {
+      timeValidationFailed = true;
+    }
   }
 
   // Consider it an event if we have event keywords + (date OR location)
@@ -209,10 +250,11 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
   return {
     eventTitle,
     eventDate,
-    eventTime,
+    eventTime: timeValidationFailed ? undefined : eventTime, // Set to undefined if validation failed
     locationName: finalLocation || undefined,
     signupUrl,
     isEvent: hasMinimumInfo,
+    timeValidationFailed, // Flag for needs_review
   };
 }
 
@@ -246,7 +288,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Parse request body
-    let body: { datasetId?: string; automated?: boolean } = {};
+    let body: { datasetId?: string; automated?: boolean; forceImport?: boolean } = {};
     try {
       body = await req.json();
     } catch {
@@ -255,6 +297,7 @@ Deno.serve(async (req) => {
 
     const rawDatasetInput = body.datasetId;
     const isAutomated = body.automated || false;
+    const forceImport = body.forceImport || false; // New flag for permissive dataset imports
     
     let datasetId: string | undefined;
     let datasetToken: string | undefined;
@@ -309,6 +352,8 @@ Deno.serve(async (req) => {
     let totalScrapedPosts = 0;
     let totalUpdatedPosts = 0;
     let totalSkipped = 0;
+    let totalFailed = 0;
+    const failureReasons: { [key: string]: number } = {};
     const accountsFound = new Set<string>();
 
     // MODE 1: Dataset Import
@@ -386,15 +431,15 @@ Deno.serve(async (req) => {
         // Parse event information
         const eventInfo = parseEventFromCaption(item.caption || '', item.locationName);
 
-        // Skip non-events
-        if (!eventInfo.isEvent) {
+        // Skip non-events (unless force import)
+        if (!eventInfo.isEvent && !forceImport) {
           totalSkipped++;
           console.log(`Skipping post ${postId} - not an event. Caption: "${item.caption?.substring(0, 100)}..."`);
           continue;
         }
 
-        // Skip past events
-        if (isEventInPast(eventInfo.eventDate)) {
+        // Skip past events (unless force import)
+        if (!forceImport && isEventInPast(eventInfo.eventDate)) {
           totalSkipped++;
           console.log(`Skipping post ${postId} - event is in the past (${eventInfo.eventDate})`);
           continue;
@@ -441,11 +486,21 @@ Deno.serve(async (req) => {
         // Check if post exists
         const { data: existingPost } = await supabase
           .from('instagram_posts')
-          .select('id, caption, event_date, event_time, location_name, location_address')
+          .select('id, caption, image_url, event_date, event_time, location_name, location_address')
           .eq('post_id', postId)
           .maybeSingle();
 
         if (existingPost) {
+          // Always backfill missing image_url
+          const imageUrl = item.displayUrl || item.imageUrl;
+          if (!existingPost.image_url && imageUrl) {
+            await supabase
+              .from('instagram_posts')
+              .update({ image_url: imageUrl })
+              .eq('id', existingPost.id);
+            console.log(`Backfilled image_url for post ${postId}`);
+          }
+          
           // Check if caption changed (indicating potential update)
           if (existingPost.caption !== item.caption) {
             const newEventInfo = parseEventFromCaption(item.caption || '', item.locationName);
@@ -546,13 +601,13 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Determine if post needs review (missing critical info)
-        const needsReview = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
+        // Determine if post needs review (missing critical info or time validation failed)
+        const needsReview = forceImport || !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName || eventInfo.timeValidationFailed;
 
         // Extract image URL from Apify data (displayUrl or imageUrl)
         const imageUrl = item.displayUrl || item.imageUrl;
 
-        // Prepare insert data - allow NULL for missing time
+        // Prepare insert data - allow NULL for missing data
         const insertData: any = {
           post_id: postId,
           instagram_account_id: account.id,
@@ -564,9 +619,9 @@ Deno.serve(async (req) => {
           comments_count: commentsCount,
           hashtags: hashtags,
           mentions: mentions,
-          is_event: true,
+          is_event: eventInfo.isEvent || forceImport,
           event_title: eventInfo.eventTitle,
-          event_date: eventInfo.eventDate,
+          event_date: eventInfo.eventDate || null, // Allow null for TBD dates
           location_name: eventInfo.locationName,
           location_address: eventInfo.locationAddress,
           signup_url: eventInfo.signupUrl,
@@ -574,40 +629,49 @@ Deno.serve(async (req) => {
         };
 
         // Only add event_time if we have a valid value
-        if (eventInfo.eventTime) {
+        if (eventInfo.eventTime && !eventInfo.timeValidationFailed) {
           insertData.event_time = eventInfo.eventTime;
         }
 
-        // Insert new post
-        const { data: insertedPost, error: insertError } = await supabase
-          .from('instagram_posts')
-          .insert(insertData)
-          .select()
-          .single();
+        // Insert new post with error handling
+        try {
+          const { data: insertedPost, error: insertError } = await supabase
+            .from('instagram_posts')
+            .insert(insertData)
+            .select()
+            .single();
 
-        if (insertError) {
-          console.error(`Failed to insert post ${postId}:`, insertError.message, insertError);
-          totalSkipped++;
-          continue;
-        }
-
-        totalScrapedPosts++;
-        console.log(`✓ Inserted post ${postId}${needsReview ? ' (needs review)' : ''}`);
-
-        // If needs review, trigger OCR enrichment
-        if (needsReview && insertedPost) {
-          console.log(`Triggering OCR enrichment for post ${insertedPost.id}`);
-          
-          try {
-            await supabase.functions.invoke('enrich-post-ocr', {
-              body: { postId: insertedPost.id }
-            });
-          } catch (ocrError) {
-            console.error(`OCR enrichment failed for ${insertedPost.id}:`, ocrError);
-            // Don't fail the entire import if OCR fails
+          if (insertError) {
+            console.error(`Failed to insert post ${postId}:`, insertError.message, insertError);
+            totalFailed++;
+            const reason = insertError.code || 'unknown_error';
+            failureReasons[reason] = (failureReasons[reason] || 0) + 1;
+            continue;
           }
+
+          totalScrapedPosts++;
+          console.log(`✓ Inserted post ${postId}${needsReview ? ' (needs review)' : ''}`);
+
+          // If needs review, trigger OCR enrichment
+          if (needsReview && insertedPost && imageUrl) {
+            console.log(`Triggering OCR enrichment for post ${insertedPost.id}`);
+            
+            try {
+              await supabase.functions.invoke('enrich-post-ocr', {
+                body: { postId: insertedPost.id }
+              });
+            } catch (ocrError) {
+              console.error(`OCR enrichment failed for ${insertedPost.id}:`, ocrError);
+              // Don't fail the entire import if OCR fails
+            }
+          }
+        } catch (unexpectedError) {
+          console.error(`Unexpected error inserting post ${postId}:`, unexpectedError);
+          totalFailed++;
+          failureReasons['unexpected_error'] = (failureReasons['unexpected_error'] || 0) + 1;
         }
       }
+
     } else {
       // MODE 2 & 3: Manual or Automated Scraping
       if (!apifyApiKeySecret) {
@@ -862,7 +926,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Import completed. New: ${totalScrapedPosts}, Updated: ${totalUpdatedPosts}, Skipped: ${totalSkipped}`);
+    console.log(`Import completed. New: ${totalScrapedPosts}, Updated: ${totalUpdatedPosts}, Skipped: ${totalSkipped}, Failed: ${totalFailed}`);
+    if (totalFailed > 0) {
+      console.log('Failure reasons:', failureReasons);
+    }
 
     // Update scrape run record
     if (runId) {
@@ -882,8 +949,11 @@ Deno.serve(async (req) => {
         newPostsAdded: totalScrapedPosts,
         postsUpdated: totalUpdatedPosts,
         postsSkipped: totalSkipped,
+        postsFailed: totalFailed,
+        failureReasons: totalFailed > 0 ? failureReasons : undefined,
         datasetId: datasetId || null,
         runId: runId,
+        forceImport: forceImport,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
