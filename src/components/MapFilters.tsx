@@ -103,11 +103,13 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
             {/* Date Filter */}
             <Select value={selectedDate} onValueChange={handleDateChange}>
-              <SelectTrigger className="md:w-[180px] w-10 frosted-glass-button border-0">
-                <Calendar className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">
-                  <SelectValue placeholder="Date" />
-                </span>
+              <SelectTrigger className="md:w-[180px] w-10 frosted-glass-button border-0 [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
+                <div className="flex items-center gap-2 w-full">
+                  <Calendar className="h-4 w-4 shrink-0" />
+                  <span className="hidden md:block">
+                    <SelectValue placeholder="Date" />
+                  </span>
+                </div>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Dates</SelectItem>
@@ -120,11 +122,13 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
             {/* Price Filter */}
             <Select value={selectedPrice} onValueChange={handlePriceChange}>
-              <SelectTrigger className="md:w-[150px] w-10 frosted-glass-button border-0">
-                <span className="text-sm font-bold md:mr-2">₱</span>
-                <span className="hidden md:inline">
-                  <SelectValue placeholder="Price" />
-                </span>
+              <SelectTrigger className="md:w-[150px] w-10 frosted-glass-button border-0 [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
+                <div className="flex items-center gap-2 w-full">
+                  <span className="text-sm font-bold shrink-0">₱</span>
+                  <span className="hidden md:block">
+                    <SelectValue placeholder="Price" />
+                  </span>
+                </div>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Prices</SelectItem>
