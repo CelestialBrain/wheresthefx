@@ -20,6 +20,8 @@ interface ApifyDatasetItem {
   ownerId?: string;
   url?: string;
   inputUrl?: string;
+  displayUrl?: string;  // Direct CDN image URL (primary)
+  imageUrl?: string;    // Alternative image URL field
   hashtags?: string[];
   mentions?: string[];
   error?: string;
@@ -547,12 +549,16 @@ Deno.serve(async (req) => {
         // Determine if post needs review (missing critical info)
         const needsReview = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
 
+        // Extract image URL from Apify data (displayUrl or imageUrl)
+        const imageUrl = item.displayUrl || item.imageUrl;
+
         // Prepare insert data - allow NULL for missing time
         const insertData: any = {
           post_id: postId,
           instagram_account_id: account.id,
           caption: item.caption,
           post_url: postUrl,
+          image_url: imageUrl,
           posted_at: postedAt,
           likes_count: likesCount,
           comments_count: commentsCount,
@@ -803,6 +809,9 @@ Deno.serve(async (req) => {
             // Detect incomplete data
             const hasIncompleteData = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
 
+            // Extract image URL from Apify data
+            const imageUrl = post.displayUrl || post.imageUrl;
+
             // Insert new post
             const { data: insertedPost, error: insertError } = await supabase
               .from('instagram_posts')
@@ -811,6 +820,7 @@ Deno.serve(async (req) => {
                 post_id: postId,
                 caption: post.caption,
                 post_url: postUrl,
+                image_url: imageUrl,
                 posted_at: post.timestamp,
                 likes_count: likesCount,
                 comments_count: commentsCount,

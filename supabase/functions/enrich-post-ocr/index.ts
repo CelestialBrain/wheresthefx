@@ -43,19 +43,25 @@ serve(async (req) => {
       );
     }
 
-    // Get the image URL from post_url (Instagram post link)
-    let imageUrl = post.post_url;
+    // Get the direct image URL from the database
+    const imageUrl = post.image_url;
     
     if (!imageUrl) {
-      throw new Error('No image URL found in post');
+      console.log(`Post ${postId} has no image_url, marking as needs_review`);
+      
+      await supabase
+        .from('instagram_posts')
+        .update({
+          ocr_processed: true,
+          ocr_last_attempt: new Date().toISOString(),
+          needs_review: true,
+        })
+        .eq('id', postId);
+      
+      throw new Error('No image URL available for OCR - post marked for review');
     }
-
-    // IMPORTANT: Instagram post URLs (instagram.com/p/XXX) are web pages, not images.
-    // Vision models need direct image URLs from Instagram's CDN.
-    // Since we don't have CDN URLs from the scraper, OCR will likely fail.
-    // This is a known limitation - we'd need to enhance the scraper to extract image URLs.
     
-    console.log(`Attempting OCR for post ${postId} with URL: ${imageUrl}`);
+    console.log(`Attempting OCR for post ${postId} with image URL: ${imageUrl}`);
 
     // Call Lovable AI vision model
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {

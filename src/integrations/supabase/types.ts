@@ -366,6 +366,7 @@ export type Database = {
           event_title: string | null
           hashtags: string[] | null
           id: string
+          image_url: string | null
           instagram_account_id: string
           is_event: boolean | null
           likes_count: number | null
@@ -393,6 +394,7 @@ export type Database = {
           event_title?: string | null
           hashtags?: string[] | null
           id?: string
+          image_url?: string | null
           instagram_account_id: string
           is_event?: boolean | null
           likes_count?: number | null
@@ -420,6 +422,7 @@ export type Database = {
           event_title?: string | null
           hashtags?: string[] | null
           id?: string
+          image_url?: string | null
           instagram_account_id?: string
           is_event?: boolean | null
           likes_count?: number | null
