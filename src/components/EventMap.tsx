@@ -44,6 +44,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        crossOrigin: true, // Enable proper caching
       }
     ).addTo(map);
 

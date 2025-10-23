@@ -173,4 +173,9 @@ All colors MUST be HSL.
   .dark .frosted-glass-button:focus {
     background-color: rgba(0, 0, 0, 0.30);
   }
+  
+  /* Hide Leaflet attribution */
+  .leaflet-control-attribution {
+    display: none !important;
+  }
 }
