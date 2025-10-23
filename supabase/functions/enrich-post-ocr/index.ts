@@ -79,27 +79,42 @@ serve(async (req) => {
               {
                 type: 'text',
                 text: `You are analyzing an Instagram post image to extract event details. Look carefully for:
-                - Event title/name (often in large or stylized text)
+                
+                EVENT DETAILS:
+                - Event title/name (often in large or stylized text, headers, or main titles)
                 - Date (check month names, numbers, day of week)
                 - Time (AM/PM, 24-hour format, "doors open", "starts at")
-                - Location/Venue name (bar, club, restaurant, venue names)
-                - Address (street, city)
                 - Price or "FREE" mentions
                 
-                Common patterns to watch for:
-                - Dates like "March 15", "15/3", "Every Friday"
-                - Times like "9PM", "21:00", "9-2AM"
-                - Venues in all caps or special fonts
+                LOCATION EXTRACTION (PRIORITY ORDER):
+                1. Pin emoji (📍) followed by venue name and address
+                   Example: "📍 Living Room, 42 Esteban Abada" → location_name: "Living Room", location_address: "42 Esteban Abada"
+                2. Street names and numbers
+                   Examples: "42 Esteban Abada", "Katipunan Avenue", "Jupiter Street"
+                3. Building names and floor numbers
+                   Examples: "2F The Barn", "Molito Lifestyle Center", "BGC"
+                4. City/area names
+                   Examples: "Makati", "Quezon City", "Manila", "BGC", "Poblacion"
+                5. Venue names in all caps or special fonts
                 
-                IMPORTANT: Extract the EVENT DATE (when the event happens), not the post date.
+                Common patterns to watch for:
+                - Dates like "March 15, 2025", "15/3", "October 25"
+                - Times like "9PM", "21:00", "9-2AM", "doors open at 8pm"
+                - Location indicators: "📍", "@", "at", "venue:", "location:"
+                - Philippine street patterns: "[Number] [Street Name]", "[Area] Avenue"
+                
+                CRITICAL: 
+                - Extract the EVENT DATE (when the event happens), not the post date
+                - Separate VENUE NAME from STREET ADDRESS if both are present
+                - Look for pin emojis (📍) as the strongest location indicator
                 
                 Return ONLY valid JSON in this format (use null for missing values):
                 {
                   "event_title": "string or null",
-                  "event_date": "YYYY-MM-DD or null (convert dates to this format, use current year if not specified)",
+                  "event_date": "YYYY-MM-DD or null (convert dates to this format, assume year 2025 if not specified)",
                   "event_time": "HH:MM or null (24-hour format)",
-                  "location_name": "string or null",
-                  "location_address": "string or null",
+                  "location_name": "venue name only (e.g., 'Living Room', 'The Barn')",
+                  "location_address": "street address only (e.g., '42 Esteban Abada, Loyola Heights')",
                   "price": "number or null"
                 }
                 

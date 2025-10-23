@@ -50,6 +50,89 @@ function extractUsernameFromUrl(url: string): string | undefined {
   return username || undefined;
 }
 
+// Parse and normalize date to YYYY-MM-DD format
+function parseAndNormalizeDate(dateStr: string): string | null {
+  if (!dateStr) return null;
+  
+  const currentYear = new Date().getFullYear();
+  const today = new Date();
+  
+  // If already in YYYY-MM-DD format, validate and return
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const date = new Date(dateStr);
+    // If date is in the past by more than 30 days, assume next year
+    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
+      date.setFullYear(currentYear + 1);
+      return date.toISOString().split('T')[0];
+    }
+    return dateStr;
+  }
+  
+  // Handle "Month Day" or "Month Day, Year" formats
+  const monthDayYearMatch = dateStr.match(/(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (\d{1,2})(?:st|nd|rd|th)?(?:,? (\d{4}))?/i);
+  if (monthDayYearMatch) {
+    const monthStr = dateStr.match(/(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/i)?.[0].toLowerCase();
+    const monthMap: { [key: string]: number } = {
+      january: 0, jan: 0, february: 1, feb: 1, march: 2, mar: 2,
+      april: 3, apr: 3, may: 4, june: 5, jun: 5, july: 6, jul: 6,
+      august: 7, aug: 7, september: 8, sep: 8, october: 9, oct: 9,
+      november: 10, nov: 10, december: 11, dec: 11
+    };
+    
+    if (monthStr && monthMap[monthStr] !== undefined) {
+      const day = parseInt(monthDayYearMatch[1]);
+      let year = monthDayYearMatch[2] ? parseInt(monthDayYearMatch[2]) : currentYear;
+      
+      const date = new Date(year, monthMap[monthStr], day);
+      
+      // If date is in the past by more than 30 days, assume next year
+      if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
+        date.setFullYear(currentYear + 1);
+      }
+      
+      return date.toISOString().split('T')[0];
+    }
+  }
+  
+  // Handle MM/DD or MM/DD/YYYY formats
+  const slashMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (slashMatch) {
+    const month = parseInt(slashMatch[1]) - 1;
+    const day = parseInt(slashMatch[2]);
+    let year = slashMatch[3] ? parseInt(slashMatch[3]) : currentYear;
+    if (year < 100) year += 2000; // Handle 2-digit years
+    
+    const date = new Date(year, month, day);
+    
+    // If date is in the past by more than 30 days, assume next year
+    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
+      date.setFullYear(currentYear + 1);
+    }
+    
+    return date.toISOString().split('T')[0];
+  }
+  
+  // Handle DD-MM-YYYY formats
+  const dashMatch = dateStr.match(/(\d{1,2})-(\d{1,2})-(\d{2,4})/);
+  if (dashMatch) {
+    const day = parseInt(dashMatch[1]);
+    const month = parseInt(dashMatch[2]) - 1;
+    let year = parseInt(dashMatch[3]);
+    if (year < 100) year += 2000;
+    
+    const date = new Date(year, month, day);
+    
+    // If date is in the past by more than 30 days, assume next year
+    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
+      date.setFullYear(currentYear + 1);
+    }
+    
+    return date.toISOString().split('T')[0];
+  }
+  
+  return null;
+}
+
 // Convert relative date terms to actual dates with improved year detection
 function parseRelativeDate(text: string): string | null {
   const now = new Date();
@@ -157,10 +240,60 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
     return { isEvent: false };
   }
 
-  // STEP 3: Extract location (preferred but not required)
-  const locationPattern = /(?:at|@|location:|venue:|place:)\s*([^\n,]+)/i;
-  const locationMatch = caption.match(locationPattern);
-  const extractedLocation = locationMatch?.[1]?.trim();
+  // STEP 3: Extract location with pin emoji priority and street detection
+  let extractedLocation: string | undefined;
+  let extractedAddress: string | undefined;
+  
+  // Priority 1: Pin emoji (📍) - most explicit indicator
+  const pinEmojiPattern = /📍\s*([^\n]+)/;
+  const pinMatch = caption.match(pinEmojiPattern);
+  if (pinMatch) {
+    const locationText = pinMatch[1].trim();
+    // Split by comma to separate venue from address
+    const parts = locationText.split(',').map(p => p.trim());
+    extractedLocation = parts[0];
+    if (parts.length > 1) {
+      extractedAddress = parts.slice(1).join(', ');
+    }
+  }
+  
+  // Priority 2: Traditional keywords (at/location:/venue:)
+  if (!extractedLocation) {
+    const locationPattern = /(?:at|@|location:|venue:|place:)\s*([^\n,]+)/i;
+    const locationMatch = caption.match(locationPattern);
+    extractedLocation = locationMatch?.[1]?.trim();
+  }
+  
+  // Priority 3: Street name detection (Filipino patterns)
+  if (!extractedAddress && !extractedLocation) {
+    // Common Filipino street patterns
+    const streetPatterns = [
+      /\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:Street|St\.|Avenue|Ave\.|Road|Rd\.|Boulevard|Blvd\.))?/,
+      /(?:Katipunan|Tomas Morato|Jupiter|Makati|Bonifacio|Quezon|Maginhawa|Morato|Timog|Ortigas|EDSA|Ayala|Roxas|Aguirre|Esteban|Loyola|Panay|Kalayaan)\s+(?:Avenue|Ave\.|Street|St\.|Road|Rd\.)?/i,
+      /\b\d+(?:F|\/F|nd Floor|rd Floor|th Floor)\s+[A-Z][a-z]+/,
+    ];
+    
+    for (const pattern of streetPatterns) {
+      const streetMatch = caption.match(pattern);
+      if (streetMatch) {
+        extractedAddress = streetMatch[0].trim();
+        // Try to find venue name before or after the address
+        const lines = caption.split('\n');
+        for (const line of lines) {
+          if (line.includes(extractedAddress)) {
+            const parts = line.split(',').map(p => p.trim());
+            if (parts.length > 1 && parts[0] !== extractedAddress) {
+              extractedLocation = parts[0];
+            }
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
+  
+  // Priority 4: Instagram locationName metadata
   const finalLocation = extractedLocation || locationName;
 
   // STEP 4: Extract event details
@@ -184,8 +317,12 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
   for (const pattern of datePatterns) {
     const match = caption.match(pattern);
     if (match) {
-      eventDate = match[0];
-      break;
+      // Normalize the date to YYYY-MM-DD format
+      const normalizedDate = parseAndNormalizeDate(match[0]);
+      if (normalizedDate) {
+        eventDate = normalizedDate;
+        break;
+      }
     }
   }
   
@@ -252,6 +389,7 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
     eventDate,
     eventTime: timeValidationFailed ? undefined : eventTime, // Set to undefined if validation failed
     locationName: finalLocation || undefined,
+    locationAddress: extractedAddress || undefined,
     signupUrl,
     isEvent: hasMinimumInfo,
     timeValidationFailed, // Flag for needs_review
