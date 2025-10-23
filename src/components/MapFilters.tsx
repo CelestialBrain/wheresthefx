@@ -242,18 +242,10 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
             <Button
               size="icon"
-              className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 relative shadow-none"
+              className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 shadow-none"
               onClick={() => setSavedDrawerOpen(true)}
             >
               <Bookmark className="h-4 w-4" />
-              {savedCount && savedCount > 0 && (
-                <Badge 
-                  variant="destructive" 
-                  className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                >
-                  {savedCount}
-                </Badge>
-              )}
             </Button>
 
             <DropdownMenu>
