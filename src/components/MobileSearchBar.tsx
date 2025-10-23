@@ -44,7 +44,7 @@ export function MobileSearchBar({ isOpen, onClose, value, onChange }: MobileSear
             placeholder="Search events, places, or accounts..."
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none appearance-none"
+            className="w-full pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-white placeholder:text-white/60 focus:outline-none appearance-none"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="none"
