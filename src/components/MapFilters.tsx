@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Search, Calendar, DollarSign, Clock, Filter } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Search, Calendar, DollarSign, User, Bookmark, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -10,6 +9,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { MobileSearchBar } from "./MobileSearchBar";
+import { useSavedEventsCount } from "@/hooks/useSavedEventsCount";
+import { useNavigate } from "react-router-dom";
 
 interface MapFiltersProps {
   onFilterChange: (filters: any) => void;
@@ -20,6 +22,9 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState("all");
   const [selectedPrice, setSelectedPrice] = useState("all");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const { data: savedCount } = useSavedEventsCount();
+  const navigate = useNavigate();
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -70,48 +75,110 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[1000] backdrop-blur-md bg-black/60 border-b border-border">
+    <div className="fixed top-0 left-0 right-0 z-[1000] blur-gradient-bottom">
       <div className="container mx-auto px-4 py-3">
-        <div className="flex flex-col md:flex-row gap-3 items-center">
-          {/* Search Bar */}
-          <div className="relative flex-1 w-full md:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search events or locations..."
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-9 bg-background/50 border-border"
-            />
+        {/* Desktop and Mobile Row */}
+        <div className="flex items-center justify-between gap-2">
+          {/* Left Side - Search and Filters */}
+          <div className="flex items-center gap-2">
+            {/* Search - Desktop full, Mobile icon */}
+            <div className="hidden md:block relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                placeholder="Search events, places, or accounts..."
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-[280px]"
+              />
+            </div>
+            
+            {/* Mobile Search Icon */}
+            <Button
+              size="icon"
+              className="md:hidden frosted-glass-button"
+              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+
+            {/* Date Filter */}
+            <Select value={selectedDate} onValueChange={handleDateChange}>
+              <SelectTrigger className="md:w-[180px] w-10 frosted-glass-button border-0">
+                <Calendar className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">
+                  <SelectValue placeholder="Date" />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Dates</SelectItem>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="weekend">This Weekend</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Price Filter */}
+            <Select value={selectedPrice} onValueChange={handlePriceChange}>
+              <SelectTrigger className="md:w-[150px] w-10 frosted-glass-button border-0">
+                <DollarSign className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">
+                  <SelectValue placeholder="Price" />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Prices</SelectItem>
+                <SelectItem value="free">Free Only</SelectItem>
+                <SelectItem value="paid">Paid Events</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Date Filter */}
-          <Select value={selectedDate} onValueChange={handleDateChange}>
-            <SelectTrigger className="w-full md:w-[180px] bg-background/50">
-              <Calendar className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Date" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Dates</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="week">This Week</SelectItem>
-              <SelectItem value="weekend">This Weekend</SelectItem>
-              <SelectItem value="month">This Month</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Right Side - User Menu */}
+          <div className="flex items-center gap-2">
+            <Button
+              size="icon"
+              className="frosted-glass-button relative"
+              onClick={() => navigate('/auth')}
+            >
+              <User className="h-4 w-4" />
+            </Button>
 
-          {/* Price Filter */}
-          <Select value={selectedPrice} onValueChange={handlePriceChange}>
-            <SelectTrigger className="w-full md:w-[150px] bg-background/50">
-              <DollarSign className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Price" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Prices</SelectItem>
-              <SelectItem value="free">Free Only</SelectItem>
-              <SelectItem value="paid">Paid Events</SelectItem>
-            </SelectContent>
-          </Select>
+            <Button
+              size="icon"
+              className="frosted-glass-button relative"
+            >
+              <Bookmark className="h-4 w-4" />
+              {savedCount && savedCount > 0 && (
+                <Badge 
+                  variant="destructive" 
+                  className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                >
+                  {savedCount}
+                </Badge>
+              )}
+            </Button>
+
+            <Button
+              size="icon"
+              className="frosted-glass-button"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
+
+        {/* Mobile Search Bar - Slides down */}
+        {mobileSearchOpen && (
+          <div className="md:hidden mt-2">
+            <MobileSearchBar
+              isOpen={mobileSearchOpen}
+              onClose={() => setMobileSearchOpen(false)}
+              value={searchQuery}
+              onChange={handleSearchChange}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

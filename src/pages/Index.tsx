@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MathVerification } from "@/components/MathVerification";
 import { EventSidebar } from "@/components/EventSidebar";
 import { EventMap } from "@/components/EventMap";
 import { MapFilters } from "@/components/MapFilters";
+import { UserOnboarding } from "@/components/UserOnboarding";
 import { Button } from "@/components/ui/button";
 import { UserCircle } from "lucide-react";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -14,6 +17,23 @@ const Index = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [filters, setFilters] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { hasCompletedOnboarding } = useUserPreferences();
+
+  useEffect(() => {
+    // Check authentication status
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setIsAuthenticated(!!user);
+    });
+  }, []);
+
+  useEffect(() => {
+    // Show onboarding for authenticated users who haven't completed it
+    if (showMap && isAuthenticated && hasCompletedOnboarding === false) {
+      setShowOnboarding(true);
+    }
+  }, [showMap, isAuthenticated, hasCompletedOnboarding]);
 
   const handleVerified = () => {
     setIsVerified(true);
@@ -23,11 +43,18 @@ const Index = () => {
     }, 1500);
   };
 
+  const handleOnboardingComplete = (selectedTags: string[]) => {
+    setShowOnboarding(false);
+    // Apply tag filters to the map
+    setFilters((prev: any) => ({ ...prev, interestTags: selectedTags }));
+  };
+
   if (showMap) {
     return (
       <div className="h-screen bg-black">
         <MapFilters onFilterChange={setFilters} onSearchChange={setSearchQuery} />
         <EventMap filters={filters} searchQuery={searchQuery} />
+        <UserOnboarding open={showOnboarding} onComplete={handleOnboardingComplete} />
       </div>
     );
   }
@@ -42,9 +69,14 @@ const Index = () => {
             f(x)
           </span>
         </div>
+        
         {/* Header */}
         <header className="absolute top-6 right-6">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/auth")}>
+          <Button 
+            className="frosted-glass-purple"
+            size="sm" 
+            onClick={() => navigate("/auth")}
+          >
             <UserCircle className="h-4 w-4 mr-2" />
             Sign In
           </Button>
@@ -66,41 +98,7 @@ const Index = () => {
           </div>
 
           {/* Math Verification */}
-          {!isVerified ? (
-            <MathVerification onVerified={handleVerified} />
-          ) : (
-            <div className="space-y-6">
-              <div className="p-8 border border-border/50 rounded-lg bg-card/50 backdrop-blur-sm">
-                <h2 className="text-2xl font-semibold mb-3">Welcome to f(x)</h2>
-                <p className="text-muted-foreground mb-6">
-                  You're now viewing all the functions happening in Quezon City. Check out the
-                  sidebar to find events near you, or browse by category.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <Button variant="outline" size="sm">
-                    Parties
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    Thrift Markets
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    Concerts
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    Markets
-                  </Button>
-                </div>
-              </div>
-
-              <div className="text-sm text-muted-foreground space-y-2">
-                <p>
-                  <span className="font-semibold">New here?</span> You can browse all events
-                  without an account. Sign up to create your own functions and get personalized
-                  recommendations.
-                </p>
-              </div>
-            </div>
-          )}
+          <MathVerification onVerified={handleVerified} />
         </div>
 
         {/* Footer */}

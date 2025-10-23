@@ -368,7 +368,35 @@ export type Database = {
             referencedRelation: "instagram_accounts"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "instagram_posts_instagram_account_id_fkey"
+            columns: ["instagram_account_id"]
+            isOneToOne: false
+            referencedRelation: "popular_instagram_accounts"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      interest_tags: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -376,10 +404,12 @@ export type Database = {
           bio: string | null
           created_at: string
           display_name: string | null
+          has_completed_onboarding: boolean | null
           id: string
           is_host: boolean
           location_lat: number | null
           location_lng: number | null
+          preferences: Json | null
           updated_at: string
           username: string
         }
@@ -388,10 +418,12 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
+          has_completed_onboarding?: boolean | null
           id: string
           is_host?: boolean
           location_lat?: number | null
           location_lng?: number | null
+          preferences?: Json | null
           updated_at?: string
           username: string
         }
@@ -400,10 +432,12 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
+          has_completed_onboarding?: boolean | null
           id?: string
           is_host?: boolean
           location_lat?: number | null
           location_lng?: number | null
+          preferences?: Json | null
           updated_at?: string
           username?: string
         }
@@ -549,7 +583,26 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      popular_instagram_accounts: {
+        Row: {
+          bio: string | null
+          created_at: string | null
+          display_name: string | null
+          engagement_score: number | null
+          follower_count: number | null
+          id: string | null
+          is_active: boolean | null
+          is_verified: boolean | null
+          last_scraped_at: string | null
+          post_count: number | null
+          profile_pic_url: string | null
+          total_comments: number | null
+          total_likes: number | null
+          updated_at: string | null
+          username: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {

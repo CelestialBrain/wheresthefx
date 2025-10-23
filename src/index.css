@@ -45,6 +45,10 @@ All colors MUST be HSL.
     
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* Frosted glass effects */
+    --glass-bg: 255 255 255;
+    --glass-bg-dark: 0 0 0;
   }
 
   .dark {
@@ -107,5 +111,40 @@ All colors MUST be HSL.
 
   .animate-zoom-into-fx {
     animation: zoomIntoFx 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+  
+  /* Frosted glass utility classes */
+  .frosted-glass {
+    @apply backdrop-blur-md bg-white/10 dark:bg-black/20 border border-white/20;
+  }
+  
+  .frosted-glass-purple {
+    @apply backdrop-blur-md bg-purple-500/20 border border-purple-400/30 text-white;
+  }
+  
+  .frosted-glass-button {
+    @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 hover:bg-white/20 dark:hover:bg-black/40 transition-all duration-200;
+  }
+  
+  /* Gradient blur for bottom edges */
+  .blur-gradient-bottom {
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  }
+  
+  /* Slide in animation */
+  @keyframes slide-in-from-top {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  .animate-slide-in-from-top {
+    animation: slide-in-from-top 0.3s ease-out;
   }
 }

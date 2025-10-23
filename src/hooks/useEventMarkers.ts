@@ -8,13 +8,14 @@ interface UseEventMarkersOptions {
   eventTypes?: string[];
   priceFilter?: 'free' | 'paid' | 'all';
   searchQuery?: string;
+  interestTags?: string[];
 }
 
 export function useEventMarkers(options: UseEventMarkersOptions = {}) {
   return useQuery({
     queryKey: ['event-markers', options],
     queryFn: async (): Promise<LocationMarker[]> => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('instagram_posts')
         .select('*, instagram_accounts(*)')
         .eq('is_event', true)
@@ -22,6 +23,23 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
         .not('location_lng', 'is', null)
         .gte('event_date', new Date().toISOString().split('T')[0])
         .order('likes_count', { ascending: false });
+
+      // Filter by search query (location or account)
+      if (options.searchQuery) {
+        query = query.or(
+          `location_name.ilike.%${options.searchQuery}%,location_address.ilike.%${options.searchQuery}%,instagram_accounts.username.ilike.%${options.searchQuery}%`
+        );
+      }
+
+      // Filter by interest tags (match against event title, caption, or hashtags)
+      if (options.interestTags && options.interestTags.length > 0) {
+        const tagFilters = options.interestTags
+          .map(tag => `event_title.ilike.%${tag}%,caption.ilike.%${tag}%,hashtags.cs.{${tag}}`)
+          .join(',');
+        query = query.or(tagFilters);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       return groupEventsByLocation(data || []);
