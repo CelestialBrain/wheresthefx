@@ -42,6 +42,7 @@ export function MobileSearchBar({ isOpen, onClose, value, onChange }: MobileSear
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full pl-9 pr-9 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+          autoComplete="off"
         />
         <button
           onClick={onClose}

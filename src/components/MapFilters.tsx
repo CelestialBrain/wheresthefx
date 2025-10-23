@@ -149,6 +149,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none w-[280px]"
+                autoComplete="off"
               />
             </div>
             
