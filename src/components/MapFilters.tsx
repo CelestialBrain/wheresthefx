@@ -142,15 +142,17 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
           {/* Left Side - Search and Filters */}
           <div className="flex items-center gap-2">
             {/* Search - Desktop full, Mobile icon */}
-            <div className="hidden md:block relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70 z-10 relative" />
-              <input
-                placeholder="Search events, places, or accounts..."
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-white placeholder:text-white/60 focus:outline-none w-[280px]"
-                autoComplete="off"
-              />
+            <div className="hidden md:block">
+              <div className="relative h-10 w-[280px] rounded-md frosted-glass-button">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70 pointer-events-none z-20" />
+                <input
+                  className="absolute inset-0 w-full h-full bg-transparent pl-9 pr-4 text-sm text-white placeholder:text-white/60 focus:outline-none"
+                  placeholder="Search events, places, or accounts..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
             </div>
             
             {/* Mobile Search Icon */}
@@ -166,7 +168,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
             {/* Date Filter */}
             <Select value={selectedDate} onValueChange={handleDateChange}>
-              <SelectTrigger className="md:w-[180px] w-10 frosted-glass-button border-0 [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
+              <SelectTrigger className="md:w-[180px] w-10 bg-white dark:bg-neutral-900 text-foreground border border-white/20 dark:border-white/10 shadow-sm [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
                 <div className="flex items-center gap-2 w-full">
                   <Calendar className="h-4 w-4 shrink-0" />
                   <span className="hidden md:block">
@@ -185,7 +187,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
             {/* Price Filter */}
             <Select value={selectedPrice} onValueChange={handlePriceChange}>
-              <SelectTrigger className="md:w-[150px] w-10 frosted-glass-button border-0 [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
+              <SelectTrigger className="md:w-[150px] w-10 bg-white dark:bg-neutral-900 text-foreground border border-white/20 dark:border-white/10 shadow-sm [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
                 <div className="flex items-center gap-2 w-full">
                   <DollarSign className="h-4 w-4 shrink-0" />
                   <span className="hidden md:block">

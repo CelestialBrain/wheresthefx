@@ -36,15 +36,15 @@ export function MobileSearchBar({ isOpen, onClose, value, onChange }: MobileSear
   return (
     <div className="w-full animate-slide-in-from-top">
       <div className="relative flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70 z-10 relative pointer-events-none" />
+        <div className="relative flex-1 h-10 rounded-md frosted-glass-button">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70 pointer-events-none z-20" />
           <input
             ref={inputRef}
             type="text"
             placeholder="Search events, places, or accounts..."
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full pl-9 pr-4 h-10 rounded-md frosted-glass-button text-sm text-white placeholder:text-white/60 focus:outline-none appearance-none"
+            className="absolute inset-0 w-full h-full bg-transparent pl-9 pr-4 text-sm text-white placeholder:text-white/60 focus:outline-none appearance-none"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="none"
