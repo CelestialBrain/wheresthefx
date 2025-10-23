@@ -53,6 +53,35 @@ export type Database = {
           },
         ]
       }
+      event_groups: {
+        Row: {
+          created_at: string | null
+          id: string
+          merged_post_ids: string[] | null
+          primary_post_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          merged_post_ids?: string[] | null
+          primary_post_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          merged_post_ids?: string[] | null
+          primary_post_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_groups_primary_post_id_fkey"
+            columns: ["primary_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_images: {
         Row: {
           created_at: string
@@ -81,6 +110,48 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_reports: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          instagram_post_id: string | null
+          report_type: string | null
+          reporter_user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          instagram_post_id?: string | null
+          report_type?: string | null
+          reporter_user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          instagram_post_id?: string | null
+          report_type?: string | null
+          reporter_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_reports_instagram_post_id_fkey"
+            columns: ["instagram_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_reports_reporter_user_id_fkey"
+            columns: ["reporter_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -225,6 +296,10 @@ export type Database = {
           location_lng: number | null
           location_name: string | null
           mentions: string[] | null
+          needs_review: boolean | null
+          ocr_confidence: number | null
+          ocr_last_attempt: string | null
+          ocr_processed: boolean | null
           post_id: string
           post_url: string
           posted_at: string
@@ -248,6 +323,10 @@ export type Database = {
           location_lng?: number | null
           location_name?: string | null
           mentions?: string[] | null
+          needs_review?: boolean | null
+          ocr_confidence?: number | null
+          ocr_last_attempt?: string | null
+          ocr_processed?: boolean | null
           post_id: string
           post_url: string
           posted_at: string
@@ -271,6 +350,10 @@ export type Database = {
           location_lng?: number | null
           location_name?: string | null
           mentions?: string[] | null
+          needs_review?: boolean | null
+          ocr_confidence?: number | null
+          ocr_last_attempt?: string | null
+          ocr_processed?: boolean | null
           post_id?: string
           post_url?: string
           posted_at?: string
@@ -362,6 +445,42 @@ export type Database = {
           {
             foreignKeyName: "reports_reporter_id_fkey"
             columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_events: {
+        Row: {
+          created_at: string | null
+          id: string
+          instagram_post_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instagram_post_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instagram_post_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_events_instagram_post_id_fkey"
+            columns: ["instagram_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_events_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

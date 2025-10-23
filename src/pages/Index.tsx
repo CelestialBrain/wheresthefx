@@ -2,17 +2,40 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MathVerification } from "@/components/MathVerification";
 import { EventSidebar } from "@/components/EventSidebar";
+import { EventMap } from "@/components/EventMap";
+import { MapFilters } from "@/components/MapFilters";
 import { Button } from "@/components/ui/button";
 import { UserCircle } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
   const [isVerified, setIsVerified] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [filters, setFilters] = useState({});
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleVerified = () => {
+    setIsVerified(true);
+    setIsAnimating(true);
+    setTimeout(() => {
+      setShowMap(true);
+    }, 1500);
+  };
+
+  if (showMap) {
+    return (
+      <div className="h-screen bg-black">
+        <MapFilters onFilterChange={setFilters} onSearchChange={setSearchQuery} />
+        <EventMap filters={filters} searchQuery={searchQuery} />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex">
+    <div className={`min-h-screen flex ${isAnimating ? 'bg-black' : ''}`}>
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
+      <main className={`flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden ${isAnimating ? 'animate-fade-out' : ''}`}>
         {/* Background f(x) */}
         <div className="absolute bottom-0 right-0 pointer-events-none select-none translate-x-1/4 translate-y-1/4 z-0">
           <span className="math-function text-[40rem] text-muted-foreground/20 leading-none">
@@ -33,8 +56,8 @@ const Index = () => {
           <div className="space-y-2">
             <h1 className="text-5xl md:text-7xl font-light tracking-tight">
               Where's the{" "}
-              <span className="math-function text-accent">f</span>
-              <span className="math-function text-accent">(x)</span>
+              <span className={`math-function text-accent ${isAnimating ? 'animate-zoom-into-fx' : ''}`}>f</span>
+              <span className={`math-function text-accent ${isAnimating ? 'animate-zoom-into-fx' : ''}`}>(x)</span>
               <span className="text-muted-foreground">?</span>
             </h1>
             <p className="text-muted-foreground text-lg">
@@ -44,7 +67,7 @@ const Index = () => {
 
           {/* Math Verification */}
           {!isVerified ? (
-            <MathVerification onVerified={() => setIsVerified(true)} />
+            <MathVerification onVerified={handleVerified} />
           ) : (
             <div className="space-y-6">
               <div className="p-8 border border-border/50 rounded-lg bg-card/50 backdrop-blur-sm">
