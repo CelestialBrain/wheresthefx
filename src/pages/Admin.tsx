@@ -248,7 +248,6 @@ const Admin = () => {
           </TabsList>
           
           <TabsContent value="scraping" className="space-y-6">
-            <div>
           
           {/* Last Scrape Status */}
           {lastRun && (
@@ -357,9 +356,8 @@ const Admin = () => {
               </Button>
             </div>
           </Card>
-        </div>
 
-        {/* Add New Account */}
+          {/* Add New Account */}
         <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4">Add Instagram Account</h2>
           <div className="flex gap-2">
@@ -442,7 +440,6 @@ const Admin = () => {
             )}
           </div>
         </Card>
-            </div>
           </TabsContent>
           
           <TabsContent value="review">
