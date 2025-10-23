@@ -44,16 +44,18 @@ serve(async (req) => {
     }
 
     // Get the image URL from post_url (Instagram post link)
-    // We need to convert Instagram post URL to an image URL
     let imageUrl = post.post_url;
     
-    // Try to extract image from Instagram CDN or use post URL directly
-    // Instagram URLs like https://www.instagram.com/p/XXX/ can be accessed by vision models
     if (!imageUrl) {
-      throw new Error('No image URL found');
+      throw new Error('No image URL found in post');
     }
 
-    console.log(`Processing OCR for post ${postId} with URL: ${imageUrl}`);
+    // IMPORTANT: Instagram post URLs (instagram.com/p/XXX) are web pages, not images.
+    // Vision models need direct image URLs from Instagram's CDN.
+    // Since we don't have CDN URLs from the scraper, OCR will likely fail.
+    // This is a known limitation - we'd need to enhance the scraper to extract image URLs.
+    
+    console.log(`Attempting OCR for post ${postId} with URL: ${imageUrl}`);
 
     // Call Lovable AI vision model
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -109,8 +111,19 @@ serve(async (req) => {
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('AI API error:', errorText);
-      throw new Error(`AI API error: ${aiResponse.status}`);
+      console.error('AI API error:', aiResponse.status, errorText);
+      
+      // Mark as attempted so we don't retry infinitely
+      await supabase
+        .from('instagram_posts')
+        .update({
+          ocr_last_attempt: new Date().toISOString(),
+          ocr_processed: true,
+          needs_review: true,
+        })
+        .eq('id', postId);
+      
+      throw new Error(`AI API error ${aiResponse.status}: ${errorText.substring(0, 200)}`);
     }
 
     const aiData = await aiResponse.json();

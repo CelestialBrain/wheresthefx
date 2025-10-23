@@ -133,15 +133,11 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
     return { isEvent: false };
   }
 
-  // STEP 3: Check for location (required for events)
+  // STEP 3: Extract location (preferred but not required)
   const locationPattern = /(?:at|@|location:|venue:|place:)\s*([^\n,]+)/i;
   const locationMatch = caption.match(locationPattern);
   const extractedLocation = locationMatch?.[1]?.trim();
   const finalLocation = extractedLocation || locationName;
-  
-  if (!finalLocation) {
-    return { isEvent: false };
-  }
 
   // STEP 4: Extract event details
   const lines = caption.split('\n').filter(line => line.trim());
@@ -177,18 +173,44 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
     }
   }
 
-  // Enhanced time patterns
-  const timePattern = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b/;
-  const timeMatch = caption.match(timePattern);
-  const eventTime = timeMatch?.[0];
+// Enhanced time patterns and normalization
+  const timePattern = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b/gi;
+  const timeMatches = caption.matchAll(timePattern);
+  let eventTime: string | undefined;
+  
+  for (const match of timeMatches) {
+    const hour = parseInt(match[1]);
+    const minute = match[2] || '00';
+    const period = match[3]?.toUpperCase();
+    
+    // Normalize to HH:MM format
+    let normalizedHour = hour;
+    if (period === 'PM' && hour !== 12) {
+      normalizedHour = hour + 12;
+    } else if (period === 'AM' && hour === 12) {
+      normalizedHour = 0;
+    } else if (!period && hour > 12) {
+      // Already 24-hour format
+      normalizedHour = hour;
+    } else if (!period && hour <= 12) {
+      // Assume PM for nightlife context (after 6PM is common)
+      normalizedHour = hour >= 6 ? hour : hour + 12;
+    }
+    
+    eventTime = `${normalizedHour.toString().padStart(2, '0')}:${minute}`;
+    break; // Take first valid time
+  }
 
+  // Consider it an event if we have event keywords + (date OR location)
+  const hasMinimumInfo = !!(finalLocation || eventDate);
+  
   return {
     eventTitle,
     eventDate,
     eventTime,
-    locationName: finalLocation,
+    locationName: finalLocation || undefined,
     signupUrl,
-    isEvent: true,
+    isEvent: hasMinimumInfo,
   };
 }
 
@@ -365,16 +387,18 @@ Deno.serve(async (req) => {
         // Skip non-events
         if (!eventInfo.isEvent) {
           totalSkipped++;
-          console.log(`Skipping post ${postId} - not an event`);
+          console.log(`Skipping post ${postId} - not an event. Caption: "${item.caption?.substring(0, 100)}..."`);
           continue;
         }
 
         // Skip past events
         if (isEventInPast(eventInfo.eventDate)) {
           totalSkipped++;
-          console.log(`Skipping post ${postId} - event is in the past`);
+          console.log(`Skipping post ${postId} - event is in the past (${eventInfo.eventDate})`);
           continue;
         }
+
+        console.log(`Processing event: ${postId}, Date: ${eventInfo.eventDate || 'TBD'}, Time: ${eventInfo.eventTime || 'TBD'}, Location: ${eventInfo.locationName || 'TBD'}`);
 
         // Ensure account exists
         let { data: account } = await supabase
@@ -520,52 +544,61 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Detect incomplete data
-        const hasIncompleteData = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
+        // Determine if post needs review (missing critical info)
+        const needsReview = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
+
+        // Prepare insert data - allow NULL for missing time
+        const insertData: any = {
+          post_id: postId,
+          instagram_account_id: account.id,
+          caption: item.caption,
+          post_url: postUrl,
+          posted_at: postedAt,
+          likes_count: likesCount,
+          comments_count: commentsCount,
+          hashtags: hashtags,
+          mentions: mentions,
+          is_event: true,
+          event_title: eventInfo.eventTitle,
+          event_date: eventInfo.eventDate,
+          location_name: eventInfo.locationName,
+          location_address: eventInfo.locationAddress,
+          signup_url: eventInfo.signupUrl,
+          needs_review: needsReview,
+        };
+
+        // Only add event_time if we have a valid value
+        if (eventInfo.eventTime) {
+          insertData.event_time = eventInfo.eventTime;
+        }
 
         // Insert new post
         const { data: insertedPost, error: insertError } = await supabase
           .from('instagram_posts')
-          .insert({
-            instagram_account_id: account.id,
-            post_id: postId,
-            caption: item.caption,
-            post_url: postUrl,
-            posted_at: postedAt,
-            likes_count: likesCount,
-            comments_count: commentsCount,
-            hashtags: hashtags,
-            mentions: mentions,
-            is_event: true,
-            event_title: eventInfo.eventTitle,
-            event_date: eventInfo.eventDate,
-            event_time: eventInfo.eventTime,
-            location_name: eventInfo.locationName,
-            location_address: eventInfo.locationAddress,
-            signup_url: eventInfo.signupUrl,
-            needs_review: hasIncompleteData,
-            ocr_processed: false,
-          })
+          .insert(insertData)
           .select()
           .single();
 
         if (insertError) {
-          console.error(`Failed to insert post ${postId}:`, insertError.message);
-        } else {
-          totalScrapedPosts++;
-          console.log(`Successfully inserted event post ${postId}`);
+          console.error(`Failed to insert post ${postId}:`, insertError.message, insertError);
+          totalSkipped++;
+          continue;
+        }
 
-          // Trigger OCR for incomplete posts
-          if (hasIncompleteData && insertedPost) {
-            console.log(`Post ${postId} has incomplete data, triggering OCR enrichment`);
-            try {
-              await supabase.functions.invoke('enrich-post-ocr', {
-                body: { postId: insertedPost.id }
-              });
-              console.log(`OCR enrichment triggered for post ${postId}`);
-            } catch (ocrError) {
-              console.error(`Failed to trigger OCR for post ${postId}:`, ocrError);
-            }
+        totalScrapedPosts++;
+        console.log(`✓ Inserted post ${postId}${needsReview ? ' (needs review)' : ''}`);
+
+        // If needs review, trigger OCR enrichment
+        if (needsReview && insertedPost) {
+          console.log(`Triggering OCR enrichment for post ${insertedPost.id}`);
+          
+          try {
+            await supabase.functions.invoke('enrich-post-ocr', {
+              body: { postId: insertedPost.id }
+            });
+          } catch (ocrError) {
+            console.error(`OCR enrichment failed for ${insertedPost.id}:`, ocrError);
+            // Don't fail the entire import if OCR fails
           }
         }
       }
