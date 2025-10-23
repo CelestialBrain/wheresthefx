@@ -143,7 +143,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
           <div className="flex items-center gap-2">
             {/* Search - Desktop full, Mobile icon */}
             <div className="hidden md:block relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70 z-10 relative" />
               <input
                 placeholder="Search events, places, or accounts..."
                 value={searchQuery}
