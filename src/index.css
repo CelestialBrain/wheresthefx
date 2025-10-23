@@ -123,7 +123,7 @@ All colors MUST be HSL.
   }
   
 .frosted-glass-button {
-  @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 hover:bg-white/20 dark:hover:bg-black/40 transition-all duration-200 shadow-none;
+  @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 transition-all duration-200 shadow-none;
 }
   
   /* Gradient blur for bottom edges */

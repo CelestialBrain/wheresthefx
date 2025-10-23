@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
-import { Input } from "@/components/ui/input";
 
 interface MobileSearchBarProps {
   isOpen: boolean;
@@ -37,12 +36,12 @@ export function MobileSearchBar({ isOpen, onClose, value, onChange }: MobileSear
     <div className="w-full animate-slide-in-from-top">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
+        <input
           ref={inputRef}
           placeholder="Search events, places, or accounts..."
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="pl-9 pr-9 frosted-glass-button"
+          className="w-full pl-9 pr-9 h-10 rounded-md frosted-glass-button text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
         <button
           onClick={onClose}

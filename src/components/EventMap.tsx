@@ -100,8 +100,8 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
   }, [markers]);
 
   return (
-    <div className="relative w-full h-screen">
-      <div ref={containerRef} className="w-full h-full" />
+    <>
+      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0" />
 
       {selectedMarker && (
         <>
@@ -118,6 +118,6 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
           )}
         </>
       )}
-    </div>
+    </>
   );
 }

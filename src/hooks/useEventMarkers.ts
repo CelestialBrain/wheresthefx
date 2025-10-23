@@ -17,12 +17,31 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
     queryFn: async (): Promise<LocationMarker[]> => {
       let query = supabase
         .from('instagram_posts')
-        .select('*, instagram_accounts(*)')
+        .select('*, instagram_accounts(*)') as any;
+      
+      query = query
         .eq('is_event', true)
         .not('location_lat', 'is', null)
-        .not('location_lng', 'is', null)
-        .gte('event_date', new Date().toISOString().split('T')[0])
-        .order('likes_count', { ascending: false });
+        .not('location_lng', 'is', null);
+
+      // Filter by date range or default to future events
+      if (options.dateRange) {
+        const startDate = options.dateRange.start.toISOString().split('T')[0];
+        const endDate = options.dateRange.end.toISOString().split('T')[0];
+        query = query.gte('event_date', startDate).lte('event_date', endDate);
+      } else {
+        query = query.gte('event_date', new Date().toISOString().split('T')[0]);
+      }
+
+      // Apply ordering
+      query = query.order('likes_count', { ascending: false });
+
+      // Filter by price
+      if (options.priceFilter === 'free') {
+        query = query.eq('is_free', true);
+      } else if (options.priceFilter === 'paid') {
+        query = query.eq('is_free', false);
+      }
 
       // Filter by search query (location or account)
       if (options.searchQuery) {
