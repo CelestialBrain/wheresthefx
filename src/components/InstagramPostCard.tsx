@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, Calendar, Heart, MessageCircle, Instagram, ExternalLink } from "lucide-react";
+import { MapPin, Calendar, Heart, MessageCircle, Instagram, ExternalLink, Bookmark } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -204,22 +204,21 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
                 className="h-6 w-6"
                 onClick={() => handleSave(post.id)}
               >
-                <Heart
+                <Bookmark
                   className={`h-3 w-3 ${
                     savedEvents.has(post.id) ? "fill-accent text-accent" : ""
                   }`}
                 />
               </Button>
             )}
-            <a
-              href={post.post_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-accent hover:underline text-[11px]"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => window.open(post.post_url, '_blank', 'noopener,noreferrer')}
             >
               <ExternalLink className="h-3 w-3" />
-              <span>Link</span>
-            </a>
+            </Button>
             {post.is_event && (
               <Badge variant="default" className="text-[10px] px-1.5 py-0.5 leading-none rounded-sm">
                 Event
