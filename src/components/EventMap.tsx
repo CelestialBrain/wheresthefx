@@ -16,10 +16,12 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersLayerRef = useRef<LayerGroup | null>(null);
+  const userLocationMarkerRef = useRef<L.Marker | null>(null);
 
   const [selectedMarker, setSelectedMarker] = useState<LocationMarker | null>(null);
   const [mapCenter, setMapCenter] = useState<LatLngExpression>([14.5995, 120.9842]); // Manila default
   const [isMapLoading, setIsMapLoading] = useState(true);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
 
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
@@ -65,6 +67,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
         (position) => {
           const center: [number, number] = [position.coords.latitude, position.coords.longitude];
           setMapCenter(center);
+          setUserLocation(center);
           mapRef.current?.setView(center, 12);
         },
         () => {
@@ -88,6 +91,37 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popularEvent]);
+
+  // Add user location marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !userLocation) return;
+
+    // Remove existing user location marker if any
+    if (userLocationMarkerRef.current) {
+      userLocationMarkerRef.current.remove();
+    }
+
+    const userIcon = L.divIcon({
+      html: '<div class="user-location-marker"></div>',
+      className: '',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
+
+    const marker = L.marker(userLocation, {
+      icon: userIcon,
+      zIndexOffset: 1000, // Keep above event markers
+    }).addTo(map);
+
+    userLocationMarkerRef.current = marker;
+
+    return () => {
+      if (userLocationMarkerRef.current) {
+        userLocationMarkerRef.current.remove();
+      }
+    };
+  }, [userLocation]);
 
   // Render markers whenever data changes
   useEffect(() => {

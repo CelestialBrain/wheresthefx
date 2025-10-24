@@ -178,4 +178,24 @@ All colors MUST be HSL.
   .leaflet-control-attribution {
     display: none !important;
   }
+
+  /* User location marker with pulsating animation */
+  .user-location-marker {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: hsl(var(--primary));
+    border: 3px solid hsl(var(--background));
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7);
+    animation: location-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes location-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 10px hsl(var(--primary) / 0);
+    }
+  }
 }
