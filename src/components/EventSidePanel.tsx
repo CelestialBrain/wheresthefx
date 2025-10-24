@@ -141,22 +141,24 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                   )}
 
                   <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold flex-1">
-                        {event.event_title || "Untitled Event"}
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleSave(event)}
-                      >
+                    {event.instagram_accounts?.username && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          @{event.instagram_accounts.username}
+                        </span>
                         <Bookmark
-                          className={`h-4 w-4 ${
-                            savedEvents.has(event.post_id) ? "fill-accent text-accent" : ""
+                          className={`h-4 w-4 cursor-pointer transition-colors ${
+                            savedEvents.has(event.post_id) 
+                              ? "fill-purple-500 text-purple-500" 
+                              : "text-muted-foreground hover:text-foreground"
                           }`}
+                          onClick={() => handleSave(event)}
                         />
-                      </Button>
-                    </div>
+                      </div>
+                    )}
+                    <h3 className="font-semibold">
+                      {event.event_title || "Untitled Event"}
+                    </h3>
 
                     <div className="space-y-1 text-sm text-muted-foreground">
                       {event.event_date && (
