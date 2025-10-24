@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
@@ -52,8 +51,6 @@ export const PublishedEventsManager = () => {
   const [selectedEvent, setSelectedEvent] = useState<PublishedEvent | null>(null);
   const [editingLocation, setEditingLocation] = useState(false);
   const [undoStack, setUndoStack] = useState<Array<{ eventId: string; field: string; oldValue: any; newValue: any }>>([]);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
 
@@ -304,29 +301,39 @@ export const PublishedEventsManager = () => {
       }
     },
     onSuccess: () => {
-      toast.success("Event deleted successfully");
-      setDeleteConfirmOpen(false);
-      setEventToDelete(null);
+      toast.success("Event deleted");
       setSelectedEvent(null);
       queryClient.invalidateQueries({ queryKey: ["published-events"] });
       queryClient.invalidateQueries({ queryKey: ["event-markers"] });
     },
     onError: (error: any) => {
-      toast.error(`Failed to delete event: ${error.message}`);
+      toast.error(`Failed to delete: ${error.message}`);
     },
   });
 
   const handleDeleteClick = () => {
-    if (selectedEvent) {
-      setEventToDelete(selectedEvent.id);
-      setDeleteConfirmOpen(true);
-    }
-  };
+    if (!selectedEvent) return;
+    
+    const eventId = selectedEvent.id;
+    const eventTitle = selectedEvent.event_title;
+    let timeoutId: NodeJS.Timeout;
+    
+    // Show toast with undo option
+    toast.success(`Deleting "${eventTitle}"`, {
+      duration: 5000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          clearTimeout(timeoutId);
+          toast.info("Deletion cancelled");
+        },
+      },
+    });
 
-  const handleDeleteConfirm = () => {
-    if (eventToDelete) {
-      deleteEventMutation.mutate(eventToDelete);
-    }
+    // Schedule deletion after 5 seconds
+    timeoutId = setTimeout(() => {
+      deleteEventMutation.mutate(eventId);
+    }, 5000);
   };
 
   const handleUndo = () => {
@@ -556,26 +563,6 @@ export const PublishedEventsManager = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent className="z-[100]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Event</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{selectedEvent?.event_title}"? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };
