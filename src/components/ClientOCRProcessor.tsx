@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ interface Post {
 
 export function ClientOCRProcessor() {
   const queryClient = useQueryClient();
+  const cancelRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -78,6 +79,8 @@ export function ClientOCRProcessor() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["unprocessed-ocr-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["ocr-pending-count"] });
+      queryClient.invalidateQueries({ queryKey: ["consolidated-review-queue"] });
       queryClient.invalidateQueries({ queryKey: ["review-queue"] });
       queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
     },
@@ -172,7 +175,7 @@ export function ClientOCRProcessor() {
     const worker = await createWorker("eng");
 
     for (let i = 0; i < posts.length; i++) {
-      if (!isProcessing) break; // Allow stopping
+      if (cancelRef.current) break; // Allow stopping
       
       const post = posts[i];
       setCurrentIndex(i + 1);
@@ -187,8 +190,8 @@ export function ClientOCRProcessor() {
       });
 
       try {
-        // Check OCR cache first
-        const imageHash = post.image_url; // Simple hash - in production use actual hash
+        // Check OCR cache first - use stored_image_url if available
+        const imageHash = post.stored_image_url || post.image_url;
         const { data: cached } = await supabase
           .from("ocr_cache")
           .select("*")
@@ -317,10 +320,12 @@ export function ClientOCRProcessor() {
       toast.error("No posts to process");
       return;
     }
+    cancelRef.current = false;
     processWithOCR(unprocessedPosts);
   };
 
   const handleStop = () => {
+    cancelRef.current = true;
     setIsProcessing(false);
     toast.info("OCR processing stopped");
   };
