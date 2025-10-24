@@ -86,6 +86,24 @@ export function ClientOCRProcessor() {
     },
   });
 
+  const convertTimeTo24Hour = (timeStr: string): string | null => {
+    try {
+      const match = timeStr.toLowerCase().match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+      if (!match) return null;
+      
+      let hours = parseInt(match[1]);
+      const minutes = match[2] ? parseInt(match[2]) : 0;
+      const period = match[3].toLowerCase();
+      
+      if (period === 'pm' && hours !== 12) hours += 12;
+      if (period === 'am' && hours === 12) hours = 0;
+      
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
+    } catch (e) {
+      return null;
+    }
+  };
+
   const extractEntities = (text: string, caption: string | null): any => {
     const combinedText = `${caption || ""}\n${text}`.toLowerCase();
     const today = new Date();
@@ -124,27 +142,32 @@ export function ClientOCRProcessor() {
     // Extract time
     for (const pattern of timePatterns) {
       const match = combinedText.match(pattern);
-      if (match) {
-        time = match[0];
+      if (match && match[0]) {
+        const rawTime = match[0];
+        time = convertTimeTo24Hour(rawTime);
         break;
       }
     }
     
-    // Extract price
+    // Extract price - add null checks
     if (!isFree) {
       for (const pattern of pricePatterns) {
         const match = combinedText.match(pattern);
-        if (match) {
-          price = parseFloat(match[1].replace(/,/g, ""));
+        if (match && match[1]) {
+          const priceStr = match[1].replace(/,/g, "");
+          const parsedPrice = parseFloat(priceStr);
+          if (!isNaN(parsedPrice)) {
+            price = parsedPrice;
+          }
           break;
         }
       }
     }
     
-    // Extract venue
+    // Extract venue - add null checks
     for (const pattern of venuePatterns) {
       const match = combinedText.match(pattern);
-      if (match) {
+      if (match && match[1]) {
         venue = match[1].trim();
         break;
       }
