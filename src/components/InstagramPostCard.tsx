@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { ImageWithSkeleton } from "./ImageWithSkeleton";
 
 export interface InstagramPost {
   id: string;
@@ -117,16 +118,11 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
       <div className="flex gap-3 mb-2">
         {/* Image */}
         {post.image_url && (
-          <div className="w-20 h-20 rounded-md overflow-hidden bg-muted flex-shrink-0">
-            <img
-              src={post.image_url}
-              alt={post.event_title || "Event"}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                e.currentTarget.src = "/placeholder.svg";
-              }}
-            />
-          </div>
+          <ImageWithSkeleton
+            src={post.image_url}
+            alt={post.event_title || "Event"}
+            className="w-20 h-20 rounded-md flex-shrink-0 bg-muted"
+          />
         )}
 
         {/* Username + Title (right of image) */}

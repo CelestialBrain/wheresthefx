@@ -58,6 +58,7 @@ export const EventSidebar = () => {
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>("");
+  const [displayLimit, setDisplayLimit] = useState(20);
 
   // Fetch Instagram posts on mount
   useEffect(() => {
@@ -139,8 +140,7 @@ export const EventSidebar = () => {
           )
         `)
         .eq("is_event", true)
-        .order("posted_at", { ascending: false })
-        .limit(50);
+        .order("posted_at", { ascending: false });
 
       if (error) throw error;
 
@@ -317,9 +317,20 @@ export const EventSidebar = () => {
         ) : (
           <>
             {/* Instagram Posts */}
-            {filteredPosts.map((post) => (
+            {filteredPosts.slice(0, displayLimit).map((post) => (
               <InstagramPostCard key={post.id} post={post} />
             ))}
+
+            {/* Load More Button */}
+            {filteredPosts.length > displayLimit && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setDisplayLimit(prev => prev + 20)}
+              >
+                Load More ({filteredPosts.length - displayLimit} remaining)
+              </Button>
+            )}
 
             {filteredPosts.length === 0 && (
               <div className="text-center py-8 text-sm text-muted-foreground">

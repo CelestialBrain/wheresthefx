@@ -9,6 +9,7 @@ import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Image as ImageIcon }
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { ImageWithSkeleton } from "./ImageWithSkeleton";
 
 interface PostWithEventEditorProps {
   post: {
@@ -148,10 +149,10 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       <CardHeader>
         <div className="flex gap-4">
           {post.image_url && (
-            <img 
-              src={post.image_url} 
-              alt="Post" 
-              className="w-32 h-32 object-cover rounded-md"
+            <ImageWithSkeleton
+              src={post.image_url}
+              alt="Post"
+              className="w-32 h-32 rounded-md"
             />
           )}
           <div className="flex-1 space-y-2">

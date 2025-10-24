@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
+import { ImageWithSkeleton } from "./ImageWithSkeleton";
 
 interface EventPopupProps {
   events: any[];
@@ -127,16 +128,11 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
               {events.map((event) => (
                 <Card key={event.id} className="p-4 space-y-3">
                   {event.image_url && (
-                    <div className="aspect-video rounded-lg overflow-hidden bg-muted">
-                      <img
-                        src={event.image_url}
-                        alt={event.event_title || "Event"}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = "/placeholder.svg";
-                        }}
-                      />
-                    </div>
+                    <ImageWithSkeleton
+                      src={event.image_url}
+                      alt={event.event_title || "Event"}
+                      className="aspect-video rounded-lg bg-muted"
+                    />
                   )}
 
                   <div className="space-y-2">
