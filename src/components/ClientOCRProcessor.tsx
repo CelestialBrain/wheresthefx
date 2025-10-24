@@ -1,0 +1,348 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { createWorker } from "tesseract.js";
+import { Eye, PlayCircle, StopCircle, CheckCircle } from "lucide-react";
+
+interface Post {
+  id: string;
+  image_url: string;
+  ocr_processed: boolean;
+  caption: string | null;
+}
+
+export function ClientOCRProcessor() {
+  const queryClient = useQueryClient();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [ocrResults, setOcrResults] = useState<{ postId: string; text: string; confidence: number }[]>([]);
+
+  const { data: unprocessedPosts } = useQuery({
+    queryKey: ["unprocessed-ocr-posts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("instagram_posts")
+        .select("id, image_url, ocr_processed, caption")
+        .eq("ocr_processed", false)
+        .not("image_url", "is", null)
+        .limit(50);
+
+      if (error) throw error;
+      return data as Post[];
+    },
+  });
+
+  const updatePostMutation = useMutation({
+    mutationFn: async ({ 
+      postId, 
+      ocrText, 
+      confidence,
+      entities 
+    }: { 
+      postId: string; 
+      ocrText: string; 
+      confidence: number;
+      entities: any;
+    }) => {
+      const { error } = await supabase
+        .from("instagram_posts")
+        .update({
+          ocr_processed: true,
+          ocr_confidence: confidence,
+          event_title: entities.title || null,
+          event_date: entities.date || null,
+          event_time: entities.time || null,
+          location_name: entities.venue || null,
+          location_address: entities.address || null,
+          price: entities.price || null,
+          is_free: entities.isFree,
+          is_event: entities.isEvent,
+          needs_review: entities.needsReview,
+        })
+        .eq("id", postId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["unprocessed-ocr-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+    },
+  });
+
+  const extractEntities = (text: string, caption: string | null): any => {
+    const combinedText = `${caption || ""}\n${text}`.toLowerCase();
+    
+    // Date regex patterns
+    const datePatterns = [
+      /(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/g, // MM/DD/YYYY or DD-MM-YYYY
+      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{4})?/gi,
+      /(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/gi,
+    ];
+    
+    // Time regex patterns
+    const timePatterns = [
+      /(\d{1,2}):(\d{2})\s*(am|pm)/gi,
+      /(\d{1,2})\s*(am|pm)/gi,
+    ];
+    
+    // Price regex patterns
+    const pricePatterns = [
+      /₱\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/g,
+      /php\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/gi,
+      /(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:pesos|php)/gi,
+    ];
+    
+    // Venue patterns (lines starting with 📍 or "at" or "in")
+    const venuePatterns = [
+      /📍\s*([^\n]+)/gi,
+      /\bat\s+([A-Z][^\n,]+)/g,
+      /\bin\s+([A-Z][^\n,]+)/g,
+    ];
+
+    let date = null;
+    let time = null;
+    let price = null;
+    let isFree = combinedText.includes("free") || combinedText.includes("libre");
+    let venue = null;
+    
+    // Extract date
+    for (const pattern of datePatterns) {
+      const match = combinedText.match(pattern);
+      if (match) {
+        date = match[0];
+        break;
+      }
+    }
+    
+    // Extract time
+    for (const pattern of timePatterns) {
+      const match = combinedText.match(pattern);
+      if (match) {
+        time = match[0];
+        break;
+      }
+    }
+    
+    // Extract price
+    if (!isFree) {
+      for (const pattern of pricePatterns) {
+        const match = combinedText.match(pattern);
+        if (match) {
+          price = parseFloat(match[1].replace(/,/g, ""));
+          break;
+        }
+      }
+    }
+    
+    // Extract venue
+    for (const pattern of venuePatterns) {
+      const match = combinedText.match(pattern);
+      if (match) {
+        venue = match[1].trim();
+        break;
+      }
+    }
+
+    // Determine if it's an event (has date OR time OR venue)
+    const isEvent = !!(date || time || venue);
+    
+    // Needs review if: is event but missing critical data
+    const needsReview = isEvent && (!date || !venue);
+
+    return {
+      title: null, // Can't extract title reliably without AI
+      date,
+      time,
+      price,
+      isFree,
+      venue,
+      address: null, // Would need geocoding
+      isEvent,
+      needsReview,
+    };
+  };
+
+  const processWithOCR = async (posts: Post[]) => {
+    setIsProcessing(true);
+    setCurrentIndex(0);
+    const results: { postId: string; text: string; confidence: number }[] = [];
+
+    const worker = await createWorker("eng");
+
+    for (let i = 0; i < posts.length; i++) {
+      const post = posts[i];
+      setCurrentIndex(i + 1);
+      setProgress(((i + 1) / posts.length) * 100);
+
+      try {
+        // Check OCR cache first
+        const imageHash = post.image_url; // Simple hash - in production use actual hash
+        const { data: cached } = await supabase
+          .from("ocr_cache")
+          .select("*")
+          .eq("image_url", imageHash)
+          .maybeSingle();
+
+        let ocrText = "";
+        let confidence = 0;
+
+        if (cached) {
+          // Use cached OCR result
+          ocrText = cached.ocr_text || "";
+          confidence = cached.ocr_confidence || 0;
+          
+          // Update cache usage
+          await supabase
+            .from("ocr_cache")
+            .update({ 
+              use_count: cached.use_count + 1,
+              last_used_at: new Date().toISOString() 
+            })
+            .eq("id", cached.id);
+        } else {
+          // Run OCR
+          const { data: { text, confidence: conf } } = await worker.recognize(post.image_url);
+          ocrText = text;
+          confidence = conf / 100; // Normalize to 0-1
+
+          // Cache the result
+          await supabase
+            .from("ocr_cache")
+            .insert({
+              image_url: imageHash,
+              image_hash: imageHash,
+              ocr_text: ocrText,
+              ocr_confidence: confidence,
+            });
+        }
+
+        results.push({ postId: post.id, text: ocrText, confidence });
+
+        // Extract entities using regex
+        const entities = extractEntities(ocrText, post.caption);
+
+        // Update post
+        await updatePostMutation.mutateAsync({
+          postId: post.id,
+          ocrText,
+          confidence,
+          entities,
+        });
+
+      } catch (error) {
+        console.error(`OCR failed for post ${post.id}:`, error);
+        toast.error(`OCR failed for post ${i + 1}`);
+      }
+    }
+
+    await worker.terminate();
+    setOcrResults(results);
+    setIsProcessing(false);
+    toast.success(`Processed ${posts.length} images with OCR!`);
+  };
+
+  const handleStart = () => {
+    if (!unprocessedPosts || unprocessedPosts.length === 0) {
+      toast.error("No posts to process");
+      return;
+    }
+    processWithOCR(unprocessedPosts);
+  };
+
+  const handleStop = () => {
+    setIsProcessing(false);
+    toast.info("OCR processing stopped");
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Eye className="w-6 h-6" />
+            <div>
+              <CardTitle>Client-Side OCR Processor</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Runs Tesseract.js in your browser - completely free, no API calls
+              </p>
+            </div>
+          </div>
+          {unprocessedPosts && unprocessedPosts.length > 0 && (
+            <Badge variant="secondary">
+              {unprocessedPosts.length} posts pending
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isProcessing ? (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span>Processing post {currentIndex} of {unprocessedPosts?.length || 0}</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
+              <Progress value={progress} />
+            </div>
+            <Button onClick={handleStop} variant="destructive" className="w-full">
+              <StopCircle className="w-4 h-4 mr-2" />
+              Stop Processing
+            </Button>
+          </>
+        ) : (
+          <>
+            {unprocessedPosts && unprocessedPosts.length > 0 ? (
+              <Button onClick={handleStart} className="w-full">
+                <PlayCircle className="w-4 h-4 mr-2" />
+                Start OCR Processing ({unprocessedPosts.length} posts)
+              </Button>
+            ) : (
+              <div className="flex items-center justify-center py-8 text-center">
+                <div>
+                  <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                  <p className="font-medium">All posts processed!</p>
+                  <p className="text-sm text-muted-foreground">No pending OCR tasks</p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {ocrResults.length > 0 && (
+          <div className="mt-6 space-y-2">
+            <h4 className="text-sm font-medium">Recent Results:</h4>
+            <div className="max-h-48 overflow-y-auto space-y-2">
+              {ocrResults.slice(-5).reverse().map((result, idx) => (
+                <div key={idx} className="bg-muted/50 rounded p-2 text-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-mono truncate">{result.postId.slice(0, 8)}...</span>
+                    <Badge variant="outline" className="text-xs">
+                      {(result.confidence * 100).toFixed(0)}%
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground line-clamp-2">{result.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="pt-4 border-t space-y-2 text-xs text-muted-foreground">
+          <p><strong>How it works:</strong></p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Runs Tesseract OCR engine in your browser (no server calls)</li>
+            <li>Caches OCR results to avoid re-processing same images</li>
+            <li>Uses regex patterns to extract dates, times, prices, venues</li>
+            <li>Completely free - no AI API costs</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

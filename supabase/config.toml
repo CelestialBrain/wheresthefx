@@ -6,12 +6,6 @@ verify_jwt = false
 [functions.scrape-instagram]
 verify_jwt = false
 
-[functions.enrich-event]
-verify_jwt = false
-
-[functions.enrich-post-ocr]
-verify_jwt = false
-
 [functions.geocode-location]
 verify_jwt = false
 

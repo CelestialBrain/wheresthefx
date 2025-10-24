@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye } from "lucide-react";
 import { ReviewQueue } from "@/components/ReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
+import { ClientOCRProcessor } from "@/components/ClientOCRProcessor";
 
 interface InstagramAccount {
   id: string;
@@ -289,6 +290,7 @@ const Admin = () => {
         <Tabs defaultValue="scraping">
           <TabsList>
             <TabsTrigger value="scraping"><Instagram className="w-4 h-4 mr-2" />Scraping</TabsTrigger>
+            <TabsTrigger value="ocr"><Eye className="w-4 h-4 mr-2" />OCR Processor</TabsTrigger>
             <TabsTrigger value="review"><ClipboardList className="w-4 h-4 mr-2" />Review Queue</TabsTrigger>
             <TabsTrigger value="published"><FolderKanban className="w-4 h-4 mr-2" />Published Events</TabsTrigger>
             <TabsTrigger value="templates"><MapPin className="w-4 h-4 mr-2" />Templates</TabsTrigger>
@@ -509,17 +511,21 @@ const Admin = () => {
         </Card>
           </TabsContent>
           
-          <TabsContent value="review">
-            <ReviewQueue />
-          </TabsContent>
+        <TabsContent value="ocr">
+          <ClientOCRProcessor />
+        </TabsContent>
 
-          <TabsContent value="published">
-            <PublishedEventsManager />
-          </TabsContent>
+        <TabsContent value="review">
+          <ReviewQueue />
+        </TabsContent>
 
-          <TabsContent value="templates">
-            <LocationTemplatesManager />
-          </TabsContent>
+        <TabsContent value="published">
+          <PublishedEventsManager />
+        </TabsContent>
+
+        <TabsContent value="templates">
+          <LocationTemplatesManager />
+        </TabsContent>
         </Tabs>
       </div>
     </div>
