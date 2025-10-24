@@ -51,6 +51,17 @@ export const PublishedEventsManager = () => {
   
   const queryClient = useQueryClient();
 
+  const formatTime = (timeStr: string | null): string => {
+    if (!timeStr) return "Not specified";
+    
+    // Handle HH:MM:SS format
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12; // Convert 0 to 12 for midnight
+    
+    return `${String(displayHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+  };
+
   // Fetch published events
   const { data: events, isLoading } = useQuery({
     queryKey: ["published-events", searchQuery],
@@ -356,7 +367,7 @@ export const PublishedEventsManager = () => {
                   <h3 className="font-medium">Event Details</h3>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div><strong>Date:</strong> {format(new Date(selectedEvent.event_date), "PPP")}</div>
-                    <div><strong>Time:</strong> {selectedEvent.event_time || "Not specified"}</div>
+                    <div><strong>Time:</strong> {formatTime(selectedEvent.event_time)}</div>
                     <div><strong>Price:</strong> {selectedEvent.is_free ? "Free" : `₱${selectedEvent.price}`}</div>
                     {selectedEvent.signup_url && (
                       <div className="col-span-2">

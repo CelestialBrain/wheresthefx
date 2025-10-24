@@ -9,70 +9,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 
-// Mock data for Quezon City events
-const mockEvents: Event[] = [
-  {
-    id: "1",
-    title: "Underground House Party at Tomas Morato",
-    type: "party",
-    location: "Tomas Morato, QC",
-    date: "Oct 25",
-    time: "10:00 PM",
-    attendees: 47,
-    distance: "1.2 km",
-  },
-  {
-    id: "2",
-    title: "Vintage Thrift Market - UP Town Center",
-    type: "thrift",
-    location: "UP Town Center",
-    date: "Oct 26",
-    time: "2:00 PM",
-    attendees: 89,
-    distance: "2.5 km",
-  },
-  {
-    id: "3",
-    title: "Indie Gig Night at 70's Bistro",
-    type: "concert",
-    location: "Anonas, QC",
-    date: "Oct 27",
-    time: "8:00 PM",
-    attendees: 34,
-    distance: "3.1 km",
-  },
-  {
-    id: "4",
-    title: "Saturday Night Market - Maginhawa",
-    type: "market",
-    location: "Maginhawa Street",
-    date: "Oct 27",
-    time: "6:00 PM",
-    attendees: 120,
-    distance: "1.8 km",
-  },
-  {
-    id: "5",
-    title: "Rooftop Chill Session - Eastwood",
-    type: "party",
-    location: "Eastwood City",
-    date: "Oct 28",
-    time: "7:00 PM",
-    attendees: 25,
-    distance: "4.2 km",
-  },
-  {
-    id: "6",
-    title: "Art & Craft Fair - Cubao Expo",
-    type: "market",
-    location: "Cubao Expo",
-    date: "Oct 28",
-    time: "3:00 PM",
-    attendees: 67,
-    distance: "2.9 km",
-  },
-];
-
 export const EventSidebar = () => {
   const { toast } = useToast();
   const [locationGranted, setLocationGranted] = useState(false);
@@ -284,12 +220,7 @@ export const EventSidebar = () => {
               <InstagramPostCard key={post.id} post={post} />
             ))}
 
-            {/* Regular Events */}
-            {mockEvents.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
-
-            {filteredPosts.length === 0 && mockEvents.length === 0 && (
+            {filteredPosts.length === 0 && (
               <div className="text-center py-8 text-sm text-muted-foreground">
                 No events found
               </div>

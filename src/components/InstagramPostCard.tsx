@@ -35,6 +35,17 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const formatTime = (timeStr: string | null): string => {
+    if (!timeStr) return "Time TBA";
+    
+    // Handle HH:MM:SS format
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12; // Convert 0 to 12 for midnight
+    
+    return `${String(displayHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+  };
+
   const formatEngagement = (count: number) => {
     if (count >= 1000) {
       return `${(count / 1000).toFixed(1)}k`;
@@ -89,7 +100,7 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
                 <span>
                   {post.event_date && formatDate(post.event_date)}
                   {post.event_date && post.event_time && ' • '}
-                  {post.event_time}
+                  {formatTime(post.event_time)}
                 </span>
               </div>
             )}
