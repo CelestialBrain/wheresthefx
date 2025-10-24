@@ -9,17 +9,55 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 
+// Calculate distance between two coordinates using Haversine formula
+const calculateDistance = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number => {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLng = (lng2 - lng1) * (Math.PI / 180);
+  
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+    Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLng / 2) *
+    Math.sin(dLng / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c;
+  
+  return distance;
+};
+
+// Format distance for display
+const formatDistance = (distanceKm: number): string => {
+  if (distanceKm < 1.0) {
+    return `${Math.round(distanceKm * 1000)}m`;
+  }
+  return `${distanceKm.toFixed(1)} km`;
+};
+
+interface InstagramPostWithDistance extends InstagramPost {
+  distance?: number;
+}
+
 export const EventSidebar = () => {
   const { toast } = useToast();
   const [locationGranted, setLocationGranted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [instagramPosts, setInstagramPosts] = useState<InstagramPost[]>([]);
-  const [filteredPosts, setFilteredPosts] = useState<InstagramPost[]>([]);
+  const [instagramPosts, setInstagramPosts] = useState<InstagramPostWithDistance[]>([]);
+  const [filteredPosts, setFilteredPosts] = useState<InstagramPostWithDistance[]>([]);
   const [accounts, setAccounts] = useState<string[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<string>("");
 
   // Fetch Instagram posts on mount
   useEffect(() => {
@@ -47,8 +85,44 @@ export const EventSidebar = () => {
       );
     }
 
+    // Calculate distances if user location is available
+    if (userLocation) {
+      filtered = filtered
+        .map((post) => {
+          // Use location_lat and location_lng from the post
+          const effectiveLat = post.location_lat;
+          const effectiveLng = post.location_lng;
+
+          // Filter out events without location data
+          if (!effectiveLat || !effectiveLng) {
+            return null;
+          }
+
+          const distance = calculateDistance(
+            userLocation.lat,
+            userLocation.lng,
+            Number(effectiveLat),
+            Number(effectiveLng)
+          );
+
+          return {
+            ...post,
+            distance
+          };
+        })
+        .filter((post): post is InstagramPostWithDistance & { distance: number } => post !== null)
+        .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+    } else {
+      // Filter out events without location when location not granted
+      filtered = filtered.filter(
+        (post) => {
+          return post.location_lat && post.location_lng;
+        }
+      );
+    }
+
     setFilteredPosts(filtered);
-  }, [searchQuery, selectedAccounts, instagramPosts]);
+  }, [searchQuery, selectedAccounts, instagramPosts, userLocation]);
 
   const fetchInstagramPosts = async () => {
     try {
@@ -103,15 +177,40 @@ export const EventSidebar = () => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          const coords = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          setUserLocation(coords);
           setLocationGranted(true);
           setIsLoading(false);
+          setLastUpdate(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }));
           sonnerToast.success("Location enabled - showing events near you");
+          
+          // Set up background refresh every 5 minutes
+          const intervalId = setInterval(() => {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                setUserLocation({
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude
+                });
+                setLastUpdate(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }));
+              },
+              (err) => console.log("Background location update failed:", err),
+              { enableHighAccuracy: false, maximumAge: 300000 }
+            );
+          }, 300000);
+
+          // Cleanup on unmount
+          return () => clearInterval(intervalId);
         },
         (error) => {
           setIsLoading(false);
           sonnerToast.error("Location access denied - showing all QC events");
           setLocationGranted(true);
-        }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
       setIsLoading(false);
@@ -143,7 +242,9 @@ export const EventSidebar = () => {
         
         <p className="text-xs text-muted-foreground">
           {locationGranted 
-            ? "Quezon City • Updated 5 min ago" 
+            ? userLocation 
+              ? `Quezon City • Sorted by distance${lastUpdate ? ` • Updated ${lastUpdate}` : ''}`
+              : "Quezon City • Location denied"
             : "Enable location to see events near you"}
         </p>
 

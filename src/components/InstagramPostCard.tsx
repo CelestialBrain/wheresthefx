@@ -17,6 +17,9 @@ export interface InstagramPost {
   location_address: string | null;
   signup_url: string | null;
   is_event: boolean;
+  distance?: number;
+  location_lat?: number | null;
+  location_lng?: number | null;
   instagram_accounts: {
     username: string;
     display_name: string | null;
@@ -51,6 +54,15 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
       return `${(count / 1000).toFixed(1)}k`;
     }
     return count.toString();
+  };
+
+  const formatDistance = (distanceKm: number | undefined): string | null => {
+    if (distanceKm === undefined) return null;
+    
+    if (distanceKm < 1.0) {
+      return `${Math.round(distanceKm * 1000)}m`;
+    }
+    return `${distanceKm.toFixed(1)} km`;
   };
 
   return (
@@ -109,6 +121,14 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
               <div className="flex items-center gap-1.5">
                 <MapPin className="h-3 w-3" />
                 <span className="truncate">{post.location_name}</span>
+                {post.distance !== undefined && (
+                  <Badge 
+                    variant="secondary" 
+                    className="ml-auto bg-purple-600 text-white hover:bg-purple-700 text-xs px-2 py-0.5 whitespace-nowrap"
+                  >
+                    {formatDistance(post.distance)}
+                  </Badge>
+                )}
               </div>
             )}
           </div>
