@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { EventCard, Event } from "./EventCard";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
 import { MapPin, Search, Filter, Instagram } from "lucide-react";
@@ -59,6 +59,39 @@ export const EventSidebar = () => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>("");
   const [displayLimit, setDisplayLimit] = useState(20);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const loadMoreElement = loadMoreRef.current;
+    if (!loadMoreElement || isLoadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && filteredPosts.length > displayLimit) {
+            setIsLoadingMore(true);
+            // Simulate slight delay for smooth UX
+            setTimeout(() => {
+              setDisplayLimit(prev => Math.min(prev + 20, filteredPosts.length));
+              setIsLoadingMore(false);
+            }, 100);
+          }
+        });
+      },
+      {
+        rootMargin: "200px",
+        threshold: 0.1,
+      }
+    );
+
+    observer.observe(loadMoreElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [displayLimit, filteredPosts.length, isLoadingMore]);
 
   // Fetch Instagram posts on mount
   useEffect(() => {
@@ -321,15 +354,13 @@ export const EventSidebar = () => {
               <InstagramPostCard key={post.id} post={post} />
             ))}
 
-            {/* Load More Button */}
+            {/* Infinite Scroll Trigger */}
             {filteredPosts.length > displayLimit && (
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setDisplayLimit(prev => prev + 20)}
-              >
-                Load More ({filteredPosts.length - displayLimit} remaining)
-              </Button>
+              <div ref={loadMoreRef} className="py-4">
+                <div className="text-center text-sm text-muted-foreground">
+                  {isLoadingMore ? "Loading more..." : "Scroll for more"}
+                </div>
+              </div>
             )}
 
             {filteredPosts.length === 0 && (

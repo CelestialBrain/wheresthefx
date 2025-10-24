@@ -82,7 +82,23 @@ All colors MUST be HSL.
   }
 }
 
-@layer base {
+  /* Performance optimizations */
+  .performance-optimized {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 500px;
+  }
+
+  /* Smooth scrolling performance */
+  * {
+    scroll-behavior: smooth;
+  }
+
+  /* GPU acceleration for transforms */
+  .will-change-transform {
+    will-change: transform;
+  }
+
+  @layer base {
   * {
     @apply border-border;
   }
