@@ -19,6 +19,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
   const [selectedMarker, setSelectedMarker] = useState<LocationMarker | null>(null);
   const [mapCenter, setMapCenter] = useState<LatLngExpression>([14.5995, 120.9842]); // Manila default
+  const [isMapLoading, setIsMapLoading] = useState(true);
 
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
@@ -39,7 +40,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       zoomControl: false,
     });
 
-    L.tileLayer(
+    const tileLayer = L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
       {
         attribution:
@@ -47,6 +48,11 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
         crossOrigin: true, // Enable proper caching
       }
     ).addTo(map);
+
+    // Hide loading background once tiles load
+    tileLayer.on('load', () => {
+      setIsMapLoading(false);
+    });
 
     markersLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -102,6 +108,11 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
   return (
     <>
+      {/* Black loading background */}
+      {isMapLoading && (
+        <div className="fixed inset-0 w-full h-screen z-[1] bg-black" />
+      )}
+      
       <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0" />
 
       {selectedMarker && (

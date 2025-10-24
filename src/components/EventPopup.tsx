@@ -69,9 +69,9 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
         </Button>
 
         <div className="p-6 space-y-4">
-          {/* Event Image */}
+          {/* Event Image - Bigger for more visibility */}
           {currentEvent.image_url && (
-            <div className="aspect-video md:aspect-square rounded-lg overflow-hidden bg-muted">
+            <div className="aspect-[4/3] md:max-h-[300px] rounded-lg overflow-hidden bg-muted">
               <img
                 src={currentEvent.image_url}
                 alt={currentEvent.event_title || "Event"}

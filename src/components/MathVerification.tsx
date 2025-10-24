@@ -15,13 +15,19 @@ const generateQuestion = (): MathQuestion => {
     { symbol: "×", fn: (a: number, b: number) => a * b },
   ];
   
-  const x = Math.floor(Math.random() * 10) + 1;
-  const coefficient = Math.floor(Math.random() * 5) + 2;
-  const operation = operations[Math.floor(Math.random() * operations.length)];
-  const secondNum = Math.floor(Math.random() * 10) + 1;
+  let answer = 50;
+  let question = "";
   
-  const answer = operation.fn(coefficient * x, secondNum);
-  const question = `If f(x) = ${coefficient}x ${operation.symbol} ${secondNum}, what is f(${x})?`;
+  // Keep generating until answer is less than 50
+  while (answer >= 50) {
+    const x = Math.floor(Math.random() * 5) + 1; // 1-5
+    const coefficient = Math.floor(Math.random() * 3) + 2; // 2-4
+    const operation = operations[Math.floor(Math.random() * operations.length)];
+    const secondNum = Math.floor(Math.random() * 8) + 1; // 1-8
+    
+    answer = operation.fn(coefficient * x, secondNum);
+    question = `If f(x) = ${coefficient}x ${operation.symbol} ${secondNum}, what is f(${x})?`;
+  }
   
   return { question, answer };
 };

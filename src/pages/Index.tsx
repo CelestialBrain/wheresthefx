@@ -21,10 +21,30 @@ const Index = () => {
   const { hasCompletedOnboarding } = useUserPreferences();
 
   useEffect(() => {
-    // Check authentication status
+    // Check authentication status and skip verification for authenticated users
     supabase.auth.getUser().then(({ data: { user } }) => {
-      setIsAuthenticated(!!user);
+      const authenticated = !!user;
+      setIsAuthenticated(authenticated);
+      
+      if (authenticated) {
+        // Skip age verification for authenticated users
+        setIsVerified(true);
+        setIsMapUnlocked(true);
+      }
     });
+
+    // Listen to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const authenticated = !!session?.user;
+      setIsAuthenticated(authenticated);
+      
+      if (authenticated && !isMapUnlocked) {
+        setIsVerified(true);
+        setIsMapUnlocked(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -66,14 +86,25 @@ const Index = () => {
           
           {/* Header */}
           <header className="absolute top-6 right-6">
-            <Button 
-              className="frosted-glass-purple"
-              size="sm" 
-              onClick={() => navigate("/auth")}
-            >
-              <UserCircle className="h-4 w-4 mr-2" />
-              Sign In
-            </Button>
+            {isAuthenticated ? (
+              <Button 
+                className="frosted-glass-purple"
+                size="sm" 
+                onClick={() => navigate("/auth")}
+              >
+                <UserCircle className="h-4 w-4 mr-2" />
+                Account
+              </Button>
+            ) : (
+              <Button 
+                className="frosted-glass-purple"
+                size="sm" 
+                onClick={() => navigate("/auth")}
+              >
+                <UserCircle className="h-4 w-4 mr-2" />
+                Sign In
+              </Button>
+            )}
           </header>
 
           {/* Hero Section */}

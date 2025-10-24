@@ -15,10 +15,10 @@ export function createMiddleFingerIcon(count: number): L.DivIcon {
         src="${markerIcon}" 
         alt="Event marker"
         class="w-8 h-10"
-        style="filter: brightness(0) saturate(100%) invert(34%) sepia(98%) saturate(4764%) hue-rotate(280deg) brightness(95%) contrast(94%);"
+        style="filter: brightness(0) saturate(100%) invert(34%) sepia(98%) saturate(4764%) hue-rotate(280deg) brightness(95%) contrast(94%); transform: rotate(180deg);"
       />
       ${count > 1 ? `
-        <div class="absolute -top-1 -right-1 bg-accent text-accent-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-mono font-bold border-2 border-background">
+        <div class="absolute -bottom-1 -right-1 bg-accent text-accent-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-mono font-bold border-2 border-background">
           ${count}
         </div>
       ` : ''}
@@ -29,8 +29,8 @@ export function createMiddleFingerIcon(count: number): L.DivIcon {
     html: iconHtml,
     className: 'custom-marker',
     iconSize: [32, 40],
-    iconAnchor: [16, 40],
-    popupAnchor: [0, -40],
+    iconAnchor: [16, 0],
+    popupAnchor: [0, 0],
   });
 }
 

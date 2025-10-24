@@ -1,6 +1,10 @@
+import { useState } from "react";
 import { MapPin, Calendar, Heart, MessageCircle, Instagram, ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export interface InstagramPost {
   id: string;
@@ -34,6 +38,47 @@ interface InstagramPostCardProps {
 }
 
 export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
+  const [savedEvents, setSavedEvents] = useState<Set<string>>(new Set());
+
+  const handleSave = async (eventId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      toast.error("Please sign in to save events");
+      return;
+    }
+
+    if (savedEvents.has(eventId)) {
+      const { error } = await supabase
+        .from('saved_events')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('instagram_post_id', eventId);
+
+      if (error) {
+        toast.error("Failed to remove event");
+      } else {
+        setSavedEvents(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(eventId);
+          return newSet;
+        });
+        toast.success("Event removed from saved");
+      }
+    } else {
+      const { error } = await supabase
+        .from('saved_events')
+        .insert({ user_id: user.id, instagram_post_id: eventId });
+
+      if (error) {
+        toast.error("Failed to save event");
+      } else {
+        setSavedEvents(prev => new Set(prev).add(eventId));
+        toast.success("Event saved!");
+      }
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -136,7 +181,7 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
           </div>
         )}
 
-        {/* Bottom Row: Engagement + Link/Event Badge */}
+        {/* Bottom Row: Engagement + Link/Event Badge + Save */}
         <div className="flex items-center justify-between pt-1">
           {/* Left: Engagement Stats */}
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
@@ -150,8 +195,22 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
             </div>
           </div>
 
-          {/* Right: Link Button + Event Badge */}
+          {/* Right: Save Button + Link Button + Event Badge */}
           <div className="flex items-center gap-2">
+            {post.is_event && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => handleSave(post.id)}
+              >
+                <Heart
+                  className={`h-3 w-3 ${
+                    savedEvents.has(post.id) ? "fill-accent text-accent" : ""
+                  }`}
+                />
+              </Button>
+            )}
             <a
               href={post.post_url}
               target="_blank"
@@ -162,7 +221,7 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
               <span>Link</span>
             </a>
             {post.is_event && (
-              <Badge variant="default" className="text-[10px] px-1.5 py-0.5 leading-none rounded-md">
+              <Badge variant="default" className="text-[10px] px-1.5 py-0.5 leading-none rounded-sm">
                 Event
               </Badge>
             )}
