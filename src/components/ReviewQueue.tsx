@@ -563,6 +563,7 @@ export function ReviewQueue() {
                   queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
                   queryClient.invalidateQueries({ queryKey: ["event-markers"] });
                   queryClient.invalidateQueries({ queryKey: ["instagram-posts"] });
+                  queryClient.invalidateQueries({ queryKey: ["published-events"] });
                 }
               }}
               onCancel={() => deletePostMutation.mutate(post.id)}

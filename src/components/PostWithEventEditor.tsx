@@ -90,6 +90,15 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
 
       if (error) throw error;
 
+      // Also create/update the enriched event so it shows under Published Events
+      try {
+        await supabase.functions.invoke("enrich-event", {
+          body: { postId: post.id },
+        });
+      } catch (fnErr) {
+        console.warn("enrich-event invocation failed (continuing):", fnErr);
+      }
+
       toast.success("Event published to map and sidebar!");
       onCreateEvent(post.id); // Pass post ID for successful creation
     } catch (error: any) {
