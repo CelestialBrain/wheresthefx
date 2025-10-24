@@ -269,6 +269,102 @@ export type Database = {
           },
         ]
       }
+      extraction_corrections: {
+        Row: {
+          corrected_value: string
+          created_at: string | null
+          extraction_method: string | null
+          field_name: string
+          id: string
+          learned_pattern_id: string | null
+          original_extracted_value: string | null
+          original_ocr_text: string | null
+          pattern_used: string | null
+          post_id: string | null
+        }
+        Insert: {
+          corrected_value: string
+          created_at?: string | null
+          extraction_method?: string | null
+          field_name: string
+          id?: string
+          learned_pattern_id?: string | null
+          original_extracted_value?: string | null
+          original_ocr_text?: string | null
+          pattern_used?: string | null
+          post_id?: string | null
+        }
+        Update: {
+          corrected_value?: string
+          created_at?: string | null
+          extraction_method?: string | null
+          field_name?: string
+          id?: string
+          learned_pattern_id?: string | null
+          original_extracted_value?: string | null
+          original_ocr_text?: string | null
+          pattern_used?: string | null
+          post_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extraction_corrections_learned_pattern_id_fkey"
+            columns: ["learned_pattern_id"]
+            isOneToOne: false
+            referencedRelation: "extraction_patterns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extraction_corrections_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extraction_patterns: {
+        Row: {
+          confidence_score: number | null
+          created_at: string | null
+          failure_count: number | null
+          id: string
+          is_active: boolean | null
+          last_used_at: string | null
+          pattern_description: string | null
+          pattern_regex: string
+          pattern_type: string
+          source: string | null
+          success_count: number | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string | null
+          failure_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          pattern_description?: string | null
+          pattern_regex: string
+          pattern_type: string
+          source?: string | null
+          success_count?: number | null
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string | null
+          failure_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          pattern_description?: string | null
+          pattern_regex?: string
+          pattern_type?: string
+          source?: string | null
+          success_count?: number | null
+        }
+        Relationships: []
+      }
       instagram_accounts: {
         Row: {
           bio: string | null

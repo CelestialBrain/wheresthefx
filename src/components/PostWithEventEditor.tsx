@@ -74,6 +74,12 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     };
 
     try {
+      // Log corrections for pattern learning
+      const corrections = [];
+      if (post.event_date !== eventData.event_date) corrections.push({ post_id: post.id, field_name: "event_date", original_extracted_value: String(post.event_date || ""), corrected_value: eventData.event_date, extraction_method: "manual", original_ocr_text: post.caption });
+      if (post.event_time !== eventData.event_time) corrections.push({ post_id: post.id, field_name: "event_time", original_extracted_value: String(post.event_time || ""), corrected_value: eventData.event_time, extraction_method: "manual", original_ocr_text: post.caption });
+      if (corrections.length > 0) await supabase.from("extraction_corrections").insert(corrections);
+
       const { error } = await supabase
         .from("instagram_posts")
         .update({
@@ -91,7 +97,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           price: eventData.is_free ? null : eventData.price,
           is_event: true,
           needs_review: false,
-          ocr_confidence: 1.0, // Mark as manually verified
+          ocr_confidence: 1.0,
         })
         .eq("id", post.id);
 

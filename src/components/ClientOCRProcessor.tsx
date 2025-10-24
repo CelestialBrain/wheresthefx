@@ -230,7 +230,7 @@ export function ClientOCRProcessor() {
 
         results.push({ postId: post.id, text: ocrText, confidence });
 
-        // Extract entities using regex
+        // Extract entities using regex (keep original sync version)
         const entities = extractEntities(ocrText, post.caption);
 
         // Update post
