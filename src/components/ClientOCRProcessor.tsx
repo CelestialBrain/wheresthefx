@@ -211,8 +211,15 @@ export function ClientOCRProcessor() {
             })
             .eq("id", cached.id);
         } else {
-          // Run OCR - update progress during recognition
-          const { data: { text, confidence: conf } } = await worker.recognize(post.image_url);
+          // Run OCR with timeout handling (30 seconds)
+          const processWithTimeout = Promise.race([
+            worker.recognize(post.image_url),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('OCR timeout after 30 seconds')), 30000)
+            )
+          ]);
+
+          const { data: { text, confidence: conf } } = await processWithTimeout as any;
           
           ocrText = text;
           confidence = conf / 100; // Normalize to 0-1
@@ -241,9 +248,28 @@ export function ClientOCRProcessor() {
           entities,
         });
 
-      } catch (error) {
-        console.error(`OCR failed for post ${post.id}:`, error);
-        toast.error(`OCR failed for post ${i + 1}`);
+      } catch (error: any) {
+        console.error(`Error processing post ${i + 1}:`, error);
+        
+        // Log error to database for tracking
+        try {
+          await supabase
+            .from("instagram_posts")
+            .update({
+              ocr_error_count: 1,
+              ocr_last_error: error.message || 'Unknown error',
+              ocr_last_attempt_at: new Date().toISOString(),
+              ocr_processed: false
+            })
+            .eq("id", post.id);
+        } catch (dbError) {
+          console.error('Failed to log OCR error:', dbError);
+        }
+        
+        toast.error(`OCR failed for post ${i + 1}: ${error.message}`);
+        
+        // Continue processing next post instead of breaking
+        continue;
       }
     }
 

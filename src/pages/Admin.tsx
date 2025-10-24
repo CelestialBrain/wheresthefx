@@ -7,10 +7,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp } from "lucide-react";
-import { ReviewQueue } from "@/components/ReviewQueue";
+import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
-import { ClientOCRProcessor } from "@/components/ClientOCRProcessor";
 import { PatternManager } from "@/components/PatternManager";
 
 interface InstagramAccount {
@@ -304,10 +303,9 @@ const Admin = () => {
         <h1 className="text-3xl font-bold mb-4">Admin Dashboard</h1>
         
         <Tabs defaultValue="scraping">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="scraping"><Instagram className="w-4 h-4 mr-2" />Scraping</TabsTrigger>
-            <TabsTrigger value="ocr"><Eye className="w-4 h-4 mr-2" />OCR</TabsTrigger>
-            <TabsTrigger value="review"><ClipboardList className="w-4 h-4 mr-2" />Review</TabsTrigger>
+            <TabsTrigger value="review"><ClipboardList className="w-4 h-4 mr-2" />Review Queue</TabsTrigger>
             <TabsTrigger value="published"><FolderKanban className="w-4 h-4 mr-2" />Published</TabsTrigger>
             <TabsTrigger value="patterns"><TrendingUp className="w-4 h-4 mr-2" />Patterns</TabsTrigger>
             <TabsTrigger value="templates"><MapPin className="w-4 h-4 mr-2" />Templates</TabsTrigger>
@@ -528,12 +526,8 @@ const Admin = () => {
         </Card>
           </TabsContent>
           
-        <TabsContent value="ocr">
-          <ClientOCRProcessor />
-        </TabsContent>
-
         <TabsContent value="review">
-          <ReviewQueue />
+          <ConsolidatedReviewQueue />
         </TabsContent>
 
         <TabsContent value="published">

@@ -433,7 +433,10 @@ export type Database = {
           mentions: string[] | null
           needs_review: boolean | null
           ocr_confidence: number | null
+          ocr_error_count: number | null
           ocr_last_attempt: string | null
+          ocr_last_attempt_at: string | null
+          ocr_last_error: string | null
           ocr_processed: boolean | null
           post_id: string
           post_url: string
@@ -470,7 +473,10 @@ export type Database = {
           mentions?: string[] | null
           needs_review?: boolean | null
           ocr_confidence?: number | null
+          ocr_error_count?: number | null
           ocr_last_attempt?: string | null
+          ocr_last_attempt_at?: string | null
+          ocr_last_error?: string | null
           ocr_processed?: boolean | null
           post_id: string
           post_url: string
@@ -507,7 +513,10 @@ export type Database = {
           mentions?: string[] | null
           needs_review?: boolean | null
           ocr_confidence?: number | null
+          ocr_error_count?: number | null
           ocr_last_attempt?: string | null
+          ocr_last_attempt_at?: string | null
+          ocr_last_error?: string | null
           ocr_processed?: boolean | null
           post_id?: string
           post_url?: string
@@ -744,6 +753,44 @@ export type Database = {
           use_count?: number | null
         }
         Relationships: []
+      }
+      post_rejections: {
+        Row: {
+          created_at: string | null
+          field_issues: Json | null
+          id: string
+          notes: string | null
+          post_id: string | null
+          rejected_by: string | null
+          rejection_reason: string
+        }
+        Insert: {
+          created_at?: string | null
+          field_issues?: Json | null
+          id?: string
+          notes?: string | null
+          post_id?: string | null
+          rejected_by?: string | null
+          rejection_reason: string
+        }
+        Update: {
+          created_at?: string | null
+          field_issues?: Json | null
+          id?: string
+          notes?: string | null
+          post_id?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_rejections_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
