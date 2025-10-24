@@ -1,4 +1,4 @@
-import { MapPin, Calendar, Heart, MessageCircle, Instagram } from "lucide-react";
+import { MapPin, Calendar, Heart, MessageCircle, Instagram, ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -68,8 +68,9 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
 
   return (
     <Card className="p-3 hover:shadow-md transition-shadow cursor-pointer border-border/50">
-      <div className="flex gap-3">
-        {/* Left: Thumbnail Image */}
+      {/* Top Row: Image + Username/Title */}
+      <div className="flex gap-3 mb-2">
+        {/* Image */}
         {post.image_url && (
           <div className="w-20 h-20 rounded-md overflow-hidden bg-muted flex-shrink-0">
             <img
@@ -83,65 +84,62 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
           </div>
         )}
 
-        {/* Right: Content */}
-        <div className="flex-1 min-w-0 space-y-1.5">
-          {/* Row 1: Username + Event Badge */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-1 flex-1 min-w-0">
-              <Instagram className="h-3.5 w-3.5 text-accent flex-shrink-0" />
-              <a
-                href={`https://instagram.com/${post.instagram_accounts.username}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-xs hover:underline truncate"
-              >
-                @{post.instagram_accounts.username}
-              </a>
-              {post.instagram_accounts.is_verified && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0 leading-none">
-                  ✓
-                </Badge>
-              )}
-            </div>
-            {post.is_event && (
-              <Badge variant="default" className="text-[10px] px-1.5 py-0.5 leading-none">
-                Event
+        {/* Username + Title (right of image) */}
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center gap-1">
+            <Instagram className="h-3.5 w-3.5 text-accent flex-shrink-0" />
+            <a
+              href={`https://instagram.com/${post.instagram_accounts.username}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-xs hover:underline truncate"
+            >
+              @{post.instagram_accounts.username}
+            </a>
+            {post.instagram_accounts.is_verified && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 leading-none">
+                ✓
               </Badge>
             )}
           </div>
-
-          {/* Row 2: Event Title */}
+          
           <h3 className="font-semibold text-sm leading-tight line-clamp-2">
             {post.event_title || post.caption?.split('\n')[0] || 'Instagram Post'}
           </h3>
+        </div>
+      </div>
 
-          {/* Row 3: Date & Time */}
-          {post.is_event && (post.event_date || post.event_time) && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Calendar className="h-3 w-3 flex-shrink-0" />
-              <span className="truncate">
-                {post.event_date && formatDate(post.event_date)}
-                {post.event_date && post.event_time && ' • '}
-                {formatTime(post.event_time)}
+      {/* Bottom Section: Details (full width below image) */}
+      <div className="space-y-1.5">
+        {/* Date & Time */}
+        {post.is_event && (post.event_date || post.event_time) && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Calendar className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">
+              {post.event_date && formatDate(post.event_date)}
+              {post.event_date && post.event_time && ' • '}
+              {formatTime(post.event_time)}
+            </span>
+          </div>
+        )}
+
+        {/* Location + Distance */}
+        {post.is_event && post.location_name && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate flex-1">{post.location_name}</span>
+            {post.distance !== undefined && (
+              <span className="text-primary text-xs font-medium whitespace-nowrap ml-1">
+                {formatDistance(post.distance)}
               </span>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-          {/* Row 4: Location + Distance */}
-          {post.is_event && post.location_name && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <MapPin className="h-3 w-3 flex-shrink-0" />
-              <span className="truncate flex-1">{post.location_name}</span>
-              {post.distance !== undefined && (
-                <span className="text-primary text-xs font-medium whitespace-nowrap ml-1">
-                  {formatDistance(post.distance)}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Row 5: Engagement (Condensed) */}
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-1">
+        {/* Bottom Row: Engagement + Link/Event Badge */}
+        <div className="flex items-center justify-between pt-1">
+          {/* Left: Engagement Stats */}
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <div className="flex items-center gap-1">
               <Heart className="h-3 w-3" />
               <span>{formatEngagement(post.likes_count)}</span>
@@ -150,14 +148,24 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
               <MessageCircle className="h-3 w-3" />
               <span>{formatEngagement(post.comments_count)}</span>
             </div>
+          </div>
+
+          {/* Right: Link Button + Event Badge */}
+          <div className="flex items-center gap-2">
             <a
               href={post.post_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="ml-auto text-accent hover:underline text-[11px]"
+              className="flex items-center gap-1 text-accent hover:underline text-[11px]"
             >
-              View on IG
+              <ExternalLink className="h-3 w-3" />
+              <span>Link</span>
             </a>
+            {post.is_event && (
+              <Badge variant="default" className="text-[10px] px-1.5 py-0.5 leading-none">
+                Event
+              </Badge>
+            )}
           </div>
         </div>
       </div>
