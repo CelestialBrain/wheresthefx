@@ -256,13 +256,13 @@ const Admin = () => {
     try {
       setIsPurging(true);
 
-      // Delete in order: published_events, events_enriched, locations, instagram_posts, location_corrections
+      // Delete all event-related data
       await supabase.from("published_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("events_enriched").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("saved_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("location_corrections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("locations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("instagram_posts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("ocr_cache").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
       toast({
         title: "Success",

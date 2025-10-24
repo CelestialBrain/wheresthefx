@@ -269,84 +269,6 @@ export type Database = {
           },
         ]
       }
-      events_enriched: {
-        Row: {
-          comments_count: number
-          created_at: string
-          description: string | null
-          end_time: string | null
-          event_date: string
-          event_time: string | null
-          event_title: string
-          id: string
-          instagram_post_id: string | null
-          is_free: boolean
-          likes_count: number
-          location_id: string | null
-          needs_review: boolean
-          price: number | null
-          signup_url: string | null
-          status: string
-          updated_at: string
-          verified: boolean
-        }
-        Insert: {
-          comments_count?: number
-          created_at?: string
-          description?: string | null
-          end_time?: string | null
-          event_date: string
-          event_time?: string | null
-          event_title: string
-          id?: string
-          instagram_post_id?: string | null
-          is_free?: boolean
-          likes_count?: number
-          location_id?: string | null
-          needs_review?: boolean
-          price?: number | null
-          signup_url?: string | null
-          status?: string
-          updated_at?: string
-          verified?: boolean
-        }
-        Update: {
-          comments_count?: number
-          created_at?: string
-          description?: string | null
-          end_time?: string | null
-          event_date?: string
-          event_time?: string | null
-          event_title?: string
-          id?: string
-          instagram_post_id?: string | null
-          is_free?: boolean
-          likes_count?: number
-          location_id?: string | null
-          needs_review?: boolean
-          price?: number | null
-          signup_url?: string | null
-          status?: string
-          updated_at?: string
-          verified?: boolean
-        }
-        Relationships: [
-          {
-            foreignKeyName: "events_enriched_instagram_post_id_fkey"
-            columns: ["instagram_post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "events_enriched_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       instagram_accounts: {
         Row: {
           bio: string | null
@@ -394,11 +316,13 @@ export type Database = {
           caption: string | null
           comments_count: number | null
           created_at: string
+          entity_extraction_method: string | null
           event_date: string | null
           event_time: string | null
           event_title: string | null
           hashtags: string[] | null
           id: string
+          image_storage_path: string | null
           image_url: string | null
           instagram_account_id: string
           is_event: boolean | null
@@ -418,17 +342,22 @@ export type Database = {
           posted_at: string
           price: number | null
           signup_url: string | null
+          stored_image_url: string | null
+          topic_confidence: number | null
+          topic_label: string | null
           updated_at: string
         }
         Insert: {
           caption?: string | null
           comments_count?: number | null
           created_at?: string
+          entity_extraction_method?: string | null
           event_date?: string | null
           event_time?: string | null
           event_title?: string | null
           hashtags?: string[] | null
           id?: string
+          image_storage_path?: string | null
           image_url?: string | null
           instagram_account_id: string
           is_event?: boolean | null
@@ -448,17 +377,22 @@ export type Database = {
           posted_at: string
           price?: number | null
           signup_url?: string | null
+          stored_image_url?: string | null
+          topic_confidence?: number | null
+          topic_label?: string | null
           updated_at?: string
         }
         Update: {
           caption?: string | null
           comments_count?: number | null
           created_at?: string
+          entity_extraction_method?: string | null
           event_date?: string | null
           event_time?: string | null
           event_title?: string | null
           hashtags?: string[] | null
           id?: string
+          image_storage_path?: string | null
           image_url?: string | null
           instagram_account_id?: string
           is_event?: boolean | null
@@ -478,6 +412,9 @@ export type Database = {
           posted_at?: string
           price?: number | null
           signup_url?: string | null
+          stored_image_url?: string | null
+          topic_confidence?: number | null
+          topic_label?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -570,15 +507,7 @@ export type Database = {
           original_ocr_text?: string | null
           updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "location_corrections_applied_to_event_id_fkey"
-            columns: ["applied_to_event_id"]
-            isOneToOne: false
-            referencedRelation: "events_enriched"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       location_templates: {
         Row: {
@@ -681,6 +610,39 @@ export type Database = {
           },
         ]
       }
+      ocr_cache: {
+        Row: {
+          created_at: string | null
+          id: string
+          image_hash: string
+          image_url: string
+          last_used_at: string | null
+          ocr_confidence: number | null
+          ocr_text: string | null
+          use_count: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          image_hash: string
+          image_url: string
+          last_used_at?: string | null
+          ocr_confidence?: number | null
+          ocr_text?: string | null
+          use_count?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          image_hash?: string
+          image_url?: string
+          last_used_at?: string | null
+          ocr_confidence?: number | null
+          ocr_text?: string | null
+          use_count?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -728,9 +690,11 @@ export type Database = {
       }
       published_events: {
         Row: {
+          caption: string | null
           comments_count: number | null
           created_at: string
           description: string | null
+          end_date: string | null
           end_time: string | null
           event_date: string
           event_time: string | null
@@ -738,6 +702,7 @@ export type Database = {
           id: string
           image_url: string | null
           instagram_account_username: string | null
+          instagram_post_url: string | null
           is_featured: boolean | null
           is_free: boolean
           likes_count: number | null
@@ -749,13 +714,16 @@ export type Database = {
           signup_url: string | null
           source_event_id: string | null
           source_post_id: string | null
+          topic_label: string | null
           updated_at: string
           verified: boolean | null
         }
         Insert: {
+          caption?: string | null
           comments_count?: number | null
           created_at?: string
           description?: string | null
+          end_date?: string | null
           end_time?: string | null
           event_date: string
           event_time?: string | null
@@ -763,6 +731,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           instagram_account_username?: string | null
+          instagram_post_url?: string | null
           is_featured?: boolean | null
           is_free?: boolean
           likes_count?: number | null
@@ -774,13 +743,16 @@ export type Database = {
           signup_url?: string | null
           source_event_id?: string | null
           source_post_id?: string | null
+          topic_label?: string | null
           updated_at?: string
           verified?: boolean | null
         }
         Update: {
+          caption?: string | null
           comments_count?: number | null
           created_at?: string
           description?: string | null
+          end_date?: string | null
           end_time?: string | null
           event_date?: string
           event_time?: string | null
@@ -788,6 +760,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           instagram_account_username?: string | null
+          instagram_post_url?: string | null
           is_featured?: boolean | null
           is_free?: boolean
           likes_count?: number | null
@@ -799,17 +772,11 @@ export type Database = {
           signup_url?: string | null
           source_event_id?: string | null
           source_post_id?: string | null
+          topic_label?: string | null
           updated_at?: string
           verified?: boolean | null
         }
         Relationships: [
-          {
-            foreignKeyName: "published_events_source_event_id_fkey"
-            columns: ["source_event_id"]
-            isOneToOne: false
-            referencedRelation: "events_enriched"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "published_events_source_post_id_fkey"
             columns: ["source_post_id"]

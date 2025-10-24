@@ -145,9 +145,9 @@ export const PublishedEventsManager = () => {
     }) => {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Update event
+      // Update published event
       const { error } = await supabase
-        .from("events_enriched")
+        .from("published_events")
         .update(updates)
         .eq("id", eventId);
 
@@ -188,7 +188,7 @@ export const PublishedEventsManager = () => {
   const undoMutation = useMutation({
     mutationFn: async (undoItem: { eventId: string; oldValue: any }) => {
       const { error } = await supabase
-        .from("events_enriched")
+        .from("published_events")
         .update(undoItem.oldValue)
         .eq("id", undoItem.eventId);
 

@@ -91,16 +91,8 @@ Deno.serve(async (req) => {
 
       finalLocationId = newLocation.id;
 
-      // Update event with new location
-      const { error: eventUpdateError } = await supabase
-        .from('events_enriched')
-        .update({ location_id: finalLocationId })
-        .eq('id', eventId);
-
-      if (eventUpdateError) {
-        console.error('Failed to update event location:', eventUpdateError);
-        throw eventUpdateError;
-      }
+      // Note: No need to update events_enriched as it no longer exists
+      // Location will be linked when event is published
     }
 
     // Save to location_corrections for learning

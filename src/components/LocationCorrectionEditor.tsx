@@ -89,11 +89,12 @@ export const LocationCorrectionEditor = ({
       if (!venueName || venueName.length < 3) return [];
       
       const { data, error } = await supabase
-        .from('events_enriched')
+        .from('instagram_posts')
         .select(`
           id,
           event_title,
-          location:locations(location_name, formatted_address)
+          location_name,
+          location_address
         `)
         .neq('id', eventId)
         .eq('needs_review', true)
