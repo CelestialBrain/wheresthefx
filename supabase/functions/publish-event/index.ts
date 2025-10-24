@@ -1,41 +1,44 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.76.1";
 
 interface PublishEventRequest {
   postId: string;
 }
 
-Deno.serve(async (req) => {
+serve(async (req) => {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { postId } = await req.json() as PublishEventRequest;
 
     console.log('Publishing event from post:', postId);
 
-    // Fetch Instagram post with account details
+    // Fetch the Instagram post
     const { data: post, error: fetchError } = await supabase
       .from('instagram_posts')
-      .select(`
-        *,
-        instagram_account:instagram_accounts(username)
-      `)
+      .select('*')
       .eq('id', postId)
       .single();
 
     if (fetchError) {
-      console.error('Failed to fetch post:', fetchError);
-      throw new Error(`Post not found: ${fetchError.message}`);
+      console.error('Error fetching post:', fetchError);
+      throw new Error(`Failed to fetch post: ${fetchError.message}`);
+    }
+
+    if (!post) {
+      throw new Error('Post not found');
     }
 
     // Validate required fields
@@ -51,104 +54,108 @@ Deno.serve(async (req) => {
       throw new Error('Event must have a title before publishing');
     }
 
-    // Check if already published (prevent duplicates)
-    const { data: existing } = await supabase
+    console.log('Post validation passed, checking for existing published event');
+
+    // Check if this post has already been published
+    const { data: existingEvent } = await supabase
       .from('published_events')
       .select('id')
       .eq('source_post_id', postId)
       .maybeSingle();
 
-    if (existing) {
-      console.log('Event already published, updating instead');
-      // Update existing
+    let eventId: string;
+    let action: string;
+
+    const eventData = {
+      event_title: post.event_title,
+      event_date: post.event_date,
+      event_time: post.event_time,
+      event_end_date: post.event_end_date,
+      location_name: post.location_name,
+      location_address: post.location_address,
+      location_lat: post.location_lat,
+      location_lng: post.location_lng,
+      description: post.caption,
+      signup_url: post.signup_url,
+      is_free: post.is_free,
+      price: post.price,
+      image_url: post.image_url,
+      instagram_post_url: post.post_url,
+      instagram_account_username: post.instagram_account_id,
+      topic_label: post.topic_label,
+      likes_count: post.likes_count || 0,
+      comments_count: post.comments_count || 0,
+      source_post_id: postId,
+    };
+
+    if (existingEvent) {
+      // Update existing published event
+      console.log('Updating existing published event:', existingEvent.id);
       const { error: updateError } = await supabase
         .from('published_events')
-        .update({
-          event_title: post.event_title,
-          event_date: post.event_date,
-          event_time: post.event_time,
-          description: post.caption,
-          signup_url: post.signup_url,
-          is_free: post.is_free,
-          price: post.price,
-          location_lat: post.location_lat,
-          location_lng: post.location_lng,
-          location_name: post.location_name,
-          location_address: post.location_address,
-          image_url: post.image_url,
-          instagram_account_username: post.instagram_account?.username,
-          instagram_post_url: post.post_url,
-          caption: post.caption,
-          topic_label: post.topic_label,
-          likes_count: post.likes_count || 0,
-          comments_count: post.comments_count || 0,
-          verified: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id);
+        .update(eventData)
+        .eq('id', existingEvent.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Error updating published event:', updateError);
+        throw updateError;
+      }
 
-      return new Response(
-        JSON.stringify({ success: true, eventId: existing.id, action: 'updated' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      eventId = existingEvent.id;
+      action = 'updated';
+    } else {
+      // Create new published event
+      console.log('Creating new published event');
+      const { data: newEvent, error: insertError } = await supabase
+        .from('published_events')
+        .insert(eventData)
+        .select('id')
+        .single();
+
+      if (insertError) {
+        console.error('Error inserting published event:', insertError);
+        throw insertError;
+      }
+
+      eventId = newEvent.id;
+      action = 'created';
     }
 
-    // Create new published event
-    const { data: published, error: insertError } = await supabase
-      .from('published_events')
-      .insert({
-        event_title: post.event_title,
-        event_date: post.event_date,
-        event_time: post.event_time,
-        description: post.caption,
-        signup_url: post.signup_url,
-        is_free: post.is_free,
-        price: post.price,
-        location_lat: post.location_lat,
-        location_lng: post.location_lng,
-        location_name: post.location_name,
-        location_address: post.location_address,
-        source_post_id: post.id,
-        image_url: post.image_url,
-        instagram_account_username: post.instagram_account?.username,
-        instagram_post_url: post.post_url,
-        caption: post.caption,
-        topic_label: post.topic_label,
-        likes_count: post.likes_count || 0,
-        comments_count: post.comments_count || 0,
-        verified: true,
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error('Failed to publish event:', insertError);
-      throw insertError;
-    }
-
-    // Mark instagram post as published
-    await supabase
+    // Mark the Instagram post as reviewed
+    const { error: reviewError } = await supabase
       .from('instagram_posts')
       .update({ needs_review: false })
       .eq('id', postId);
 
-    console.log('Event published successfully:', published.id);
+    if (reviewError) {
+      console.error('Error marking post as reviewed:', reviewError);
+      // Don't throw - the event was published successfully
+    }
+
+    console.log(`Event ${action} successfully:`, eventId);
 
     return new Response(
-      JSON.stringify({ success: true, eventId: published.id, action: 'created' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
-  } catch (error) {
-    console.error('Error publishing event:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ 
+        success: true, 
+        eventId, 
+        action,
+        message: `Event ${action} successfully`
+      }),
       { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    );
+  } catch (error: any) {
+    console.error('Error in publish-event function:', error);
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'An error occurred while publishing the event'
+      }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
   }

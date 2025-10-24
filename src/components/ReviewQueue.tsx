@@ -1,23 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { useState } from "react";
-import { MapPin, Calendar, Clock, AlertCircle, CheckCircle } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LocationCorrectionEditor } from "@/components/LocationCorrectionEditor";
 import { PostWithEventEditor } from "@/components/PostWithEventEditor";
 
 export function ReviewQueue() {
   const queryClient = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<any>({});
-  const [showLocationEditor, setShowLocationEditor] = useState<string | null>(null);
 
   const { data: reviewItems, isLoading } = useQuery({
     queryKey: ["review-queue"],
@@ -56,87 +46,33 @@ export function ReviewQueue() {
     },
   });
 
-  const updateEventMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
-      console.log('Updating post:', id, updates);
-      const { data, error } = await supabase
-        .from("instagram_posts")
-        .update(updates)
-        .eq("id", id)
-        .select();
-      
-      if (error) {
-        console.error('Update error:', error);
-        throw error;
-      }
-      console.log('Update success:', data);
-      return data;
-    },
-    onSuccess: (data) => {
-      console.log('onSuccess called with:', data);
-      // Force refetch instead of just invalidating
-      queryClient.refetchQueries({ queryKey: ["review-queue"] });
-      queryClient.refetchQueries({ queryKey: ["posts-without-events"] });
-      toast.success("Event updated successfully");
-    },
-    onError: (error: any) => {
-      console.error('Mutation error:', error);
-      toast.error(`Failed to update: ${error.message}`);
-    },
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: async (postId: string) => {
-      const { data, error } = await supabase.functions.invoke("publish-event", {
-        body: { postId },
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["review-queue"] });
-      queryClient.invalidateQueries({ queryKey: ["event-markers"] });
-      queryClient.invalidateQueries({ queryKey: ["published-events"] });
-      toast.success("Event published!");
-    },
-    onError: (error: any) => {
-      toast.error(error?.message || "Failed to publish");
-    },
-  });
 
   const rejectMutation = useMutation({
     mutationFn: async (postId: string) => {
-      // Mark post as not an event
       const { error } = await supabase
         .from("instagram_posts")
-        .update({ is_event: false, needs_review: false })
+        .delete()
         .eq("id", postId);
       if (error) throw error;
     },
     onMutate: async (postId) => {
-      // Cancel ongoing queries
       await queryClient.cancelQueries({ queryKey: ["review-queue"] });
-      
-      // Snapshot current state
       const previous = queryClient.getQueryData(["review-queue"]);
-      
-      // Optimistically remove from UI
       queryClient.setQueryData(["review-queue"], (old: any[]) => 
         old?.filter(item => item.id !== postId)
       );
-      
       return { previous };
     },
     onError: (err, postId, context: any) => {
-      // Rollback on error
       queryClient.setQueryData(["review-queue"], context.previous);
-      toast.error("Failed to reject event");
+      toast.error("Failed to delete event");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["review-queue"] });
       queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
       queryClient.invalidateQueries({ queryKey: ["unprocessed-ocr-posts"] });
-      toast.success("Event rejected");
+      queryClient.invalidateQueries({ queryKey: ["event-markers"] });
+      toast.success("Event deleted");
     },
   });
 
@@ -176,23 +112,6 @@ export function ReviewQueue() {
     },
   });
 
-  const startEdit = (item: any) => {
-    setEditingId(item.id);
-    setEditData({
-      event_title: item.event_title,
-      event_date: item.event_date,
-      event_time: item.event_time,
-      caption: item.caption,
-      signup_url: item.signup_url,
-    });
-  };
-
-  const saveEdit = () => {
-    if (!editingId) return;
-    updateEventMutation.mutate({ id: editingId, updates: editData });
-    setEditingId(null);
-    setEditData({});
-  };
 
   if (isLoading) {
     return <div className="p-4">Loading review queue...</div>;
@@ -230,214 +149,39 @@ export function ReviewQueue() {
             </Card>
           ) : (
             reviewItems?.map((item) => (
-              <Card key={item.id} className="overflow-hidden">
-                <CardHeader className="pb-3">
-                  <div className="flex gap-4">
-                    {item.image_url && (
-                      <img 
-                        src={item.image_url} 
-                        alt="Post" 
-                        className="w-24 h-24 object-cover rounded-md"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-lg line-clamp-2">
-                          {editingId === item.id ? (
-                            <Input
-                              value={editData.event_title || ""}
-                              onChange={(e) => setEditData({ ...editData, event_title: e.target.value })}
-                            />
-                          ) : (
-                            item.event_title
-                          )}
-                        </CardTitle>
-                        {item.ocr_confidence && (
-                          <Badge variant="outline" className="shrink-0">
-                            OCR: {Math.min(100, Math.round(item.ocr_confidence * 100))}%
-                          </Badge>
-                        )}
-                      </div>
-                      <CardDescription className="mt-1">
-                        @{item.instagram_account?.username || "unknown"}
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
+              <div key={item.id} className="space-y-4">
+                <PostWithEventEditor
+                  post={item}
+                  onCreateEvent={async (eventId) => {
+                    // Save changes first
+                    await queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+                    await queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
+                    
+                    // Then publish to feed
+                    try {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) {
+                        toast.error("Please sign in to publish events");
+                        return;
+                      }
 
-                <CardContent className="space-y-4">
-                  {editingId === item.id ? (
-                    <div className="space-y-3">
-                      <div>
-                        <Label>Event Date</Label>
-                        <Input
-                          type="date"
-                          value={editData.event_date || ""}
-                          onChange={(e) => setEditData({ ...editData, event_date: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Event Time</Label>
-                        <Input
-                          type="time"
-                          value={editData.event_time || ""}
-                          onChange={(e) => setEditData({ ...editData, event_time: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>Description</Label>
-                        <Textarea
-                          value={editData.caption || ""}
-                          onChange={(e) => setEditData({ ...editData, caption: e.target.value })}
-                          rows={3}
-                        />
-                      </div>
-                      <div>
-                        <Label>Signup URL</Label>
-                        <Input
-                          value={editData.signup_url || ""}
-                          onChange={(e) => setEditData({ ...editData, signup_url: e.target.value })}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={saveEdit}
-                          disabled={updateEventMutation.isPending}
-                        >
-                          {updateEventMutation.isPending ? "Saving..." : "Save Changes"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setEditingId(null);
-                            setEditData({});
-                          }}
-                          disabled={updateEventMutation.isPending}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-muted-foreground" />
-                          {editingId === item.id ? (
-                            <Input
-                              type="date"
-                              value={editData.event_date || ""}
-                              onChange={(e) => setEditData({ ...editData, event_date: e.target.value })}
-                            />
-                          ) : (
-                            <span>{item.event_date || "Not set"}</span>
-                          )}
-                        </div>
-                        {(item.event_time || editingId === item.id) && (
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-muted-foreground" />
-                            {editingId === item.id ? (
-                              <Input
-                                type="time"
-                                value={editData.event_time || ""}
-                                onChange={(e) => setEditData({ ...editData, event_time: e.target.value })}
-                              />
-                            ) : (
-                              <span>{item.event_time}</span>
-                            )}
-                          </div>
-                        )}
-                        <div className="flex items-start gap-2">
-                          <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-                          <div className="flex-1">
-                            <div>{item.location_name || "Location not set"}</div>
-                            {item.location_address && (
-                              <div className="text-muted-foreground text-xs">
-                                {item.location_address}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      const { data, error } = await supabase.functions.invoke("publish-event", {
+                        body: { postId: item.id },
+                      });
 
-                      {showLocationEditor === item.id && (
-                        <LocationCorrectionEditor
-                          eventId={item.id}
-                          locationId={null}
-                          originalOCR={{
-                            venue: item.location_name || "",
-                            address: item.location_address || "",
-                          }}
-                          currentLocation={{
-                            location_name: item.location_name,
-                            formatted_address: item.location_address,
-                            location_lat: item.location_lat,
-                            location_lng: item.location_lng,
-                          }}
-                          onSave={(correction) => {
-                            // Update the instagram_posts directly with new location
-                            updateEventMutation.mutate({
-                              id: item.id,
-                              updates: {
-                                location_name: correction.venueName,
-                                location_address: correction.streetAddress,
-                                location_lat: correction.lat,
-                                location_lng: correction.lng,
-                              }
-                            });
-                            setShowLocationEditor(null);
-                          }}
-                          onCancel={() => setShowLocationEditor(null)}
-                        />
-                      )}
+                      if (error) throw error;
 
-                      {!item.location_lat && (
-                        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md p-3">
-                          <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-500">
-                            <AlertCircle className="w-4 h-4" />
-                            <span className="text-sm font-medium">
-                              Missing GPS coordinates - event cannot be published until location is set
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex gap-2 pt-2 border-t">
-                        <Button
-                          onClick={() => startEdit(item)}
-                          variant="outline"
-                          size="sm"
-                        >
-                          Edit Details
-                        </Button>
-                        <Button
-                          onClick={() => setShowLocationEditor(showLocationEditor === item.id ? null : item.id)}
-                          variant="outline"
-                          size="sm"
-                        >
-                          {showLocationEditor === item.id ? "Hide" : "Edit"} Location
-                        </Button>
-                        <div className="flex-1" />
-                        <Button
-                          onClick={() => rejectMutation.mutate(item.id)}
-                          variant="destructive"
-                          size="sm"
-                          disabled={rejectMutation.isPending}
-                        >
-                          {rejectMutation.isPending ? "Rejecting..." : "Reject"}
-                        </Button>
-                        <Button
-                          onClick={() => approveMutation.mutate(item.id)}
-                          disabled={!item.location_lat || !item.event_date || approveMutation.isPending}
-                          size="sm"
-                        >
-                          {approveMutation.isPending ? "Publishing..." : "Publish"}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+                      queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+                      queryClient.invalidateQueries({ queryKey: ["event-markers"] });
+                      queryClient.invalidateQueries({ queryKey: ["published-events"] });
+                      toast.success("Event published to feed!");
+                    } catch (error: any) {
+                      toast.error(error?.message || "Failed to publish event");
+                    }
+                  }}
+                  onCancel={() => rejectMutation.mutate(item.id)}
+                />
+              </div>
             ))
           )}
         </TabsContent>

@@ -48,9 +48,22 @@ const Admin = () => {
   const [isPurging, setIsPurging] = useState(false);
 
   useEffect(() => {
+    checkAuth();
     fetchAccounts();
     fetchScrapeRuns();
   }, []);
+
+  const checkAuth = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to access the admin dashboard",
+        variant: "destructive",
+      });
+      window.location.href = '/auth';
+    }
+  };
 
   const fetchAccounts = async () => {
     try {
