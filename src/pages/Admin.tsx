@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, RefreshCw, Instagram, ClipboardList } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban } from "lucide-react";
 import { ReviewQueue } from "@/components/ReviewQueue";
+import { PublishedEventsManager } from "@/components/PublishedEventsManager";
+import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
 
 interface InstagramAccount {
   id: string;
@@ -279,6 +281,8 @@ const Admin = () => {
           <TabsList>
             <TabsTrigger value="scraping"><Instagram className="w-4 h-4 mr-2" />Scraping</TabsTrigger>
             <TabsTrigger value="review"><ClipboardList className="w-4 h-4 mr-2" />Review Queue</TabsTrigger>
+            <TabsTrigger value="published"><FolderKanban className="w-4 h-4 mr-2" />Published Events</TabsTrigger>
+            <TabsTrigger value="templates"><MapPin className="w-4 h-4 mr-2" />Templates</TabsTrigger>
           </TabsList>
           
           <TabsContent value="scraping" className="space-y-6">
@@ -498,6 +502,14 @@ const Admin = () => {
           
           <TabsContent value="review">
             <ReviewQueue />
+          </TabsContent>
+
+          <TabsContent value="published">
+            <PublishedEventsManager />
+          </TabsContent>
+
+          <TabsContent value="templates">
+            <LocationTemplatesManager />
           </TabsContent>
         </Tabs>
       </div>

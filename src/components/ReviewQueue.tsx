@@ -11,6 +11,7 @@ import { useState } from "react";
 import { MapPin, Calendar, Clock, AlertCircle, CheckCircle, X, Navigation, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LocationCorrectionEditor } from "@/components/LocationCorrectionEditor";
+import { PostWithEventEditor } from "@/components/PostWithEventEditor";
 
 interface ReviewItem {
   id: string;
@@ -554,53 +555,12 @@ export function ReviewQueue() {
 
         <TabsContent value="posts" className="space-y-4">
           {postsWithoutEvents?.map((post: any) => (
-            <Card key={post.id}>
-              <CardHeader>
-                <CardTitle className="text-lg">{post.caption?.slice(0, 100)}...</CardTitle>
-                <CardDescription>
-                  @{post.instagram_account?.username} ·{" "}
-                  {new Date(post.posted_at).toLocaleDateString()}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {post.location_name && (
-                    <div className="text-sm">
-                      <MapPin className="w-4 h-4 inline mr-2" />
-                      {post.location_name}
-                    </div>
-                  )}
-                  {post.event_date && (
-                    <div className="text-sm">
-                      <Calendar className="w-4 h-4 inline mr-2" />
-                      {new Date(post.event_date).toLocaleDateString()}
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => enrichEventMutation.mutate(post.id)}
-                      disabled={enrichEventMutation.isPending}
-                    >
-                      Create Event
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => {
-                        if (confirm("Delete this post? This cannot be undone.")) {
-                          deletePostMutation.mutate(post.id);
-                        }
-                      }}
-                      disabled={deletePostMutation.isPending}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete Post
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <PostWithEventEditor
+              key={post.id}
+              post={post}
+              onCreateEvent={(eventData) => enrichEventMutation.mutate(post.id)}
+              onCancel={() => deletePostMutation.mutate(post.id)}
+            />
           ))}
         </TabsContent>
       </Tabs>

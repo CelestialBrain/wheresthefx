@@ -53,6 +53,39 @@ export type Database = {
           },
         ]
       }
+      event_edit_history: {
+        Row: {
+          action_type: string
+          created_at: string
+          edited_by: string | null
+          event_id: string
+          field_name: string
+          id: string
+          new_value: Json | null
+          old_value: Json | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          edited_by?: string | null
+          event_id: string
+          field_name: string
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          edited_by?: string | null
+          event_id?: string
+          field_name?: string
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+        }
+        Relationships: []
+      }
       event_groups: {
         Row: {
           created_at: string | null
@@ -540,6 +573,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      location_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          lat: number
+          lng: number
+          notes: string | null
+          street_address: string | null
+          template_name: string
+          updated_at: string
+          usage_count: number
+          venue_name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lat: number
+          lng: number
+          notes?: string | null
+          street_address?: string | null
+          template_name: string
+          updated_at?: string
+          usage_count?: number
+          venue_name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lat?: number
+          lng?: number
+          notes?: string | null
+          street_address?: string | null
+          template_name?: string
+          updated_at?: string
+          usage_count?: number
+          venue_name?: string
+        }
+        Relationships: []
       }
       locations: {
         Row: {
