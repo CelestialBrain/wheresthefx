@@ -176,9 +176,15 @@ export function ClientOCRProcessor() {
     const worker = await createWorker("eng");
 
     for (let i = 0; i < posts.length; i++) {
+      if (!isProcessing) break; // Allow stopping
+      
       const post = posts[i];
       setCurrentIndex(i + 1);
-      setProgress(((i + 1) / posts.length) * 100);
+      
+      // Force UI update with setTimeout to flush React's render queue
+      setTimeout(() => {
+        setProgress(((i + 1) / posts.length) * 100);
+      }, 0);
 
       try {
         // Check OCR cache first
@@ -206,8 +212,18 @@ export function ClientOCRProcessor() {
             })
             .eq("id", cached.id);
         } else {
-          // Run OCR
-          const { data: { text, confidence: conf } } = await worker.recognize(post.image_url);
+          // Run OCR - update progress during recognition
+          const recognizePromise = worker.recognize(post.image_url);
+          
+          // Simulate progress updates while OCR is running
+          const progressInterval = setInterval(() => {
+            const currentProgress = ((i + 0.5) / posts.length) * 100;
+            setTimeout(() => setProgress(currentProgress), 0);
+          }, 300);
+          
+          const { data: { text, confidence: conf } } = await recognizePromise;
+          clearInterval(progressInterval);
+          
           ocrText = text;
           confidence = conf / 100; // Normalize to 0-1
 

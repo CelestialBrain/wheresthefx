@@ -98,8 +98,29 @@ export function ReviewQueue() {
         .eq("id", postId);
       if (error) throw error;
     },
+    onMutate: async (postId) => {
+      // Cancel ongoing queries
+      await queryClient.cancelQueries({ queryKey: ["review-queue"] });
+      
+      // Snapshot current state
+      const previous = queryClient.getQueryData(["review-queue"]);
+      
+      // Optimistically remove from UI
+      queryClient.setQueryData(["review-queue"], (old: any[]) => 
+        old?.filter(item => item.id !== postId)
+      );
+      
+      return { previous };
+    },
+    onError: (err, postId, context: any) => {
+      // Rollback on error
+      queryClient.setQueryData(["review-queue"], context.previous);
+      toast.error("Failed to reject event");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
+      queryClient.invalidateQueries({ queryKey: ["unprocessed-ocr-posts"] });
       toast.success("Event rejected");
     },
   });
@@ -112,14 +133,31 @@ export function ReviewQueue() {
         .eq("id", postId);
       if (error) throw error;
     },
+    onMutate: async (postId) => {
+      // Cancel ongoing queries
+      await queryClient.cancelQueries({ queryKey: ["posts-without-events"] });
+      
+      // Snapshot current state
+      const previous = queryClient.getQueryData(["posts-without-events"]);
+      
+      // Optimistically remove from UI
+      queryClient.setQueryData(["posts-without-events"], (old: any[]) => 
+        old?.filter(item => item.id !== postId)
+      );
+      
+      return { previous };
+    },
+    onError: (err, postId, context: any) => {
+      // Rollback on error
+      queryClient.setQueryData(["posts-without-events"], context.previous);
+      toast.error(`Failed to delete post: ${err.message}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
+      queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["unprocessed-ocr-posts"] });
       queryClient.invalidateQueries({ queryKey: ["event-markers"] });
-      queryClient.invalidateQueries({ queryKey: ["instagram-posts"] });
       toast.success("Post deleted successfully");
-    },
-    onError: (error: any) => {
-      toast.error(`Failed to delete post: ${error.message}`);
     },
   });
 
@@ -363,15 +401,16 @@ export function ReviewQueue() {
                           onClick={() => rejectMutation.mutate(item.id)}
                           variant="destructive"
                           size="sm"
+                          disabled={rejectMutation.isPending}
                         >
-                          Reject
+                          {rejectMutation.isPending ? "Rejecting..." : "Reject"}
                         </Button>
                         <Button
                           onClick={() => approveMutation.mutate(item.id)}
-                          disabled={!item.location_lat || !item.event_date}
+                          disabled={!item.location_lat || !item.event_date || approveMutation.isPending}
                           size="sm"
                         >
-                          Publish
+                          {approveMutation.isPending ? "Publishing..." : "Publish"}
                         </Button>
                       </div>
                     </>

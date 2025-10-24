@@ -241,7 +241,7 @@ const Admin = () => {
   };
 
   const purgeAllPosts = async () => {
-    if (!confirm("⚠️ DANGER: This will delete ALL events, posts, locations, and published data. This cannot be undone!\n\nType 'DELETE' to confirm.")) {
+    if (!confirm("⚠️ DANGER: This will delete EVERYTHING including all Instagram accounts, events, posts, locations, and published data. This cannot be undone!\n\nType 'DELETE' to confirm.")) {
       return;
     }
 
@@ -257,19 +257,21 @@ const Admin = () => {
     try {
       setIsPurging(true);
 
-      // Delete all event-related data
+      // Delete all data including instagram accounts
       await supabase.from("published_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("saved_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("location_corrections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("locations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("instagram_posts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("ocr_cache").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("instagram_accounts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
       toast({
         title: "Success",
-        description: "All event data has been purged",
+        description: "All data has been completely purged",
       });
 
+      fetchAccounts();
       fetchScrapeRuns();
     } catch (error: any) {
       toast({
