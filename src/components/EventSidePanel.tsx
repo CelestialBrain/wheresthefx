@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Bookmark, ExternalLink, Calendar, MapPin, DollarSign, Flag } from "lucide-react";
+import { X, Bookmark, ExternalLink, Calendar, MapPin, DollarSign, Flag, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format } from "date-fns";
 
 interface EventSidePanelProps {
   events: any[];
@@ -143,9 +144,12 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                   <div className="space-y-2">
                     {event.instagram_accounts?.username && (
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          @{event.instagram_accounts.username}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <Instagram className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">
+                            @{event.instagram_accounts.username}
+                          </span>
+                        </div>
                         <Bookmark
                           className={`h-4 w-4 cursor-pointer transition-colors ${
                             savedEvents.has(event.post_id) 
@@ -165,8 +169,8 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                         <div className="flex items-center gap-2">
                           <Calendar className="h-3 w-3" />
                           <span>
-                            {new Date(event.event_date).toLocaleDateString()}
-                            {event.event_time && ` at ${event.event_time}`}
+                            {format(new Date(event.event_date), 'MMM d')}
+                            {event.event_time && ` at ${format(new Date(`2000-01-01T${event.event_time}`), 'h:mm a')}`}
                           </span>
                         </div>
                       )}
