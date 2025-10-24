@@ -181,21 +181,20 @@ All colors MUST be HSL.
 
   /* User location marker with pulsating animation */
   .user-location-marker {
-    width: 16px;
-    height: 16px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: hsl(var(--primary));
-    border: 3px solid hsl(var(--background));
-    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7);
+    background: white;
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
     animation: location-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
   @keyframes location-pulse {
     0%, 100% {
-      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7);
+      box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
     }
     50% {
-      box-shadow: 0 0 0 10px hsl(var(--primary) / 0);
+      box-shadow: 0 0 0 8px rgba(255, 255, 255, 0);
     }
   }
 }

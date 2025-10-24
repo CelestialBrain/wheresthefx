@@ -105,8 +105,8 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     const userIcon = L.divIcon({
       html: '<div class="user-location-marker"></div>',
       className: '',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+      iconSize: [8, 8],
+      iconAnchor: [4, 4],
     });
 
     const marker = L.marker(userLocation, {
