@@ -169,9 +169,9 @@ export const LocationCorrectionEditor = ({
 
       if (error) throw error;
 
-      if (data?.latitude && data?.longitude) {
-        setLat(data.latitude);
-        setLng(data.longitude);
+      if (data?.lat && data?.lng) {
+        setLat(data.lat);
+        setLng(data.lng);
         setShowMap(true);
         toast.success("Coordinates found! Review the map pin.");
       } else {

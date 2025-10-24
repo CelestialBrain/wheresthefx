@@ -43,6 +43,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
   });
 
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showLocationEditor, setShowLocationEditor] = useState(false);
   const [locationCorrection, setLocationCorrection] = useState<{
     venueName: string;
@@ -80,6 +81,9 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           location_lng: location.lng,
           signup_url: eventData.signup_url || null,
           is_free: eventData.is_free,
+          price: eventData.is_free ? null : eventData.price,
+          is_event: true,
+          needs_review: false,
           ocr_confidence: 1.0, // Mark as manually verified
         })
         .eq("id", post.id);
@@ -91,6 +95,46 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     } catch (error: any) {
       toast.error(`Failed to publish: ${error.message}`);
       setIsPublishing(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    const location = locationCorrection || {
+      venueName: post.location_name || "",
+      streetAddress: post.location_address || "",
+      lat: post.location_lat,
+      lng: post.location_lng,
+    };
+
+    try {
+      const { error } = await supabase
+        .from("instagram_posts")
+        .update({
+          event_title: eventData.event_title,
+          event_date: eventData.event_date,
+          event_time: eventData.event_time || null,
+          location_name: location.venueName,
+          location_address: location.streetAddress,
+          location_lat: location.lat,
+          location_lng: location.lng,
+          signup_url: eventData.signup_url || null,
+          is_free: eventData.is_free,
+          price: eventData.is_free ? null : eventData.price,
+          // Keep review flag until Publish
+          needs_review: true,
+          is_event: true,
+        })
+        .eq("id", post.id);
+
+      if (error) throw error;
+
+      toast.success("Saved changes");
+    } catch (error: any) {
+      toast.error(`Failed to save: ${error.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -278,13 +322,20 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         {/* Actions */}
         <div className="flex gap-2 pt-4 border-t">
           <Button
+            onClick={handleSaveDraft}
+            disabled={!isValid || isSaving || isPublishing}
+            variant="secondary"
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </Button>
+          <Button
             onClick={handleCreateEvent}
             disabled={!isValid || isPublishing}
             className="flex-1"
           >
             {isPublishing ? "Publishing..." : "Publish Event"}
           </Button>
-          <Button onClick={onCancel} variant="outline" disabled={isPublishing}>
+          <Button onClick={onCancel} variant="outline" disabled={isPublishing || isSaving}>
             Cancel
           </Button>
         </div>

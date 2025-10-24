@@ -402,6 +402,7 @@ export type Database = {
           image_url: string | null
           instagram_account_id: string
           is_event: boolean | null
+          is_free: boolean
           likes_count: number | null
           location_address: string | null
           location_lat: number | null
@@ -415,6 +416,7 @@ export type Database = {
           post_id: string
           post_url: string
           posted_at: string
+          price: number | null
           signup_url: string | null
           updated_at: string
         }
@@ -430,6 +432,7 @@ export type Database = {
           image_url?: string | null
           instagram_account_id: string
           is_event?: boolean | null
+          is_free?: boolean
           likes_count?: number | null
           location_address?: string | null
           location_lat?: number | null
@@ -443,6 +446,7 @@ export type Database = {
           post_id: string
           post_url: string
           posted_at: string
+          price?: number | null
           signup_url?: string | null
           updated_at?: string
         }
@@ -458,6 +462,7 @@ export type Database = {
           image_url?: string | null
           instagram_account_id?: string
           is_event?: boolean | null
+          is_free?: boolean
           likes_count?: number | null
           location_address?: string | null
           location_lat?: number | null
@@ -471,6 +476,7 @@ export type Database = {
           post_id?: string
           post_url?: string
           posted_at?: string
+          price?: number | null
           signup_url?: string | null
           updated_at?: string
         }

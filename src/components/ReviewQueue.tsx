@@ -83,17 +83,12 @@ export function ReviewQueue() {
           instagram_account:instagram_accounts(username, display_name)
         `)
         .eq("is_event", true)
+        .eq("needs_review", true)
         .order("posted_at", { ascending: false });
 
       if (error) throw error;
 
-      // Filter out posts that already have events
-      const { data: existingEvents } = await supabase
-        .from("events_enriched")
-        .select("instagram_post_id");
-
-      const existingPostIds = new Set(existingEvents?.map(e => e.instagram_post_id) || []);
-      return data?.filter(post => !existingPostIds.has(post.id)) || [];
+      return data || [];
     },
   });
 
