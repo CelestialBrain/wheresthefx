@@ -5,19 +5,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
-import { Search, MapPin, Calendar, Clock, Edit2, Undo2, ExternalLink, Image as ImageIcon } from "lucide-react";
+import { Search, MapPin, Calendar, Clock, Edit2, Undo2, ExternalLink, Image as ImageIcon, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
 
 interface PublishedEvent {
   id: string;
   event_title: string;
   event_date: string;
   event_time: string | null;
+  event_end_date: string | null;
+  end_time: string | null;
   description: string | null;
   signup_url: string | null;
   is_free: boolean;
@@ -48,6 +52,8 @@ export const PublishedEventsManager = () => {
   const [selectedEvent, setSelectedEvent] = useState<PublishedEvent | null>(null);
   const [editingLocation, setEditingLocation] = useState(false);
   const [undoStack, setUndoStack] = useState<Array<{ eventId: string; field: string; oldValue: any; newValue: any }>>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
 
@@ -84,6 +90,8 @@ export const PublishedEventsManager = () => {
         event_title: event.event_title,
         event_date: event.event_date,
         event_time: event.event_time,
+        event_end_date: event.event_end_date,
+        end_time: event.end_time,
         description: event.description,
         signup_url: event.signup_url,
         is_free: event.is_free,
@@ -263,6 +271,64 @@ export const PublishedEventsManager = () => {
     },
   });
 
+  // Delete event mutation
+  const deleteEventMutation = useMutation({
+    mutationFn: async (eventId: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Get event details for history log
+      const { data: event } = await supabase
+        .from("published_events")
+        .select("*")
+        .eq("id", eventId)
+        .single();
+
+      // Delete from published_events
+      const { error } = await supabase
+        .from("published_events")
+        .delete()
+        .eq("id", eventId);
+
+      if (error) throw error;
+
+      // Log deletion in history
+      if (event) {
+        await supabase.from("event_edit_history").insert({
+          event_id: eventId,
+          edited_by: user?.id,
+          field_name: "event",
+          old_value: event,
+          new_value: null,
+          action_type: "delete",
+        });
+      }
+    },
+    onSuccess: () => {
+      toast.success("Event deleted successfully");
+      setDeleteConfirmOpen(false);
+      setEventToDelete(null);
+      setSelectedEvent(null);
+      queryClient.invalidateQueries({ queryKey: ["published-events"] });
+      queryClient.invalidateQueries({ queryKey: ["event-markers"] });
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to delete event: ${error.message}`);
+    },
+  });
+
+  const handleDeleteClick = () => {
+    if (selectedEvent) {
+      setEventToDelete(selectedEvent.id);
+      setDeleteConfirmOpen(true);
+    }
+  };
+
+  const handleDeleteConfirm = () => {
+    if (eventToDelete) {
+      deleteEventMutation.mutate(eventToDelete);
+    }
+  };
+
   const handleUndo = () => {
     if (undoStack.length > 0) {
       undoMutation.mutate(undoStack[0]);
@@ -387,8 +453,8 @@ export const PublishedEventsManager = () => {
                 <div className="space-y-3">
                   <h3 className="font-medium">Event Details</h3>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div><strong>Date:</strong> {format(new Date(selectedEvent.event_date), "PPP")}</div>
-                    <div><strong>Time:</strong> {formatTime(selectedEvent.event_time)}</div>
+                    <div><strong>Date:</strong> {formatDateRange(selectedEvent.event_date, selectedEvent.event_end_date)}</div>
+                    <div><strong>Time:</strong> {formatTimeRange(selectedEvent.event_time, selectedEvent.end_time)}</div>
                     <div><strong>Price:</strong> {selectedEvent.is_free ? "Free" : `₱${selectedEvent.price}`}</div>
                     {selectedEvent.signup_url && (
                       <div className="col-span-2">
@@ -473,10 +539,43 @@ export const PublishedEventsManager = () => {
                   </div>
                 )}
               </div>
+
+              {/* Dialog Footer with Delete Button */}
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteClick}
+                  disabled={deleteEventMutation.isPending}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {deleteEventMutation.isPending ? "Deleting..." : "Delete Event"}
+                </Button>
+              </DialogFooter>
             </>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Event</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{selectedEvent?.event_title}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

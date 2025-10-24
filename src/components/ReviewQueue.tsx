@@ -148,10 +148,14 @@ export function ReviewQueue() {
               </CardContent>
             </Card>
           ) : (
-            reviewItems?.map((item) => (
+            reviewItems?.map((item: any) => (
               <div key={item.id} className="space-y-4">
                 <PostWithEventEditor
-                  post={item}
+                  post={{
+                    ...item,
+                    event_end_date: item.event_end_date || null,
+                    end_time: item.end_time || null,
+                  }}
                   onCreateEvent={async (eventId) => {
                     // Save changes first
                     await queryClient.invalidateQueries({ queryKey: ["review-queue"] });
@@ -196,10 +200,14 @@ export function ReviewQueue() {
               </CardContent>
             </Card>
           ) : (
-            postsWithoutEvents?.map((post) => (
+            postsWithoutEvents?.map((post: any) => (
               <PostWithEventEditor
                 key={post.id}
-                post={post}
+                post={{
+                  ...post,
+                  event_end_date: post.event_end_date || null,
+                  end_time: post.end_time || null,
+                }}
                 onCreateEvent={(postId) => {
                   queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
                   queryClient.invalidateQueries({ queryKey: ["review-queue"] });

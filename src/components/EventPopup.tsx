@@ -8,8 +8,8 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format } from "date-fns";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
+import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
 
 interface EventPopupProps {
   events: any[];
@@ -163,8 +163,8 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                         <div className="flex items-center gap-2">
                           <Calendar className="h-3 w-3" />
                           <span>
-                            {format(new Date(event.event_date), 'MMMM d')}
-                            {event.event_time && ` at ${format(new Date(`2000-01-01T${event.event_time}`), 'h:mm a')}`}
+                            {formatDateRange(event.event_date, event.event_end_date)}
+                            {(event.event_time || event.end_time) && ` at ${formatTimeRange(event.event_time, event.end_time)}`}
                           </span>
                         </div>
                       )}

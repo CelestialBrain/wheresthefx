@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
+import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
 
 export interface InstagramPost {
   id: string;
@@ -19,6 +20,8 @@ export interface InstagramPost {
   event_title: string | null;
   event_date: string | null;
   event_time: string | null;
+  event_end_date: string | null;
+  end_time: string | null;
   location_name: string | null;
   location_address: string | null;
   signup_url: string | null;
@@ -80,20 +83,16 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const formatDate = (dateStr: string, endDateStr?: string | null) => {
+    if (!endDateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    return formatDateRange(dateStr, endDateStr);
   };
 
-  const formatTime = (timeStr: string | null): string => {
-    if (!timeStr) return "Time TBA";
-    
-    // Handle HH:MM:SS format
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours % 12 || 12; // Convert 0 to 12 for midnight
-    
-    return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
+  const formatTime = (timeStr: string | null, endTimeStr?: string | null): string => {
+    return formatTimeRange(timeStr, endTimeStr);
   };
 
   const formatEngagement = (count: number) => {
@@ -160,9 +159,9 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Calendar className="h-3 w-3 flex-shrink-0" />
             <span className="truncate">
-              {post.event_date && formatDate(post.event_date)}
-              {post.event_date && post.event_time && ' • '}
-              {formatTime(post.event_time)}
+              {post.event_date && formatDate(post.event_date, post.event_end_date)}
+              {post.event_date && (post.event_time || post.end_time) && ' • '}
+              {formatTime(post.event_time, post.end_time)}
             </span>
           </div>
         )}

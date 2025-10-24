@@ -177,8 +177,8 @@ export const EventSidebar = () => {
 
       if (error) throw error;
 
-      setInstagramPosts(data || []);
-      setFilteredPosts(data || []);
+      setInstagramPosts(data as any || []);
+      setFilteredPosts(data as any || []);
 
       // Extract unique accounts
       const uniqueAccounts = Array.from(

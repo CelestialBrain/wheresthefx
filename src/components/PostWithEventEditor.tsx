@@ -20,6 +20,8 @@ interface PostWithEventEditorProps {
     event_title: string | null;
     event_date: string | null;
     event_time: string | null;
+    event_end_date: string | null;
+    end_time: string | null;
     location_name: string | null;
     location_address: string | null;
     location_lat: number | null;
@@ -37,6 +39,8 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     event_title: post.event_title || "",
     event_date: post.event_date || "",
     event_time: post.event_time || "",
+    event_end_date: post.event_end_date || "",
+    end_time: post.end_time || "",
     description: post.caption || "",
     signup_url: post.signup_url || "",
     is_free: true,
@@ -76,6 +80,8 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           event_title: eventData.event_title,
           event_date: eventData.event_date,
           event_time: eventData.event_time || null,
+          event_end_date: eventData.event_end_date || null,
+          end_time: eventData.end_time || null,
           location_name: location.venueName,
           location_address: location.streetAddress,
           location_lat: location.lat,
@@ -116,6 +122,8 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           event_title: eventData.event_title,
           event_date: eventData.event_date,
           event_time: eventData.event_time || null,
+          event_end_date: eventData.event_end_date || null,
+          end_time: eventData.end_time || null,
           location_name: location.venueName,
           location_address: location.streetAddress,
           location_lat: location.lat,
@@ -182,9 +190,10 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
             />
           </div>
 
+          {/* Start Date & Time */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="date">Date *</Label>
+              <Label htmlFor="date">Start Date *</Label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -192,13 +201,23 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
                   type="date"
                   className="pl-10"
                   value={eventData.event_date}
-                  onChange={(e) => setEventData({ ...eventData, event_date: e.target.value })}
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    setEventData({ 
+                      ...eventData, 
+                      event_date: newDate,
+                      // Clear end date if it's before start date
+                      event_end_date: eventData.event_end_date && newDate > eventData.event_end_date 
+                        ? "" 
+                        : eventData.event_end_date
+                    });
+                  }}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="time">Time</Label>
+              <Label htmlFor="time">Start Time</Label>
               <div className="relative">
                 <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -207,6 +226,38 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
                   className="pl-10"
                   value={eventData.event_time}
                   onChange={(e) => setEventData({ ...eventData, event_time: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* End Date & Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="end-date">End Date (optional)</Label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="end-date"
+                  type="date"
+                  className="pl-10"
+                  value={eventData.event_end_date}
+                  min={eventData.event_date}
+                  onChange={(e) => setEventData({ ...eventData, event_end_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="end-time">End Time (optional)</Label>
+              <div className="relative">
+                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="end-time"
+                  type="time"
+                  className="pl-10"
+                  value={eventData.end_time}
+                  onChange={(e) => setEventData({ ...eventData, end_time: e.target.value })}
                 />
               </div>
             </div>
