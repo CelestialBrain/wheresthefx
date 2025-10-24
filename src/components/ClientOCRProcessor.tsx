@@ -54,22 +54,16 @@ export function ClientOCRProcessor() {
         ocr_confidence: confidence,
         event_title: entities.title || null,
         event_date: entities.date || null,
+        event_end_date: entities.endDate || entities.date,
         event_time: entities.time || null,
         location_name: entities.venue || null,
         location_address: entities.address || null,
         price: entities.price || null,
         is_free: entities.isFree,
         is_event: entities.isEvent,
-        needs_review: entities.needsReview,
+        ocr_processed: true,
+        needs_review: entities.isEvent && entities.date ? true : false,
       };
-      
-      // Only mark as processed if we successfully extracted event data
-      if (entities.isEvent && entities.date) {
-        updates.ocr_processed = true;
-      } else {
-        // Keep in OCR queue if incomplete
-        updates.ocr_processed = false;
-      }
 
       const { error } = await supabase
         .from("instagram_posts")
@@ -90,13 +84,8 @@ export function ClientOCRProcessor() {
 
   const extractEntities = (text: string, caption: string | null): any => {
     const combinedText = `${caption || ""}\n${text}`.toLowerCase();
-    
-    // Date regex patterns
-    const datePatterns = [
-      /(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/g, // MM/DD/YYYY or DD-MM-YYYY
-      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{4})?/gi,
-      /(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/gi,
-    ];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     
     // Time regex patterns
     const timePatterns = [
@@ -111,7 +100,7 @@ export function ClientOCRProcessor() {
       /(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:pesos|php)/gi,
     ];
     
-    // Venue patterns (lines starting with 📍 or "at" or "in")
+    // Venue patterns
     const venuePatterns = [
       /📍\s*([^\n]+)/gi,
       /\bat\s+([A-Z][^\n,]+)/g,
@@ -124,14 +113,9 @@ export function ClientOCRProcessor() {
     let isFree = combinedText.includes("free") || combinedText.includes("libre");
     let venue = null;
     
-    // Extract date
-    for (const pattern of datePatterns) {
-      const match = combinedText.match(pattern);
-      if (match) {
-        date = match[0];
-        break;
-      }
-    }
+    // Simple date extraction (keep basic for now)
+    const simpleDate = combinedText.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
+    if (simpleDate) date = simpleDate[0];
     
     // Extract time
     for (const pattern of timePatterns) {
@@ -162,20 +146,18 @@ export function ClientOCRProcessor() {
       }
     }
 
-    // Determine if it's an event (has date OR time OR venue)
     const isEvent = !!(date || time || venue);
-    
-    // Needs review if: is event but missing critical data
-    const needsReview = isEvent && (!date || !venue);
+    const needsReview = true;
 
     return {
-      title: null, // Can't extract title reliably without AI
+      title: null,
       date,
+      endDate: date,
       time,
       price,
       isFree,
       venue,
-      address: null, // Would need geocoding
+      address: null,
       isEvent,
       needsReview,
     };

@@ -7,6 +7,7 @@ export interface InstagramPost {
   post_id: string;
   caption: string | null;
   post_url: string;
+  image_url: string | null;
   posted_at: string;
   likes_count: number;
   comments_count: number;
@@ -68,6 +69,20 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
   return (
     <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-border/50">
       <div className="space-y-3">
+        {/* Event Image */}
+        {post.image_url && (
+          <div className="w-full h-40 rounded-lg overflow-hidden bg-muted mb-3">
+            <img
+              src={post.image_url}
+              alt={post.event_title || "Event"}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = "/placeholder.svg";
+              }}
+            />
+          </div>
+        )}
+        
         {/* Header with account info */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -122,12 +137,9 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
                 <MapPin className="h-3 w-3" />
                 <span className="truncate">{post.location_name}</span>
                 {post.distance !== undefined && (
-                  <Badge 
-                    variant="secondary" 
-                    className="ml-auto bg-purple-600 text-white hover:bg-purple-700 text-xs px-2 py-0.5 whitespace-nowrap"
-                  >
+                  <span className="ml-auto text-primary text-xs font-medium whitespace-nowrap">
                     {formatDistance(post.distance)}
-                  </Badge>
+                  </span>
                 )}
               </div>
             )}

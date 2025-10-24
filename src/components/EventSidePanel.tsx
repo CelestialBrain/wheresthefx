@@ -108,12 +108,15 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
             <div className="space-y-4">
               {events.map((event) => (
                 <Card key={event.id} className="p-4 space-y-3">
-                  {event.post_url && (
+                  {event.image_url && (
                     <div className="aspect-video rounded-lg overflow-hidden bg-muted">
                       <img
-                        src={event.post_url}
+                        src={event.image_url}
                         alt={event.event_title || "Event"}
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = "/placeholder.svg";
+                        }}
                       />
                     </div>
                   )}

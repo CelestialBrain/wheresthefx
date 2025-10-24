@@ -34,8 +34,8 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     if (!containerRef.current || mapRef.current) return;
 
     const map = L.map(containerRef.current, {
-      center: mapCenter as [number, number],
-      zoom: 12,
+      center: [14.651676537238625, 121.04921119789635],
+      zoom: 13,
       zoomControl: false,
     });
 

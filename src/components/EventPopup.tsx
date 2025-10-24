@@ -57,35 +57,38 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <Card className="relative w-full max-w-md max-h-[90vh] overflow-auto bg-card border-border">
+    <div className="fixed inset-0 z-[2000] flex items-end md:items-center md:justify-center bg-black/80 backdrop-blur-sm">
+      <Card className="relative w-full md:max-w-md max-h-[90vh] overflow-auto bg-card border-border rounded-t-2xl md:rounded-lg">
         <Button
           variant="ghost"
           size="icon"
-          className="absolute top-2 right-2 z-10"
+          className="absolute top-4 right-4 z-10"
           onClick={onClose}
         >
           <X className="h-4 w-4" />
         </Button>
 
-        <div className="p-4 space-y-4">
+        <div className="p-6 space-y-4">
           {/* Event Image */}
-          {currentEvent.post_url && (
-            <div className="aspect-square rounded-lg overflow-hidden bg-muted">
+          {currentEvent.image_url && (
+            <div className="aspect-video md:aspect-square rounded-lg overflow-hidden bg-muted">
               <img
-                src={currentEvent.post_url}
+                src={currentEvent.image_url}
                 alt={currentEvent.event_title || "Event"}
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = "/placeholder.svg";
+                }}
               />
             </div>
           )}
 
           {/* Event Details */}
           <div className="space-y-3">
-            <div className="flex items-start justify-between">
-              <h3 className="text-lg font-semibold flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="text-2xl font-bold flex-1">
                 {currentEvent.event_title || "Untitled Event"}
-              </h3>
+              </h2>
               <Button
                 variant="ghost"
                 size="icon"
@@ -104,7 +107,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Calendar className="h-4 w-4" />
                   <span>
-                    {new Date(currentEvent.event_date).toLocaleDateString()} 
+                    {new Date(currentEvent.event_date).toLocaleDateString()}
                     {currentEvent.event_time && ` at ${currentEvent.event_time}`}
                   </span>
                 </div>
@@ -126,19 +129,21 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
             </div>
 
             {currentEvent.caption && (
-              <p className="text-sm text-muted-foreground line-clamp-3">
+              <p className="text-sm text-muted-foreground">
                 {currentEvent.caption}
               </p>
             )}
 
-            <div className="flex gap-2">
-              <Button asChild className="flex-1">
-                <a href={currentEvent.post_url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  View Post
-                </a>
-              </Button>
-            </div>
+            {currentEvent.instagram_post_url && (
+              <div className="flex gap-2">
+                <Button asChild className="flex-1">
+                  <a href={currentEvent.instagram_post_url} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View Post
+                  </a>
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Navigation Dots */}

@@ -318,6 +318,7 @@ export type Database = {
           created_at: string
           entity_extraction_method: string | null
           event_date: string | null
+          event_end_date: string | null
           event_time: string | null
           event_title: string | null
           hashtags: string[] | null
@@ -353,6 +354,7 @@ export type Database = {
           created_at?: string
           entity_extraction_method?: string | null
           event_date?: string | null
+          event_end_date?: string | null
           event_time?: string | null
           event_title?: string | null
           hashtags?: string[] | null
@@ -388,6 +390,7 @@ export type Database = {
           created_at?: string
           entity_extraction_method?: string | null
           event_date?: string | null
+          event_end_date?: string | null
           event_time?: string | null
           event_title?: string | null
           hashtags?: string[] | null
@@ -697,6 +700,7 @@ export type Database = {
           end_date: string | null
           end_time: string | null
           event_date: string
+          event_end_date: string | null
           event_time: string | null
           event_title: string
           id: string
@@ -726,6 +730,7 @@ export type Database = {
           end_date?: string | null
           end_time?: string | null
           event_date: string
+          event_end_date?: string | null
           event_time?: string | null
           event_title: string
           id?: string
@@ -755,6 +760,7 @@ export type Database = {
           end_date?: string | null
           end_time?: string | null
           event_date?: string
+          event_end_date?: string | null
           event_time?: string | null
           event_title?: string
           id?: string

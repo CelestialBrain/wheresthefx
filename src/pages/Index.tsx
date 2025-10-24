@@ -13,8 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 const Index = () => {
   const navigate = useNavigate();
   const [isVerified, setIsVerified] = useState(false);
-  const [showMap, setShowMap] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [isMapUnlocked, setIsMapUnlocked] = useState(false);
   const [filters, setFilters] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -30,17 +29,17 @@ const Index = () => {
 
   useEffect(() => {
     // Show onboarding for authenticated users who haven't completed it
-    if (showMap && isAuthenticated && hasCompletedOnboarding === false) {
+    if (isMapUnlocked && isAuthenticated && hasCompletedOnboarding === false) {
       setShowOnboarding(true);
     }
-  }, [showMap, isAuthenticated, hasCompletedOnboarding]);
+  }, [isMapUnlocked, isAuthenticated, hasCompletedOnboarding]);
 
   const handleVerified = () => {
     setIsVerified(true);
-    setIsAnimating(true);
+    // Start fade-out transition
     setTimeout(() => {
-      setShowMap(true);
-    }, 1500);
+      setIsMapUnlocked(true);
+    }, 1000); // Match transition duration
   };
 
   const handleOnboardingComplete = (selectedTags: string[]) => {
@@ -49,67 +48,70 @@ const Index = () => {
     setFilters((prev: any) => ({ ...prev, interestTags: selectedTags }));
   };
 
-  if (showMap) {
-    return (
-      <div className="h-screen bg-black">
+  return (
+    <div className={`min-h-screen transition-colors duration-1000 ${isMapUnlocked ? 'bg-black' : 'bg-background'}`}>
+      {/* White overlay with math verification - fades out after verification */}
+      <div 
+        className={`fixed inset-0 z-50 bg-white transition-opacity duration-1000 flex ${
+          isVerified ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
+      >
+        <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
+          {/* Background f(x) */}
+          <div className="absolute bottom-0 right-0 pointer-events-none select-none translate-x-1/4 translate-y-1/4 z-0">
+            <span className="math-function text-[40rem] text-muted-foreground/20 leading-none">
+              f(x)
+            </span>
+          </div>
+          
+          {/* Header */}
+          <header className="absolute top-6 right-6">
+            <Button 
+              className="frosted-glass-purple"
+              size="sm" 
+              onClick={() => navigate("/auth")}
+            >
+              <UserCircle className="h-4 w-4 mr-2" />
+              Sign In
+            </Button>
+          </header>
+
+          {/* Hero Section */}
+          <div className="max-w-3xl w-full space-y-12 z-10">
+            {/* Logo/Title */}
+            <div className="space-y-2">
+              <h1 className="text-5xl md:text-7xl font-light tracking-tight">
+                Where's the{" "}
+                <span className="math-function text-accent">f</span>
+                <span className="math-function text-accent">(x)</span>
+                <span className="text-muted-foreground">?</span>
+              </h1>
+              <p className="text-muted-foreground text-lg">
+                Discover parties, thrift markets, and events in Quezon City
+              </p>
+            </div>
+
+            {/* Math Verification */}
+            <MathVerification onVerified={handleVerified} />
+          </div>
+
+          {/* Footer */}
+          <footer className="absolute bottom-6 text-xs text-muted-foreground">
+            Currently serving Quezon City • More cities coming soon
+          </footer>
+        </div>
+
+        {/* Sidebar - Desktop Only */}
+        <div className="hidden lg:block">
+          <EventSidebar />
+        </div>
+      </div>
+
+      {/* Map (always rendered, revealed after fade) */}
+      <div className={`h-screen transition-opacity duration-1000 ${isMapUnlocked ? 'opacity-100' : 'opacity-0'}`}>
         <MapFilters onFilterChange={setFilters} onSearchChange={setSearchQuery} />
         <EventMap filters={filters} searchQuery={searchQuery} />
         <UserOnboarding open={showOnboarding} onComplete={handleOnboardingComplete} />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`min-h-screen flex ${isAnimating ? 'bg-black' : ''}`}>
-      {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden ${isAnimating ? 'animate-fade-out' : ''}`}>
-        {/* Background f(x) */}
-        <div className="absolute bottom-0 right-0 pointer-events-none select-none translate-x-1/4 translate-y-1/4 z-0">
-          <span className="math-function text-[40rem] text-muted-foreground/20 leading-none">
-            f(x)
-          </span>
-        </div>
-        
-        {/* Header */}
-        <header className="absolute top-6 right-6">
-          <Button 
-            className="frosted-glass-purple"
-            size="sm" 
-            onClick={() => navigate("/auth")}
-          >
-            <UserCircle className="h-4 w-4 mr-2" />
-            Sign In
-          </Button>
-        </header>
-
-        {/* Hero Section */}
-        <div className="max-w-3xl w-full space-y-12">
-          {/* Logo/Title */}
-          <div className="space-y-2">
-            <h1 className="text-5xl md:text-7xl font-light tracking-tight">
-              Where's the{" "}
-              <span className={`math-function text-accent ${isAnimating ? 'animate-zoom-into-fx' : ''}`}>f</span>
-              <span className={`math-function text-accent ${isAnimating ? 'animate-zoom-into-fx' : ''}`}>(x)</span>
-              <span className="text-muted-foreground">?</span>
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              Discover parties, thrift markets, and events in Quezon City
-            </p>
-          </div>
-
-          {/* Math Verification */}
-          <MathVerification onVerified={handleVerified} />
-        </div>
-
-        {/* Footer */}
-        <footer className="absolute bottom-6 text-xs text-muted-foreground">
-          Currently serving Quezon City • More cities coming soon
-        </footer>
-      </main>
-
-      {/* Sidebar - Desktop Only */}
-      <div className="hidden lg:block">
-        <EventSidebar />
       </div>
     </div>
   );
