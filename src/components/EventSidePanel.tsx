@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { X, Heart, ExternalLink, Calendar, MapPin, DollarSign, Flag } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Bookmark, ExternalLink, Calendar, MapPin, DollarSign, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -21,13 +21,32 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
   const [reportType, setReportType] = useState<string>("outdated");
   const [reportDescription, setReportDescription] = useState("");
 
-  const handleSave = async (eventId: string) => {
+  useEffect(() => {
+    const loadSavedEvents = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('saved_events')
+        .select('instagram_post_id')
+        .eq('user_id', user.id);
+
+      if (data) {
+        setSavedEvents(new Set(data.map(d => d.instagram_post_id)));
+      }
+    };
+    loadSavedEvents();
+  }, []);
+
+  const handleSave = async (event: any) => {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
       toast.error("Please sign in to save events");
       return;
     }
+
+    const eventId = event.post_id;
 
     if (savedEvents.has(eventId)) {
       const { error } = await supabase
@@ -122,18 +141,18 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                   )}
 
                   <div className="space-y-2">
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between gap-2">
                       <h3 className="font-semibold flex-1">
                         {event.event_title || "Untitled Event"}
                       </h3>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleSave(event.id)}
+                        onClick={() => handleSave(event)}
                       >
-                        <Heart
+                        <Bookmark
                           className={`h-4 w-4 ${
-                            savedEvents.has(event.id) ? "fill-accent text-accent" : ""
+                            savedEvents.has(event.post_id) ? "fill-accent text-accent" : ""
                           }`}
                         />
                       </Button>
@@ -175,7 +194,7 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          setReportingEventId(event.id);
+                          setReportingEventId(event.post_id);
                           setReportDialogOpen(true);
                         }}
                       >
@@ -195,6 +214,9 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Report Issue</DialogTitle>
+            <DialogDescription>
+              Help us improve by reporting issues with this event
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <Select value={reportType} onValueChange={setReportType}>

@@ -62,6 +62,8 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
       const transformedData = (data || []).map((event: any) => ({
         id: event.id,
         post_id: event.source_post_id || event.id,
+        post_url: event.instagram_post_url,
+        caption: event.caption || event.description,
         event_title: event.event_title,
         event_date: event.event_date,
         event_time: event.event_time,
