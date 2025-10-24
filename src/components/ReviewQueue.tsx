@@ -58,15 +58,30 @@ export function ReviewQueue() {
 
   const updateEventMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
-      const { error } = await supabase
+      console.log('Updating post:', id, updates);
+      const { data, error } = await supabase
         .from("instagram_posts")
         .update(updates)
-        .eq("id", id);
-      if (error) throw error;
+        .eq("id", id)
+        .select();
+      
+      if (error) {
+        console.error('Update error:', error);
+        throw error;
+      }
+      console.log('Update success:', data);
+      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["review-queue"] });
-      toast.success("Event updated");
+    onSuccess: (data) => {
+      console.log('onSuccess called with:', data);
+      // Force refetch instead of just invalidating
+      queryClient.refetchQueries({ queryKey: ["review-queue"] });
+      queryClient.refetchQueries({ queryKey: ["posts-without-events"] });
+      toast.success("Event updated successfully");
+    },
+    onError: (error: any) => {
+      console.error('Mutation error:', error);
+      toast.error(`Failed to update: ${error.message}`);
     },
   });
 
@@ -285,13 +300,19 @@ export function ReviewQueue() {
                         />
                       </div>
                       <div className="flex gap-2">
-                        <Button onClick={saveEdit}>Save Changes</Button>
+                        <Button 
+                          onClick={saveEdit}
+                          disabled={updateEventMutation.isPending}
+                        >
+                          {updateEventMutation.isPending ? "Saving..." : "Save Changes"}
+                        </Button>
                         <Button
                           variant="outline"
                           onClick={() => {
                             setEditingId(null);
                             setEditData({});
                           }}
+                          disabled={updateEventMutation.isPending}
                         >
                           Cancel
                         </Button>

@@ -50,28 +50,41 @@ export function ClientOCRProcessor() {
       confidence: number;
       entities: any;
     }) => {
+      const updates: any = {
+        ocr_confidence: confidence,
+        event_title: entities.title || null,
+        event_date: entities.date || null,
+        event_time: entities.time || null,
+        location_name: entities.venue || null,
+        location_address: entities.address || null,
+        price: entities.price || null,
+        is_free: entities.isFree,
+        is_event: entities.isEvent,
+        needs_review: entities.needsReview,
+      };
+      
+      // Only mark as processed if we successfully extracted event data
+      if (entities.isEvent && entities.date) {
+        updates.ocr_processed = true;
+      } else {
+        // Keep in OCR queue if incomplete
+        updates.ocr_processed = false;
+      }
+
       const { error } = await supabase
         .from("instagram_posts")
-        .update({
-          ocr_processed: true,
-          ocr_confidence: confidence,
-          event_title: entities.title || null,
-          event_date: entities.date || null,
-          event_time: entities.time || null,
-          location_name: entities.venue || null,
-          location_address: entities.address || null,
-          price: entities.price || null,
-          is_free: entities.isFree,
-          is_event: entities.isEvent,
-          needs_review: entities.needsReview,
-        })
+        .update(updates)
         .eq("id", postId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('OCR update error:', error);
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["unprocessed-ocr-posts"] });
       queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
     },
   });
 
@@ -181,10 +194,14 @@ export function ClientOCRProcessor() {
       const post = posts[i];
       setCurrentIndex(i + 1);
       
-      // Force UI update with setTimeout to flush React's render queue
-      setTimeout(() => {
-        setProgress(((i + 1) / posts.length) * 100);
-      }, 0);
+      // Force UI update with requestAnimationFrame for smoother progress
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          setProgress(((i + 1) / posts.length) * 100);
+          // Small delay to allow render
+          setTimeout(resolve, 30);
+        });
+      });
 
       try {
         // Check OCR cache first
@@ -213,16 +230,7 @@ export function ClientOCRProcessor() {
             .eq("id", cached.id);
         } else {
           // Run OCR - update progress during recognition
-          const recognizePromise = worker.recognize(post.image_url);
-          
-          // Simulate progress updates while OCR is running
-          const progressInterval = setInterval(() => {
-            const currentProgress = ((i + 0.5) / posts.length) * 100;
-            setTimeout(() => setProgress(currentProgress), 0);
-          }, 300);
-          
-          const { data: { text, confidence: conf } } = await recognizePromise;
-          clearInterval(progressInterval);
+          const { data: { text, confidence: conf } } = await worker.recognize(post.image_url);
           
           ocrText = text;
           confidence = conf / 100; // Normalize to 0-1
