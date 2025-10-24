@@ -162,7 +162,7 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
               <span>Link</span>
             </a>
             {post.is_event && (
-              <Badge variant="default" className="text-[10px] px-1.5 py-0.5 leading-none">
+              <Badge variant="default" className="text-[10px] px-1.5 py-0.5 leading-none rounded-sm">
                 Event
               </Badge>
             )}
