@@ -316,6 +316,7 @@ export type Database = {
           caption: string | null
           comments_count: number | null
           created_at: string
+          end_time: string | null
           entity_extraction_method: string | null
           event_date: string | null
           event_end_date: string | null
@@ -352,6 +353,7 @@ export type Database = {
           caption?: string | null
           comments_count?: number | null
           created_at?: string
+          end_time?: string | null
           entity_extraction_method?: string | null
           event_date?: string | null
           event_end_date?: string | null
@@ -388,6 +390,7 @@ export type Database = {
           caption?: string | null
           comments_count?: number | null
           created_at?: string
+          end_time?: string | null
           entity_extraction_method?: string | null
           event_date?: string | null
           event_end_date?: string | null
