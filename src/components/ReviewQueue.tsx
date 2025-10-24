@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { MapPin, Calendar, Clock, AlertCircle, CheckCircle, X, Navigation, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LocationCorrectionEditor } from "@/components/LocationCorrectionEditor";
 
 interface ReviewItem {
   id: string;
@@ -47,6 +48,7 @@ export function ReviewQueue() {
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<ReviewItem>>({});
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
 
   const { data: reviewItems, isLoading } = useQuery({
     queryKey: ["review-queue"],
@@ -202,6 +204,94 @@ export function ReviewQueue() {
     onSuccess: () => {
       toast.success("Post deleted");
       queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
+    },
+  });
+
+  const saveLocationCorrectionMutation = useMutation({
+    mutationFn: async ({ 
+      eventId, 
+      locationId, 
+      correction,
+      originalOCR 
+    }: { 
+      eventId: string;
+      locationId: string | null;
+      correction: { venueName: string; streetAddress: string; lat: number | null; lng: number | null };
+      originalOCR: { venue: string; address: string };
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Create or update location
+      let finalLocationId = locationId;
+      
+      if (locationId) {
+        // Update existing location
+        const { error } = await supabase
+          .from("locations")
+          .update({
+            location_name: correction.venueName,
+            formatted_address: correction.streetAddress,
+            location_lat: correction.lat,
+            location_lng: correction.lng,
+            manual_override: true,
+            needs_review: false,
+          })
+          .eq("id", locationId);
+        
+        if (error) throw error;
+      } else {
+        // Create new location
+        const { data: newLocation, error } = await supabase
+          .from("locations")
+          .insert({
+            location_name: correction.venueName,
+            formatted_address: correction.streetAddress,
+            location_lat: correction.lat,
+            location_lng: correction.lng,
+            manual_override: true,
+            needs_review: false,
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        finalLocationId = newLocation.id;
+        
+        // Update event with new location
+        const { error: updateError } = await supabase
+          .from("events_enriched")
+          .update({ location_id: finalLocationId })
+          .eq("id", eventId);
+        
+        if (updateError) throw updateError;
+      }
+      
+      // Save to location_corrections table for learning
+      const { error: correctionError } = await supabase
+        .from("location_corrections")
+        .insert({
+          original_location_name: originalOCR.venue,
+          original_location_address: originalOCR.address,
+          corrected_venue_name: correction.venueName,
+          corrected_street_address: correction.streetAddress,
+          manual_lat: correction.lat,
+          manual_lng: correction.lng,
+          corrected_by: user?.id,
+          applied_to_event_id: eventId,
+          match_pattern: correction.streetAddress?.toLowerCase().replace(/[^a-z0-9\s]/g, ''),
+        });
+      
+      if (correctionError) throw correctionError;
+      
+      return finalLocationId;
+    },
+    onSuccess: () => {
+      toast.success("Location corrected and saved for future learning");
+      queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      setEditingLocationId(null);
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to save correction: ${error.message}`);
     },
   });
 
@@ -372,36 +462,59 @@ export function ReviewQueue() {
                         </div>
                       </div>
 
-                      {item.location && (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-4 h-4 text-muted-foreground" />
-                            <span className="font-medium">
-                              {item.location.location_name}
-                            </span>
+                      {editingLocationId === item.id ? (
+                        <LocationCorrectionEditor
+                          eventId={item.id}
+                          locationId={item.location_id}
+                          originalOCR={{
+                            venue: item.location?.location_name || "",
+                            address: item.location?.formatted_address || ""
+                          }}
+                          currentLocation={item.location ? {
+                            location_name: item.location.location_name,
+                            formatted_address: item.location.formatted_address || "",
+                            location_lat: item.location.location_lat,
+                            location_lng: item.location.location_lng,
+                          } : undefined}
+                          onSave={(correction) => {
+                            saveLocationCorrectionMutation.mutate({
+                              eventId: item.id,
+                              locationId: item.location_id,
+                              correction,
+                              originalOCR: {
+                                venue: item.location?.location_name || "",
+                                address: item.location?.formatted_address || ""
+                              }
+                            });
+                          }}
+                          onCancel={() => setEditingLocationId(null)}
+                        />
+                      ) : (
+                        item.location && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="w-4 h-4 text-muted-foreground" />
+                              <span className="font-medium">
+                                {item.location.location_name}
+                              </span>
+                            </div>
+                            <div className="ml-6 space-y-2">
+                              {item.location.location_lat && item.location.location_lng ? (
+                                <div className="text-sm text-muted-foreground">
+                                  GPS: {item.location.location_lat}, {item.location.location_lng}
+                                </div>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingLocationId(item.id)}
+                              >
+                                <MapPin className="w-4 h-4 mr-2" />
+                                {item.location.location_lat ? "Edit Location" : "Add Coordinates"}
+                              </Button>
+                            </div>
                           </div>
-                          <div className="ml-6 space-y-2">
-                            {item.location.location_lat && item.location.location_lng ? (
-                              <div className="text-sm text-muted-foreground">
-                                GPS: {item.location.location_lat}, {item.location.location_lng}
-                              </div>
-                            ) : (
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    geocodeMutation.mutate(item.location!.location_name)
-                                  }
-                                  disabled={geocodeMutation.isPending}
-                                >
-                                  <Navigation className="w-4 h-4 mr-2" />
-                                  Auto-Geocode
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        )
                       )}
 
                       <div className="flex gap-2">

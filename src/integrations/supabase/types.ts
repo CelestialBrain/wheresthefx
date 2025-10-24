@@ -479,8 +479,71 @@ export type Database = {
         }
         Relationships: []
       }
+      location_corrections: {
+        Row: {
+          applied_to_event_id: string | null
+          confidence_score: number | null
+          corrected_by: string | null
+          corrected_street_address: string | null
+          corrected_venue_name: string
+          correction_count: number | null
+          created_at: string | null
+          id: string
+          manual_lat: number | null
+          manual_lng: number | null
+          match_pattern: string | null
+          original_location_address: string | null
+          original_location_name: string | null
+          original_ocr_text: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          applied_to_event_id?: string | null
+          confidence_score?: number | null
+          corrected_by?: string | null
+          corrected_street_address?: string | null
+          corrected_venue_name: string
+          correction_count?: number | null
+          created_at?: string | null
+          id?: string
+          manual_lat?: number | null
+          manual_lng?: number | null
+          match_pattern?: string | null
+          original_location_address?: string | null
+          original_location_name?: string | null
+          original_ocr_text?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          applied_to_event_id?: string | null
+          confidence_score?: number | null
+          corrected_by?: string | null
+          corrected_street_address?: string | null
+          corrected_venue_name?: string
+          correction_count?: number | null
+          created_at?: string | null
+          id?: string
+          manual_lat?: number | null
+          manual_lng?: number | null
+          match_pattern?: string | null
+          original_location_address?: string | null
+          original_location_name?: string | null
+          original_ocr_text?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "location_corrections_applied_to_event_id_fkey"
+            columns: ["applied_to_event_id"]
+            isOneToOne: false
+            referencedRelation: "events_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
+          correction_id: string | null
           created_at: string
           floor_note: string | null
           formatted_address: string | null
@@ -488,6 +551,7 @@ export type Database = {
           location_lat: number | null
           location_lng: number | null
           location_name: string
+          manual_override: boolean | null
           needs_review: boolean
           place_id: string | null
           total_events: number
@@ -495,6 +559,7 @@ export type Database = {
           verified: boolean
         }
         Insert: {
+          correction_id?: string | null
           created_at?: string
           floor_note?: string | null
           formatted_address?: string | null
@@ -502,6 +567,7 @@ export type Database = {
           location_lat?: number | null
           location_lng?: number | null
           location_name: string
+          manual_override?: boolean | null
           needs_review?: boolean
           place_id?: string | null
           total_events?: number
@@ -509,6 +575,7 @@ export type Database = {
           verified?: boolean
         }
         Update: {
+          correction_id?: string | null
           created_at?: string
           floor_note?: string | null
           formatted_address?: string | null
@@ -516,13 +583,22 @@ export type Database = {
           location_lat?: number | null
           location_lng?: number | null
           location_name?: string
+          manual_override?: boolean | null
           needs_review?: boolean
           place_id?: string | null
           total_events?: number
           updated_at?: string
           verified?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "locations_correction_id_fkey"
+            columns: ["correction_id"]
+            isOneToOne: false
+            referencedRelation: "location_corrections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -731,6 +807,32 @@ export type Database = {
       }
     }
     Functions: {
+      find_similar_addresses: {
+        Args: { search_address: string; similarity_threshold?: number }
+        Returns: {
+          confidence_score: number
+          corrected_street_address: string
+          corrected_venue_name: string
+          correction_count: number
+          id: string
+          manual_lat: number
+          manual_lng: number
+          similarity_score: number
+        }[]
+      }
+      find_similar_venues: {
+        Args: { search_venue: string; similarity_threshold?: number }
+        Returns: {
+          confidence_score: number
+          corrected_street_address: string
+          corrected_venue_name: string
+          correction_count: number
+          id: string
+          manual_lat: number
+          manual_lng: number
+          similarity_score: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -738,6 +840,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "moderator" | "host" | "user"
