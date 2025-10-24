@@ -297,6 +297,33 @@ const Admin = () => {
     }
   };
 
+  const backfillImages = async () => {
+    try {
+      setIsLoading(true);
+      
+      const { data, error } = await supabase.functions.invoke("backfill-images", {
+        body: {},
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Backfilled ${data.success} images. ${data.failed > 0 ? `Failed: ${data.failed}` : ''}`,
+      });
+
+      console.log("Backfill result:", data);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to backfill images",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
@@ -418,6 +445,29 @@ const Admin = () => {
             </Card>
           )}
           
+          {/* Image Backfill Tool */}
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-base md:text-lg">Fix OCR Images</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Re-download and store Instagram images to fix CORS errors
+                  </p>
+                </div>
+                <Button
+                  onClick={backfillImages}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="w-full md:w-auto"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                  {isLoading ? "Processing..." : "Backfill Images"}
+                </Button>
+              </div>
+            </CardHeader>
+          </Card>
+
           {/* Dataset Import */}
           <Card>
             <CardHeader className="p-4 md:p-6">

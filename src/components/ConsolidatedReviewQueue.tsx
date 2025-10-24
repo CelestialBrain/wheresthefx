@@ -29,6 +29,7 @@ interface Post {
   id: string;
   post_url: string;
   image_url: string;
+  stored_image_url: string | null;
   caption: string | null;
   event_title: string | null;
   event_date: string | null;

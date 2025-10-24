@@ -12,6 +12,7 @@ import { Eye, PlayCircle, StopCircle, CheckCircle } from "lucide-react";
 interface Post {
   id: string;
   image_url: string;
+  stored_image_url: string | null;
   ocr_processed: boolean;
   caption: string | null;
 }
@@ -28,7 +29,7 @@ export function ClientOCRProcessor() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("instagram_posts")
-        .select("id, image_url, ocr_processed, caption")
+        .select("id, image_url, stored_image_url, ocr_processed, caption")
         .eq("ocr_processed", false)
         .not("image_url", "is", null)
         .limit(50);
@@ -211,9 +212,32 @@ export function ClientOCRProcessor() {
             })
             .eq("id", cached.id);
         } else {
+          // Use stored_image_url if available (no CORS), fallback to image_url
+          const imageToProcess = post.stored_image_url || post.image_url;
+          
+          // Pre-flight check: try to load image
+          try {
+            const testImg = new Image();
+            const loadPromise = new Promise((resolve, reject) => {
+              testImg.onload = resolve;
+              testImg.onerror = reject;
+              testImg.crossOrigin = 'anonymous';
+            });
+            testImg.src = imageToProcess;
+            await Promise.race([
+              loadPromise,
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Image load timeout')), 10000)
+              )
+            ]);
+          } catch (loadError: any) {
+            const errorType = loadError.message.includes('timeout') ? 'Timeout' : 'CORS Error';
+            throw new Error(`${errorType}: ${post.stored_image_url ? 'Stored image' : 'Instagram CDN'} blocked - ${loadError.message}`);
+          }
+          
           // Run OCR with timeout handling (30 seconds)
           const processWithTimeout = Promise.race([
-            worker.recognize(post.image_url),
+            worker.recognize(imageToProcess),
             new Promise((_, reject) => 
               setTimeout(() => reject(new Error('OCR timeout after 30 seconds')), 30000)
             )
@@ -251,13 +275,19 @@ export function ClientOCRProcessor() {
       } catch (error: any) {
         console.error(`Error processing post ${i + 1}:`, error);
         
-        // Log error to database for tracking
+        // Determine error type for better logging
+        const isCorsError = error.message?.includes('CORS') || error.message?.includes('blocked');
+        const errorMessage = isCorsError 
+          ? `Image blocked by CORS - needs re-scraping: ${error.message}`
+          : error.message || 'Unknown error';
+        
+        // Log error to database for tracking (use direct query to avoid mutation conflicts)
         try {
           await supabase
             .from("instagram_posts")
             .update({
               ocr_error_count: 1,
-              ocr_last_error: error.message || 'Unknown error',
+              ocr_last_error: errorMessage,
               ocr_last_attempt_at: new Date().toISOString(),
               ocr_processed: false
             })
@@ -266,7 +296,10 @@ export function ClientOCRProcessor() {
           console.error('Failed to log OCR error:', dbError);
         }
         
-        toast.error(`OCR failed for post ${i + 1}: ${error.message}`);
+        toast.error(isCorsError 
+          ? `Post ${i + 1}: Image blocked by CORS. Run scraper to re-download.`
+          : `OCR failed for post ${i + 1}: ${error.message}`
+        );
         
         // Continue processing next post instead of breaking
         continue;

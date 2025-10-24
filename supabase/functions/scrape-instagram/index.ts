@@ -742,6 +742,53 @@ Deno.serve(async (req) => {
         // Extract image URL from Apify data (displayUrl or imageUrl)
         const imageUrl = item.displayUrl || item.imageUrl;
 
+        // Download and store image in Supabase Storage
+        let storedImageUrl: string | null = null;
+        if (imageUrl) {
+          try {
+            console.log(`Downloading image for post ${postId}...`);
+            const imageResponse = await fetch(imageUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              }
+            });
+            
+            if (imageResponse.ok) {
+              const imageBlob = await imageResponse.blob();
+              const arrayBuffer = await imageBlob.arrayBuffer();
+              
+              // Compress image using canvas-like approach
+              // For simplicity, we'll store as-is but with reasonable size limit
+              // Advanced compression would require image processing library
+              
+              const fileName = `instagram-posts/${postId}.jpg`;
+              
+              const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('event-images')
+                .upload(fileName, arrayBuffer, {
+                  contentType: 'image/jpeg',
+                  upsert: true,
+                });
+              
+              if (uploadError) {
+                console.error(`Failed to upload image for ${postId}:`, uploadError);
+              } else {
+                // Get public URL
+                const { data: urlData } = supabase.storage
+                  .from('event-images')
+                  .getPublicUrl(fileName);
+                
+                storedImageUrl = urlData.publicUrl;
+                console.log(`✓ Stored image for ${postId}`);
+              }
+            } else {
+              console.error(`Failed to download image for ${postId}: ${imageResponse.status}`);
+            }
+          } catch (imageError) {
+            console.error(`Error processing image for ${postId}:`, imageError);
+          }
+        }
+
         // Prepare insert data - allow NULL for missing data
         const insertData: any = {
           post_id: postId,
@@ -749,6 +796,7 @@ Deno.serve(async (req) => {
           caption: item.caption,
           post_url: postUrl,
           image_url: imageUrl,
+          stored_image_url: storedImageUrl,
           posted_at: postedAt,
           likes_count: likesCount,
           comments_count: commentsCount,

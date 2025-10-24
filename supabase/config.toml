@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.save-location-correction]
 verify_jwt = true
+
+[functions.backfill-images]
+verify_jwt = false
