@@ -67,7 +67,7 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
   };
 
   return (
-    <Card className="p-3 hover:shadow-md transition-shadow cursor-pointer border-border/50 rounded-sm">
+    <Card className="p-3 hover:shadow-md transition-shadow cursor-pointer border-border/50">
       {/* Top Row: Image + Username/Title */}
       <div className="flex gap-3 mb-2">
         {/* Image */}
