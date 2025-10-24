@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Image as ImageIcon } from "lucide-react";
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface PostWithEventEditorProps {
   post: {
@@ -53,18 +55,38 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     setShowLocationEditor(false);
   };
 
-  const handleCreateEvent = () => {
-    const finalData = {
-      ...eventData,
-      location: locationCorrection || {
-        venueName: post.location_name || "",
-        streetAddress: post.location_address || "",
-        lat: post.location_lat,
-        lng: post.location_lng,
-      },
-      instagram_post_id: post.id,
+  const handleCreateEvent = async () => {
+    const location = locationCorrection || {
+      venueName: post.location_name || "",
+      streetAddress: post.location_address || "",
+      lat: post.location_lat,
+      lng: post.location_lng,
     };
-    onCreateEvent(finalData);
+
+    try {
+      const { error } = await supabase
+        .from("instagram_posts")
+        .update({
+          event_title: eventData.event_title,
+          event_date: eventData.event_date,
+          event_time: eventData.event_time || null,
+          location_name: location.venueName,
+          location_address: location.streetAddress,
+          location_lat: location.lat,
+          location_lng: location.lng,
+          signup_url: eventData.signup_url || null,
+          is_free: eventData.is_free,
+          ocr_confidence: 1.0, // Mark as manually verified
+        })
+        .eq("id", post.id);
+
+      if (error) throw error;
+
+      toast.success("Event published to map and sidebar!");
+      onCreateEvent(null); // Signal success
+    } catch (error: any) {
+      toast.error(`Failed to publish: ${error.message}`);
+    }
   };
 
   const isValid = 
@@ -255,7 +277,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
             disabled={!isValid}
             className="flex-1"
           >
-            Create Draft Event
+            Publish Event
           </Button>
           <Button onClick={onCancel} variant="outline">
             Cancel

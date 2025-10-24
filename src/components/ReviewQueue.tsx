@@ -558,7 +558,11 @@ export function ReviewQueue() {
             <PostWithEventEditor
               key={post.id}
               post={post}
-              onCreateEvent={(eventData) => enrichEventMutation.mutate(post.id)}
+              onCreateEvent={() => {
+                queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
+                queryClient.invalidateQueries({ queryKey: ["event-markers"] });
+                queryClient.invalidateQueries({ queryKey: ["instagram-posts"] });
+              }}
               onCancel={() => deletePostMutation.mutate(post.id)}
             />
           ))}
