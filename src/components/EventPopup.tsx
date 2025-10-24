@@ -143,7 +143,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                     {event.instagram_accounts?.username && (
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
-                          <Instagram className="h-3 w-3 text-muted-foreground" />
+                          <Instagram className="h-3 w-3 text-accent" />
                           <span className="text-xs text-muted-foreground">
                             @{event.instagram_accounts.username}
                           </span>
