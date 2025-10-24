@@ -262,15 +262,15 @@ export function ConsolidatedReviewQueue() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* OCR Processor - only show if pending posts exist */}
       {(ocrPendingCount || 0) > 0 && (
         <Card>
-          <CardHeader>
-            <h3 className="text-lg font-semibold">OCR Processing</h3>
-            <p className="text-sm text-muted-foreground">{ocrPendingCount} posts pending OCR processing</p>
+          <CardHeader className="p-4 md:p-6">
+            <h3 className="text-base md:text-lg font-semibold">OCR Processing</h3>
+            <p className="text-xs md:text-sm text-muted-foreground">{ocrPendingCount} posts pending OCR processing</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 md:p-6 pt-0">
             <ClientOCRProcessor />
           </CardContent>
         </Card>
@@ -278,118 +278,125 @@ export function ConsolidatedReviewQueue() {
 
       {/* Main Review Queue */}
       <Card>
-        <CardHeader>
-          <h2 className="text-2xl font-bold">Review Queue</h2>
-          <p className="text-sm text-muted-foreground">
+        <CardHeader className="p-4 md:p-6">
+          <h2 className="text-lg md:text-xl font-bold">Review Queue</h2>
+          <p className="text-xs md:text-sm text-muted-foreground mt-1">
             Unified queue for all posts needing attention
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 md:p-6 pt-0">
           <Tabs value={filterTab} onValueChange={(v) => {
             setFilterTab(v as typeof filterTab);
             setCurrentPage(0);
           }}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="all">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 gap-1">
+              <TabsTrigger value="all" className="text-xs md:text-sm">
                 All ({allPosts?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="needs_data">
-                <AlertCircle className="w-4 h-4 mr-1" />
-                Needs Data
+              <TabsTrigger value="needs_data" className="flex items-center gap-1 text-xs md:text-sm">
+                <AlertCircle className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Needs Data</span>
+                <span className="sm:hidden">Data</span>
               </TabsTrigger>
-              <TabsTrigger value="ocr_pending">
-                <Loader className="w-4 h-4 mr-1" />
-                OCR Pending
+              <TabsTrigger value="ocr_pending" className="flex items-center gap-1 text-xs md:text-sm">
+                <Loader className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">OCR</span>
+                <span className="sm:hidden">OCR</span>
               </TabsTrigger>
-              <TabsTrigger value="ready">
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Ready
+              <TabsTrigger value="ready" className="flex items-center gap-1 text-xs md:text-sm">
+                <CheckCircle className="w-3 h-3 md:w-4 md:h-4" />
+                <span>Ready</span>
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value={filterTab} className="space-y-4 mt-6">
+            <TabsContent value={filterTab} className="space-y-3 md:space-y-4 mt-4 md:mt-6">
               {/* Pagination controls */}
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                <p className="text-xs md:text-sm text-muted-foreground">
                   Showing {currentPage * ITEMS_PER_PAGE + 1}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, allPosts?.length || 0)} of {allPosts?.length || 0}
                 </p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full md:w-auto">
                   <Button 
                     size="sm" 
                     variant="outline" 
                     disabled={currentPage === 0}
                     onClick={() => setCurrentPage(p => p - 1)}
+                    className="flex-1 md:flex-initial"
                   >
-                    <ChevronLeft className="w-4 h-4" />
-                    Previous
+                    <ChevronLeft className="w-4 h-4 md:mr-1" />
+                    <span className="hidden md:inline">Previous</span>
                   </Button>
                   <Button 
                     size="sm" 
                     variant="outline"
                     disabled={currentPage >= totalPages - 1}
                     onClick={() => setCurrentPage(p => p + 1)}
+                    className="flex-1 md:flex-initial"
                   >
-                    Next
-                    <ChevronRight className="w-4 h-4" />
+                    <span className="hidden md:inline">Next</span>
+                    <ChevronRight className="w-4 h-4 md:ml-1" />
                   </Button>
                 </div>
               </div>
 
               {/* Posts list */}
               {paginatedPosts && paginatedPosts.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-3 md:space-y-4">
                   {paginatedPosts.map((post: any) => (
-                    <Card key={post.id} className="p-4">
-                      <div className="space-y-4">
-                        {/* Header with badges */}
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <StatusBadge post={post} />
-                            <PriorityBadge priority={post.priority} />
-                            {post.instagram_account && (
-                              <Badge variant="outline">@{post.instagram_account.username}</Badge>
-                            )}
+                    <Card key={post.id}>
+                      <CardContent className="p-4 md:p-6">
+                        <div className="space-y-3 md:space-y-4">
+                          {/* Header with badges */}
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <StatusBadge post={post} />
+                              <PriorityBadge priority={post.priority} />
+                              {post.instagram_account && (
+                                <Badge variant="outline" className="text-xs">@{post.instagram_account.username}</Badge>
+                              )}
+                            </div>
                           </div>
+
+                          {/* Completeness meter */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Completeness</span>
+                              <span>{Math.round(post.completeness)}%</span>
+                            </div>
+                            <Progress value={post.completeness} className="h-2" />
+                          </div>
+
+                          {/* OCR Error Display */}
+                          {post.ocr_error_count > 0 && (
+                            <div className="bg-destructive/10 p-3 rounded-lg space-y-2">
+                              <p className="text-xs md:text-sm text-destructive font-medium">
+                                OCR failed {post.ocr_error_count} time{post.ocr_error_count > 1 ? 's' : ''}
+                              </p>
+                              {post.ocr_last_error && (
+                                <p className="text-xs text-muted-foreground">{post.ocr_last_error}</p>
+                              )}
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={() => forceReprocessMutation.mutate(post.id)}
+                                disabled={forceReprocessMutation.isPending}
+                                className="w-full md:w-auto"
+                              >
+                                Force Reprocess OCR
+                              </Button>
+                            </div>
+                          )}
+
+                          {/* Post Editor */}
+                          <PostWithEventEditor
+                            post={post}
+                            onCancel={() => setPostToReject(post)}
+                            onCreateEvent={() => {
+                              queryClient.invalidateQueries({ queryKey: ["consolidated-review-queue"] });
+                            }}
+                          />
                         </div>
-
-                        {/* Completeness meter */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>Completeness</span>
-                            <span>{Math.round(post.completeness)}%</span>
-                          </div>
-                          <Progress value={post.completeness} className="h-2" />
-                        </div>
-
-                        {/* OCR Error Display */}
-                        {post.ocr_error_count > 0 && (
-                          <div className="bg-destructive/10 p-3 rounded-lg space-y-2">
-                            <p className="text-sm text-destructive font-medium">
-                              OCR failed {post.ocr_error_count} time{post.ocr_error_count > 1 ? 's' : ''}
-                            </p>
-                            {post.ocr_last_error && (
-                              <p className="text-xs text-muted-foreground">{post.ocr_last_error}</p>
-                            )}
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              onClick={() => forceReprocessMutation.mutate(post.id)}
-                              disabled={forceReprocessMutation.isPending}
-                            >
-                              Force Reprocess OCR
-                            </Button>
-                          </div>
-                        )}
-
-                        {/* Post Editor */}
-                        <PostWithEventEditor
-                          post={post}
-                          onCancel={() => setPostToReject(post)}
-                          onCreateEvent={() => {
-                            queryClient.invalidateQueries({ queryKey: ["consolidated-review-queue"] });
-                          }}
-                        />
-                      </div>
+                      </CardContent>
                     </Card>
                   ))}
                 </div>

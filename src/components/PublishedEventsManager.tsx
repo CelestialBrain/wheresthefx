@@ -347,21 +347,23 @@ export const PublishedEventsManager = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Published Events</h2>
-          <p className="text-muted-foreground">{events?.length || 0} events published</p>
+          <h2 className="text-lg md:text-xl font-bold">Published Events</h2>
+          <p className="text-xs md:text-sm text-muted-foreground">{events?.length || 0} events published</p>
         </div>
         <Button
           variant="outline"
           size="sm"
           onClick={handleUndo}
           disabled={undoStack.length === 0}
+          className="w-full md:w-auto"
         >
           <Undo2 className="w-4 h-4 mr-2" />
-          Undo Last Change
+          <span className="hidden md:inline">Undo Last Change</span>
+          <span className="md:hidden">Undo</span>
         </Button>
       </div>
 
@@ -377,24 +379,24 @@ export const PublishedEventsManager = () => {
       </div>
 
       {/* Events Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {events?.map((event) => (
           <Card 
             key={event.id} 
             className="cursor-pointer hover:border-accent transition-colors"
             onClick={() => setSelectedEvent(event)}
           >
-            <CardHeader className="pb-3">
+            <CardHeader className="p-4 md:p-6 pb-3">
               <div className="flex items-start gap-3">
                 {event.instagram_post?.image_url && (
                   <img
                     src={event.instagram_post.image_url}
                     alt=""
-                    className="w-16 h-16 object-cover rounded"
+                    className="w-12 h-12 md:w-16 md:h-16 object-cover rounded flex-shrink-0"
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-base truncate">{event.event_title}</CardTitle>
+                  <CardTitle className="text-sm md:text-base truncate">{event.event_title}</CardTitle>
                   <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                     <Calendar className="w-3 h-3" />
                     <span>{format(new Date(event.event_date), "MMM d, yyyy")}</span>
@@ -402,7 +404,7 @@ export const PublishedEventsManager = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="p-4 md:p-6 pt-0 space-y-2">
               <div className="flex items-start gap-2 text-sm">
                 <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
                 <span className="line-clamp-1">{event.location?.location_name || "No location"}</span>
@@ -417,7 +419,7 @@ export const PublishedEventsManager = () => {
 
       {/* Event Detail Modal */}
       <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-4 md:p-6">
           {selectedEvent && (
             <>
               <DialogHeader>

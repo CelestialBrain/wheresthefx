@@ -158,12 +158,12 @@ export const LocationTemplatesManager = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 md:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Location Templates</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-lg md:text-xl font-bold">Location Templates</h2>
+          <p className="text-xs md:text-sm text-muted-foreground">
             Save frequently used locations for quick event creation
           </p>
         </div>
@@ -175,17 +175,17 @@ export const LocationTemplatesManager = () => {
           }
         }}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full md:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               New Template
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="p-4 md:p-6 max-w-lg">
             <DialogHeader>
-              <DialogTitle>{editingId ? "Edit" : "Create"} Location Template</DialogTitle>
+              <DialogTitle className="text-base md:text-lg">{editingId ? "Edit" : "Create"} Location Template</DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4">
+            <div className="space-y-3 md:space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="template-name">Template Name *</Label>
                 <Input
@@ -216,9 +216,9 @@ export const LocationTemplatesManager = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="lat">Latitude *</Label>
+                  <Label htmlFor="lat" className="text-sm">Latitude *</Label>
                   <Input
                     id="lat"
                     type="number"
@@ -229,7 +229,7 @@ export const LocationTemplatesManager = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lng">Longitude *</Label>
+                  <Label htmlFor="lng" className="text-sm">Longitude *</Label>
                   <Input
                     id="lng"
                     type="number"
@@ -252,7 +252,7 @@ export const LocationTemplatesManager = () => {
                 />
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col md:flex-row gap-2">
                 <Button onClick={handleSubmit} className="flex-1">
                   <Save className="w-4 h-4 mr-2" />
                   {editingId ? "Update" : "Create"} Template
@@ -264,6 +264,7 @@ export const LocationTemplatesManager = () => {
                     setEditingId(null);
                     resetForm();
                   }}
+                  className="w-full md:w-auto"
                 >
                   Cancel
                 </Button>
@@ -274,44 +275,44 @@ export const LocationTemplatesManager = () => {
       </div>
 
       {/* Templates Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {templates?.map((template) => (
           <Card key={template.id}>
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
+            <CardHeader className="p-4 md:p-6 pb-3">
+              <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-base truncate">{template.template_name}</CardTitle>
+                  <CardTitle className="text-sm md:text-base truncate">{template.template_name}</CardTitle>
                   <div className="flex items-center gap-2 mt-1">
                     <Badge variant="secondary" className="text-xs">
                       Used {template.usage_count}x
                     </Badge>
                   </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-7 w-7 md:h-8 md:w-8"
                     onClick={() => startEdit(template)}
                   >
-                    <Edit2 className="w-4 h-4" />
+                    <Edit2 className="w-3 h-3 md:w-4 md:h-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
+                    className="h-7 w-7 md:h-8 md:w-8 text-destructive hover:text-destructive"
                     onClick={() => {
                       if (confirm("Delete this template?")) {
                         deleteMutation.mutate(template.id);
                       }
                     }}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
                   </Button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="p-4 md:p-6 pt-0 space-y-2 text-xs md:text-sm">
               <div className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">

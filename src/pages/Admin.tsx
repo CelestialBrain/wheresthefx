@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp } from "lucide-react";
@@ -298,70 +298,94 @@ const Admin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold mb-4">Admin Dashboard</h1>
+    <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
+        <h1 className="text-2xl md:text-3xl font-bold">Admin Dashboard</h1>
         
         <Tabs defaultValue="scraping">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="scraping"><Instagram className="w-4 h-4 mr-2" />Scraping</TabsTrigger>
-            <TabsTrigger value="review"><ClipboardList className="w-4 h-4 mr-2" />Review Queue</TabsTrigger>
-            <TabsTrigger value="published"><FolderKanban className="w-4 h-4 mr-2" />Published</TabsTrigger>
-            <TabsTrigger value="patterns"><TrendingUp className="w-4 h-4 mr-2" />Patterns</TabsTrigger>
-            <TabsTrigger value="templates"><MapPin className="w-4 h-4 mr-2" />Templates</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-1">
+            <TabsTrigger value="scraping" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <Instagram className="w-3 h-3 md:w-4 md:h-4" />
+              <span className="hidden sm:inline">Scraping</span>
+              <span className="sm:hidden">Scrape</span>
+            </TabsTrigger>
+            <TabsTrigger value="review" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <ClipboardList className="w-3 h-3 md:w-4 md:h-4" />
+              <span className="hidden sm:inline">Review Queue</span>
+              <span className="sm:hidden">Review</span>
+            </TabsTrigger>
+            <TabsTrigger value="published" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <FolderKanban className="w-3 h-3 md:w-4 md:h-4" />
+              <span className="hidden sm:inline">Published</span>
+              <span className="sm:hidden">Events</span>
+            </TabsTrigger>
+            <TabsTrigger value="patterns" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <TrendingUp className="w-3 h-3 md:w-4 md:h-4" />
+              <span>Patterns</span>
+            </TabsTrigger>
+            <TabsTrigger value="templates" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <MapPin className="w-3 h-3 md:w-4 md:h-4" />
+              <span className="hidden sm:inline">Templates</span>
+              <span className="sm:hidden">Loc</span>
+            </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="scraping" className="space-y-6">
+          <TabsContent value="scraping" className="space-y-4 md:space-y-6 mt-4 md:mt-6">
           
           {/* Danger Zone - Purge All Posts */}
-          <Card className="p-4 border-destructive">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-destructive">Danger Zone</h3>
-                <p className="text-sm text-muted-foreground">
-                  Delete all posts and events from the database
-                </p>
+          <Card className="border-destructive">
+            <CardHeader className="p-4 md:p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-destructive text-base md:text-lg">Danger Zone</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Delete all posts and events from the database
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={purgeAllPosts}
+                  disabled={isPurging}
+                  className="w-full md:w-auto"
+                >
+                  <Trash2 className={`h-4 w-4 mr-2 ${isPurging ? "animate-pulse" : ""}`} />
+                  {isPurging ? "Purging..." : "Purge All Posts"}
+                </Button>
               </div>
-              <Button
-                variant="destructive"
-                onClick={purgeAllPosts}
-                disabled={isPurging}
-              >
-                <Trash2 className={`h-4 w-4 mr-2 ${isPurging ? "animate-pulse" : ""}`} />
-                {isPurging ? "Purging..." : "Purge All Posts"}
-              </Button>
-            </div>
+            </CardHeader>
           </Card>
           
           {/* Last Scrape Status */}
           {lastRun && (
-            <Card className="p-4 mb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Last Scrape</p>
-                  <p className="font-semibold">
-                    {formatTimestamp(lastRun.started_at)} ({getTimeSince(lastRun.started_at)})
-                  </p>
-                  <div className="flex gap-4 mt-1 text-sm">
-                    <span className={lastRun.status === 'completed' ? 'text-green-600' : lastRun.status === 'failed' ? 'text-red-600' : 'text-yellow-600'}>
-                      {lastRun.status === 'completed' ? '✓ Success' : lastRun.status === 'failed' ? '✗ Failed' : '⏳ Running'}
-                    </span>
-                    {lastRun.status === 'completed' && (
-                      <>
-                        <span>• Posts Added: {lastRun.posts_added}</span>
-                        <span>• Updated: {lastRun.posts_updated}</span>
-                        <span>• Accounts: {lastRun.accounts_found}</span>
-                      </>
+            <Card>
+              <CardHeader className="p-4 md:p-6">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <p className="text-xs md:text-sm text-muted-foreground">Last Scrape</p>
+                    <p className="font-semibold text-sm md:text-base mt-1">
+                      {formatTimestamp(lastRun.started_at)} ({getTimeSince(lastRun.started_at)})
+                    </p>
+                    <div className="flex flex-wrap gap-2 md:gap-4 mt-2 text-xs md:text-sm">
+                      <span className={lastRun.status === 'completed' ? 'text-green-600' : lastRun.status === 'failed' ? 'text-red-600' : 'text-yellow-600'}>
+                        {lastRun.status === 'completed' ? '✓ Success' : lastRun.status === 'failed' ? '✗ Failed' : '⏳ Running'}
+                      </span>
+                      {lastRun.status === 'completed' && (
+                        <>
+                          <span>• Posts Added: {lastRun.posts_added}</span>
+                          <span>• Updated: {lastRun.posts_updated}</span>
+                          <span>• Accounts: {lastRun.accounts_found}</span>
+                        </>
+                      )}
+                    </div>
+                    {lastRun.error_message && (
+                      <p className="text-xs text-red-600 mt-2">{lastRun.error_message}</p>
                     )}
                   </div>
-                  {lastRun.error_message && (
-                    <p className="text-xs text-red-600 mt-1">{lastRun.error_message}</p>
-                  )}
+                  <Button variant="outline" size="sm" onClick={() => setShowHistory(!showHistory)} className="w-full md:w-auto">
+                    {showHistory ? 'Hide' : 'View'} History
+                  </Button>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setShowHistory(!showHistory)}>
-                  {showHistory ? 'Hide' : 'View'} History
-                </Button>
-              </div>
+              </CardHeader>
             </Card>
           )}
 
@@ -395,74 +419,90 @@ const Admin = () => {
           )}
           
           {/* Dataset Import */}
-          <Card className="p-4 mb-4">
-            <h2 className="text-lg font-semibold mb-2">Import from Dataset</h2>
-            <p className="text-sm text-muted-foreground mb-3">
-              Paste an Apify dataset URL or ID from a dataset you've already scraped
-            </p>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Dataset ID or full URL (e.g., unhzteLFHcz1H4VLQ or https://api.apify.com/v2/datasets/...)"
-                value={datasetId}
-                onChange={(e) => setDatasetId(e.target.value)}
-                className="flex-1"
-              />
-              <Button
-                onClick={() => triggerScraping(true)}
-                disabled={isScraping || !datasetId.trim()}
-                variant="default"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isScraping ? "animate-spin" : ""}`} />
-                {isScraping ? "Importing..." : "Import Now"}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              💡 Accounts will be automatically created from the dataset
-            </p>
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <h2 className="text-base md:text-lg font-semibold">Import from Dataset</h2>
+              <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                Paste an Apify dataset URL or ID from a dataset you've already scraped
+              </p>
+            </CardHeader>
+            <CardContent className="p-4 md:p-6 pt-0 space-y-3">
+              <div className="flex flex-col md:flex-row gap-2">
+                <Input
+                  placeholder="Dataset ID or full URL..."
+                  value={datasetId}
+                  onChange={(e) => setDatasetId(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={() => triggerScraping(true)}
+                  disabled={isScraping || !datasetId.trim()}
+                  variant="default"
+                  className="w-full md:w-auto"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isScraping ? "animate-spin" : ""}`} />
+                  {isScraping ? "Importing..." : "Import Now"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                💡 Accounts will be automatically created from the dataset
+              </p>
+            </CardContent>
           </Card>
 
           {/* Automated Scraping Section */}
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-lg font-semibold">Automated Scraping</h2>
-                <p className="text-sm text-muted-foreground">
-                  ⏰ Auto-scrapes daily at 3:00 AM (last 5 posts from 30 days per account)
-                </p>
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                <div className="flex-1">
+                  <h2 className="text-base md:text-lg font-semibold">Automated Scraping</h2>
+                  <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                    ⏰ Auto-scrapes daily at 3:00 AM (last 5 posts from 30 days per account)
+                  </p>
+                </div>
+                <Button
+                  onClick={() => triggerScraping(false)}
+                  disabled={isScraping || accounts.length === 0}
+                  variant="outline"
+                  className="w-full md:w-auto"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isScraping ? "animate-spin" : ""}`} />
+                  Scrape Now
+                </Button>
               </div>
-              <Button
-                onClick={() => triggerScraping(false)}
-                disabled={isScraping || accounts.length === 0}
-                variant="outline"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isScraping ? "animate-spin" : ""}`} />
-                Scrape Now
-              </Button>
-            </div>
+            </CardHeader>
           </Card>
 
           {/* Add New Account */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Add Instagram Account</h2>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Enter Instagram username (e.g., @username)"
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && addAccount()}
-            />
-            <Button onClick={addAccount} disabled={isLoading || !newUsername.trim()}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add
-            </Button>
-          </div>
+        <Card>
+          <CardHeader className="p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold">Add Instagram Account</h2>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6 pt-0">
+            <div className="flex flex-col md:flex-row gap-2">
+              <Input
+                placeholder="Enter Instagram username (e.g., @username)"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && addAccount()}
+                className="flex-1"
+              />
+              <Button onClick={addAccount} disabled={isLoading || !newUsername.trim()} className="w-full md:w-auto">
+                <Plus className="h-4 w-4 mr-2" />
+                Add
+              </Button>
+            </div>
+          </CardContent>
         </Card>
 
         {/* Accounts List */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">
-            Tracked Accounts ({accounts.length})
-          </h2>
+        <Card>
+          <CardHeader className="p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold">
+              Tracked Accounts ({accounts.length})
+            </h2>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6 pt-0">
           <div className="space-y-3">
             {accounts.map((account) => (
               <div
@@ -523,6 +563,7 @@ const Admin = () => {
               </p>
             )}
           </div>
+          </CardContent>
         </Card>
           </TabsContent>
           

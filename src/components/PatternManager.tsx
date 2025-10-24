@@ -93,16 +93,16 @@ export const PatternManager = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <Tabs defaultValue="patterns" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="patterns">Patterns</TabsTrigger>
-          <TabsTrigger value="learning">Learning</TabsTrigger>
-          <TabsTrigger value="testing">Testing</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 gap-1">
+          <TabsTrigger value="patterns" className="text-xs md:text-sm">Patterns</TabsTrigger>
+          <TabsTrigger value="learning" className="text-xs md:text-sm">Learning</TabsTrigger>
+          <TabsTrigger value="testing" className="text-xs md:text-sm">Testing</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="patterns" className="space-y-4">
-          <div className="flex gap-2">
+        <TabsContent value="patterns" className="space-y-3 md:space-y-4 mt-4 md:mt-6">
+          <div className="flex flex-col md:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -115,7 +115,7 @@ export const PatternManager = () => {
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="px-3 py-2 border rounded-md"
+              className="px-3 py-2 border rounded-md text-sm w-full md:w-auto"
             >
               {patternTypes.map(type => (
                 <option key={type} value={type}>
@@ -128,32 +128,33 @@ export const PatternManager = () => {
           <div className="grid gap-3">
             {filteredPatterns?.map((pattern) => (
               <Card key={pattern.id}>
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between gap-4">
+                <CardContent className="p-4 md:p-6">
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
                     <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{pattern.pattern_type}</Badge>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className="text-xs">{pattern.pattern_type}</Badge>
                         <Badge
                           variant={pattern.source === "default" ? "secondary" : "default"}
+                          className="text-xs"
                         >
                           {pattern.source}
                         </Badge>
-                        <span className={`text-sm font-semibold ${getConfidenceColor(Number(pattern.confidence_score))}`}>
+                        <span className={`text-xs md:text-sm font-semibold ${getConfidenceColor(Number(pattern.confidence_score))}`}>
                           {(Number(pattern.confidence_score) * 100).toFixed(0)}% confidence
                         </span>
                       </div>
                       
-                      <code className="block p-2 bg-muted rounded text-sm break-all">
+                      <code className="block p-2 bg-muted rounded text-xs md:text-sm break-all">
                         {pattern.pattern_regex}
                       </code>
                       
                       {pattern.pattern_description && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs md:text-sm text-muted-foreground">
                           {pattern.pattern_description}
                         </p>
                       )}
                       
-                      <div className="flex gap-4 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap gap-2 md:gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <CheckCircle2 className="h-3 w-3 text-green-600" />
                           {pattern.success_count} successes
@@ -170,7 +171,7 @@ export const PatternManager = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 md:flex-col md:items-end">
                       <Switch
                         checked={pattern.is_active}
                         onCheckedChange={() =>
@@ -185,6 +186,7 @@ export const PatternManager = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => deletePatternMutation.mutate(pattern.id)}
+                          className="text-xs"
                         >
                           Delete
                         </Button>
@@ -207,15 +209,15 @@ export const PatternManager = () => {
           <PatternLearner />
         </TabsContent>
 
-        <TabsContent value="testing" className="space-y-4">
+        <TabsContent value="testing" className="space-y-4 mt-4 md:mt-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Pattern Testing</CardTitle>
-              <CardDescription>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-base md:text-lg">Pattern Testing</CardTitle>
+              <CardDescription className="text-xs md:text-sm">
                 Test your extraction patterns against sample text
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-4 md:p-6 pt-0 space-y-4">
               <div>
                 <label className="text-sm font-medium">Test Text</label>
                 <Input
