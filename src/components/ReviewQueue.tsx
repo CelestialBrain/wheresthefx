@@ -38,6 +38,8 @@ interface ReviewItem {
   instagram_post?: {
     post_url: string;
     posted_at: string;
+    image_url: string | null;
+    ocr_confidence: number | null;
     instagram_account: {
       username: string;
       display_name: string | null;
@@ -62,6 +64,8 @@ export function ReviewQueue() {
           instagram_post:instagram_posts(
             post_url,
             posted_at,
+            image_url,
+            ocr_confidence,
             instagram_account:instagram_accounts(username, display_name)
           )
         `)
@@ -159,19 +163,22 @@ export function ReviewQueue() {
 
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("events_enriched")
-        .update({
-          needs_review: false,
-          verified: true,
-          status: "published",
-        })
-        .eq("id", id);
+      // Call publish-event function to move to published_events
+      const { data, error } = await supabase.functions.invoke("publish-event", {
+        body: { enrichedEventId: id },
+      });
+      
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      toast.success("Event approved and published");
+      toast.success("Event published successfully!");
       queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["event-markers"] });
+      queryClient.invalidateQueries({ queryKey: ["published-events"] });
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to publish: ${error.message}`);
     },
   });
 
@@ -220,79 +227,26 @@ export function ReviewQueue() {
       correction: { venueName: string; streetAddress: string; lat: number | null; lng: number | null };
       originalOCR: { venue: string; address: string };
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      // Use edge function with service role to bypass RLS
+      const { data, error } = await supabase.functions.invoke("save-location-correction", {
+        body: { 
+          eventId,
+          locationId,
+          correction,
+          originalOCR 
+        },
+      });
       
-      // Create or update location
-      let finalLocationId = locationId;
-      
-      if (locationId) {
-        // Update existing location
-        const { error } = await supabase
-          .from("locations")
-          .update({
-            location_name: correction.venueName,
-            formatted_address: correction.streetAddress,
-            location_lat: correction.lat,
-            location_lng: correction.lng,
-            manual_override: true,
-            needs_review: false,
-          })
-          .eq("id", locationId);
-        
-        if (error) throw error;
-      } else {
-        // Create new location
-        const { data: newLocation, error } = await supabase
-          .from("locations")
-          .insert({
-            location_name: correction.venueName,
-            formatted_address: correction.streetAddress,
-            location_lat: correction.lat,
-            location_lng: correction.lng,
-            manual_override: true,
-            needs_review: false,
-          })
-          .select()
-          .single();
-        
-        if (error) throw error;
-        finalLocationId = newLocation.id;
-        
-        // Update event with new location
-        const { error: updateError } = await supabase
-          .from("events_enriched")
-          .update({ location_id: finalLocationId })
-          .eq("id", eventId);
-        
-        if (updateError) throw updateError;
-      }
-      
-      // Save to location_corrections table for learning
-      const { error: correctionError } = await supabase
-        .from("location_corrections")
-        .insert({
-          original_location_name: originalOCR.venue,
-          original_location_address: originalOCR.address,
-          corrected_venue_name: correction.venueName,
-          corrected_street_address: correction.streetAddress,
-          manual_lat: correction.lat,
-          manual_lng: correction.lng,
-          corrected_by: user?.id,
-          applied_to_event_id: eventId,
-          match_pattern: correction.streetAddress?.toLowerCase().replace(/[^a-z0-9\s]/g, ''),
-        });
-      
-      if (correctionError) throw correctionError;
-      
-      return finalLocationId;
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      toast.success("Location corrected and saved for future learning");
+      toast.success("Location saved successfully!");
       queryClient.invalidateQueries({ queryKey: ["review-queue"] });
       setEditingLocationId(null);
     },
     onError: (error: any) => {
-      toast.error(`Failed to save correction: ${error.message}`);
+      toast.error(`Failed to save location: ${error.message}`);
     },
   });
 
@@ -350,8 +304,15 @@ export function ReviewQueue() {
             reviewItems?.map((item) => (
               <Card key={item.id}>
                 <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 flex-1">
+                  <div className="flex items-start justify-between gap-4">
+                    {item.instagram_post?.image_url && (
+                      <img
+                        src={item.instagram_post.image_url}
+                        alt="Event"
+                        className="w-20 h-20 object-cover rounded"
+                      />
+                    )}
+                    <div className="space-y-1 flex-1 min-w-0">
                       {editingId === item.id ? (
                         <Input
                           value={editData.event_title || ""}
@@ -361,9 +322,9 @@ export function ReviewQueue() {
                           className="text-xl font-bold"
                         />
                       ) : (
-                        <CardTitle>{item.event_title}</CardTitle>
+                        <CardTitle className="truncate">{item.event_title}</CardTitle>
                       )}
-                      <CardDescription className="flex items-center gap-2">
+                      <CardDescription className="flex items-center gap-2 text-xs flex-wrap">
                         <span>
                           @{item.instagram_post?.instagram_account?.username || "unknown"}
                         </span>
@@ -373,6 +334,14 @@ export function ReviewQueue() {
                             item.instagram_post?.posted_at || ""
                           ).toLocaleDateString()}
                         </span>
+                        {item.instagram_post?.ocr_confidence && (
+                          <>
+                            <span>·</span>
+                            <Badge variant="outline" className="text-xs">
+                              OCR: {Math.min(item.instagram_post.ocr_confidence * 100, 100).toFixed(0)}%
+                            </Badge>
+                          </>
+                        )}
                       </CardDescription>
                     </div>
                     <div className="flex gap-2">

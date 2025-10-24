@@ -726,6 +726,99 @@ export type Database = {
         }
         Relationships: []
       }
+      published_events: {
+        Row: {
+          comments_count: number | null
+          created_at: string
+          description: string | null
+          end_time: string | null
+          event_date: string
+          event_time: string | null
+          event_title: string
+          id: string
+          image_url: string | null
+          instagram_account_username: string | null
+          is_featured: boolean | null
+          is_free: boolean
+          likes_count: number | null
+          location_address: string | null
+          location_lat: number
+          location_lng: number
+          location_name: string
+          price: number | null
+          signup_url: string | null
+          source_event_id: string | null
+          source_post_id: string | null
+          updated_at: string
+          verified: boolean | null
+        }
+        Insert: {
+          comments_count?: number | null
+          created_at?: string
+          description?: string | null
+          end_time?: string | null
+          event_date: string
+          event_time?: string | null
+          event_title: string
+          id?: string
+          image_url?: string | null
+          instagram_account_username?: string | null
+          is_featured?: boolean | null
+          is_free?: boolean
+          likes_count?: number | null
+          location_address?: string | null
+          location_lat: number
+          location_lng: number
+          location_name: string
+          price?: number | null
+          signup_url?: string | null
+          source_event_id?: string | null
+          source_post_id?: string | null
+          updated_at?: string
+          verified?: boolean | null
+        }
+        Update: {
+          comments_count?: number | null
+          created_at?: string
+          description?: string | null
+          end_time?: string | null
+          event_date?: string
+          event_time?: string | null
+          event_title?: string
+          id?: string
+          image_url?: string | null
+          instagram_account_username?: string | null
+          is_featured?: boolean | null
+          is_free?: boolean
+          likes_count?: number | null
+          location_address?: string | null
+          location_lat?: number
+          location_lng?: number
+          location_name?: string
+          price?: number | null
+          signup_url?: string | null
+          source_event_id?: string | null
+          source_post_id?: string | null
+          updated_at?: string
+          verified?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "published_events_source_event_id_fkey"
+            columns: ["source_event_id"]
+            isOneToOne: false
+            referencedRelation: "events_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "published_events_source_post_id_fkey"
+            columns: ["source_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           created_at: string

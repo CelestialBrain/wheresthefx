@@ -240,31 +240,40 @@ const Admin = () => {
   };
 
   const purgeAllPosts = async () => {
-    if (!confirm("Are you sure you want to delete ALL posts? This cannot be undone!")) {
+    if (!confirm("⚠️ DANGER: This will delete ALL events, posts, locations, and published data. This cannot be undone!\n\nType 'DELETE' to confirm.")) {
+      return;
+    }
+
+    const confirmation = prompt("Type DELETE in all caps to confirm:");
+    if (confirmation !== "DELETE") {
+      toast({
+        title: "Cancelled",
+        description: "Purge cancelled",
+      });
       return;
     }
 
     try {
       setIsPurging(true);
 
-      // Delete all instagram_posts (cascade will handle events_enriched)
-      const { error } = await supabase
-        .from("instagram_posts")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000"); // Delete all
-
-      if (error) throw error;
+      // Delete in order: published_events, events_enriched, locations, instagram_posts, location_corrections
+      await supabase.from("published_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("events_enriched").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("saved_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("location_corrections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("locations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("instagram_posts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
       toast({
         title: "Success",
-        description: "All posts have been deleted",
+        description: "All event data has been purged",
       });
 
       fetchScrapeRuns();
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to purge posts",
+        description: error.message || "Failed to purge data",
         variant: "destructive",
       });
     } finally {

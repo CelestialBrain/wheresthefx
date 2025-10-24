@@ -62,33 +62,54 @@ export const PublishedEventsManager = () => {
     return `${String(displayHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
   };
 
-  // Fetch published events
+  // Fetch published events from canonical feed
   const { data: events, isLoading } = useQuery({
     queryKey: ["published-events", searchQuery],
     queryFn: async () => {
       let query = supabase
-        .from("events_enriched")
-        .select(`
-          *,
-          location:locations(*),
-          instagram_post:instagram_posts(
-            post_id,
-            image_url,
-            caption,
-            ocr_confidence,
-            instagram_account:instagram_accounts(username)
-          )
-        `)
-        .eq("status", "published")
+        .from("published_events")
+        .select("*")
         .order("event_date", { ascending: false });
 
       if (searchQuery.trim()) {
-        query = query.or(`event_title.ilike.%${searchQuery}%,location.location_name.ilike.%${searchQuery}%`);
+        query = query.or(`event_title.ilike.%${searchQuery}%,location_name.ilike.%${searchQuery}%`);
       }
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as PublishedEvent[];
+      
+      // Transform to match expected interface
+      return (data || []).map((event: any) => ({
+        id: event.id,
+        event_title: event.event_title,
+        event_date: event.event_date,
+        event_time: event.event_time,
+        description: event.description,
+        signup_url: event.signup_url,
+        is_free: event.is_free,
+        price: event.price,
+        location_id: null,
+        instagram_post_id: event.source_post_id,
+        created_at: event.created_at,
+        updated_at: event.updated_at,
+        location: {
+          id: event.id,
+          location_name: event.location_name,
+          formatted_address: event.location_address,
+          location_lat: event.location_lat,
+          location_lng: event.location_lng,
+          manual_override: true,
+        },
+        instagram_post: {
+          post_id: event.source_post_id || "",
+          image_url: event.image_url,
+          caption: null,
+          ocr_confidence: null,
+          instagram_account: event.instagram_account_username ? {
+            username: event.instagram_account_username
+          } : null,
+        },
+      })) as PublishedEvent[];
     },
   });
 

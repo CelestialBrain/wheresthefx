@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.suggest-location-corrections]
 verify_jwt = true
+
+[functions.publish-event]
+verify_jwt = true
+
+[functions.save-location-correction]
+verify_jwt = true
