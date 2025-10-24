@@ -92,7 +92,7 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
     const period = hours >= 12 ? 'PM' : 'AM';
     const displayHours = hours % 12 || 12; // Convert 0 to 12 for midnight
     
-    return `${String(displayHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+    return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
   };
 
   const formatEngagement = (count: number) => {
