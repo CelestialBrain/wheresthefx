@@ -42,6 +42,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     price: null as number | null,
   });
 
+  const [isPublishing, setIsPublishing] = useState(false);
   const [showLocationEditor, setShowLocationEditor] = useState(false);
   const [locationCorrection, setLocationCorrection] = useState<{
     venueName: string;
@@ -56,6 +57,9 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
   };
 
   const handleCreateEvent = async () => {
+    if (isPublishing) return;
+    
+    setIsPublishing(true);
     const location = locationCorrection || {
       venueName: post.location_name || "",
       streetAddress: post.location_address || "",
@@ -83,9 +87,10 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       if (error) throw error;
 
       toast.success("Event published to map and sidebar!");
-      onCreateEvent(null); // Signal success
+      onCreateEvent(post.id); // Pass post ID for successful creation
     } catch (error: any) {
       toast.error(`Failed to publish: ${error.message}`);
+      setIsPublishing(false);
     }
   };
 
@@ -274,12 +279,12 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         <div className="flex gap-2 pt-4 border-t">
           <Button
             onClick={handleCreateEvent}
-            disabled={!isValid}
+            disabled={!isValid || isPublishing}
             className="flex-1"
           >
-            Publish Event
+            {isPublishing ? "Publishing..." : "Publish Event"}
           </Button>
-          <Button onClick={onCancel} variant="outline">
+          <Button onClick={onCancel} variant="outline" disabled={isPublishing}>
             Cancel
           </Button>
         </div>

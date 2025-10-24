@@ -203,8 +203,13 @@ export function ReviewQueue() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Post deleted");
+      toast.success("Post deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
+      queryClient.invalidateQueries({ queryKey: ["event-markers"] });
+      queryClient.invalidateQueries({ queryKey: ["instagram-posts"] });
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to delete post: ${error.message}`);
     },
   });
 
@@ -558,10 +563,12 @@ export function ReviewQueue() {
             <PostWithEventEditor
               key={post.id}
               post={post}
-              onCreateEvent={() => {
-                queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
-                queryClient.invalidateQueries({ queryKey: ["event-markers"] });
-                queryClient.invalidateQueries({ queryKey: ["instagram-posts"] });
+              onCreateEvent={(postId) => {
+                if (postId) {
+                  queryClient.invalidateQueries({ queryKey: ["posts-without-events"] });
+                  queryClient.invalidateQueries({ queryKey: ["event-markers"] });
+                  queryClient.invalidateQueries({ queryKey: ["instagram-posts"] });
+                }
               }}
               onCancel={() => deletePostMutation.mutate(post.id)}
             />
