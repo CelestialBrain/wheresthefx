@@ -80,7 +80,8 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       if (post.event_time !== eventData.event_time) corrections.push({ post_id: post.id, field_name: "event_time", original_extracted_value: String(post.event_time || ""), corrected_value: eventData.event_time, extraction_method: "manual", original_ocr_text: post.caption });
       if (corrections.length > 0) await supabase.from("extraction_corrections").insert(corrections);
 
-      const { error } = await supabase
+      // Update post with all event data
+      const { error: updateError } = await supabase
         .from("instagram_posts")
         .update({
           event_title: eventData.event_title,
@@ -101,9 +102,16 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         })
         .eq("id", post.id);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
-      toast.success("Event saved! Use Review Queue to publish it.");
+      // Now publish to published_events table
+      const { error: publishError } = await supabase.functions.invoke("publish-event", {
+        body: { postId: post.id }
+      });
+
+      if (publishError) throw publishError;
+
+      toast.success("Event published successfully!");
       onCreateEvent(post.id);
     } catch (error: any) {
       toast.error(`Failed to publish: ${error.message}`);
