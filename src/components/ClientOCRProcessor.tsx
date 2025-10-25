@@ -64,7 +64,7 @@ export function ClientOCRProcessor() {
         is_free: entities.isFree,
         is_event: entities.isEvent,
         ocr_processed: true,
-        needs_review: entities.isEvent && entities.date ? true : false,
+        needs_review: true, // Always review OCR results - admin can reject if not event
       };
 
       const { error } = await supabase
