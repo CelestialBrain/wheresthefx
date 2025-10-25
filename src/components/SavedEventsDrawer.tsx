@@ -65,10 +65,10 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
                 return (
                   <Card key={saved.id} className="p-4">
                     <div className="space-y-3">
-                      {post.post_url && (
+                      {(post.stored_image_url || post.image_url) && (
                         <div className="aspect-video rounded-lg overflow-hidden bg-muted">
                           <img
-                            src={post.post_url}
+                            src={post.stored_image_url || post.image_url}
                             alt={post.event_title || "Event"}
                             className="w-full h-full object-cover"
                           />

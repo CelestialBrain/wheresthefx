@@ -26,6 +26,8 @@ export function useSavedEvents() {
             caption,
             is_free,
             price,
+            image_url,
+            stored_image_url,
             instagram_accounts (
               username,
               display_name,

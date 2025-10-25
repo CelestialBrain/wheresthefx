@@ -40,6 +40,7 @@ interface PublishedEvent {
   instagram_post: {
     post_id: string;
     image_url: string | null;
+    stored_image_url?: string | null;
     caption: string | null;
     ocr_confidence: number | null;
     instagram_account: { username: string } | null;
@@ -108,6 +109,7 @@ export const PublishedEventsManager = () => {
         instagram_post: {
           post_id: event.source_post_id || "",
           image_url: event.image_url,
+          stored_image_url: event.stored_image_url,
           caption: null,
           ocr_confidence: null,
           instagram_account: event.instagram_account_username ? {
@@ -388,9 +390,9 @@ export const PublishedEventsManager = () => {
           >
             <CardHeader className="p-4 md:p-6 pb-3">
               <div className="flex items-start gap-3">
-                {event.instagram_post?.image_url && (
+                {(event.instagram_post?.stored_image_url || event.instagram_post?.image_url) && (
                   <img
-                    src={event.instagram_post.image_url}
+                    src={event.instagram_post?.stored_image_url || event.instagram_post?.image_url}
                     alt=""
                     className="w-12 h-12 md:w-16 md:h-16 object-cover rounded flex-shrink-0"
                   />
@@ -435,9 +437,9 @@ export const PublishedEventsManager = () => {
                       Original Instagram Post
                     </h3>
                     <div className="flex gap-4">
-                      {selectedEvent.instagram_post.image_url && (
+                      {(selectedEvent.instagram_post.stored_image_url || selectedEvent.instagram_post.image_url) && (
                         <img
-                          src={selectedEvent.instagram_post.image_url}
+                          src={selectedEvent.instagram_post.stored_image_url || selectedEvent.instagram_post.image_url}
                           alt="Post"
                           className="w-40 h-40 object-cover rounded"
                         />

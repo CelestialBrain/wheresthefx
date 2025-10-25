@@ -16,6 +16,7 @@ interface PostWithEventEditorProps {
     id: string;
     post_id: string;
     image_url: string | null;
+    stored_image_url?: string | null;
     caption: string | null;
     event_title: string | null;
     event_date: string | null;
@@ -170,9 +171,9 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     <Card className="border-accent/20">
       <CardHeader>
         <div className="flex gap-4">
-          {post.image_url && (
+          {(post.stored_image_url || post.image_url) && (
             <ImageWithSkeleton
-              src={post.image_url}
+              src={post.stored_image_url || post.image_url}
               alt="Post"
               className="w-32 h-32 rounded-md"
             />

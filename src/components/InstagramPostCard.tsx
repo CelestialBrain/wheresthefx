@@ -14,6 +14,7 @@ export interface InstagramPost {
   caption: string | null;
   post_url: string;
   image_url: string | null;
+  stored_image_url?: string | null;
   posted_at: string;
   likes_count: number;
   comments_count: number;
@@ -119,9 +120,9 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
       {/* Top Row: Image + Username/Title */}
       <div className="flex gap-3 mb-2">
         {/* Image */}
-        {post.image_url && (
+        {(post.stored_image_url || post.image_url) && (
           <ImageWithSkeleton
-            src={post.image_url}
+            src={post.stored_image_url || post.image_url}
             alt={post.event_title || "Event"}
             className="w-20 h-20 rounded-md flex-shrink-0 bg-muted"
           />
