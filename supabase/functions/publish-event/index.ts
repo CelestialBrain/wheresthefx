@@ -54,9 +54,20 @@ serve(async (req) => {
       throw new Error('Event must have a title before publishing');
     }
 
-    console.log('Post validation passed, checking for existing published event');
+    console.log('Post validation passed, fetching Instagram account details');
 
-    // Check if this post has already been published
+    // Fetch the actual username from instagram_accounts
+    const { data: accountData } = await supabase
+      .from('instagram_accounts')
+      .select('username')
+      .eq('id', post.instagram_account_id)
+      .single();
+
+    if (!accountData) {
+      console.error('Instagram account not found for id:', post.instagram_account_id);
+    }
+
+    console.log('Checking for existing published event');
     const { data: existingEvent } = await supabase
       .from('published_events')
       .select('id')
@@ -80,8 +91,9 @@ serve(async (req) => {
       is_free: post.is_free,
       price: post.price,
       image_url: post.image_url,
+      stored_image_url: post.stored_image_url,
       instagram_post_url: post.post_url,
-      instagram_account_username: post.instagram_account_id,
+      instagram_account_username: accountData?.username || null,
       topic_label: post.topic_label,
       likes_count: post.likes_count || 0,
       comments_count: post.comments_count || 0,

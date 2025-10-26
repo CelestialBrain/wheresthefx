@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Badge as UIBadge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,6 +64,11 @@ export const PublishedEventsManager = () => {
     const displayHours = hours % 12 || 12; // Convert 0 to 12 for midnight
     
     return `${String(displayHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+  };
+
+  // Helper function to check if event is in the past
+  const isPastEvent = (eventDate: string) => {
+    return new Date(eventDate) < new Date(new Date().setHours(0, 0, 0, 0));
   };
 
   // Fetch published events from canonical feed
@@ -398,7 +403,12 @@ export const PublishedEventsManager = () => {
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-sm md:text-base truncate">{event.event_title}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-sm md:text-base truncate">{event.event_title}</CardTitle>
+                    {isPastEvent(event.event_date) && (
+                      <UIBadge variant="secondary" className="text-xs shrink-0">Done</UIBadge>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                     <Calendar className="w-3 h-3" />
                     <span>{format(new Date(event.event_date), "MMM d, yyyy")}</span>
@@ -412,7 +422,7 @@ export const PublishedEventsManager = () => {
                 <span className="line-clamp-1">{event.location?.location_name || "No location"}</span>
               </div>
               {event.location?.manual_override && (
-                <Badge variant="secondary" className="text-xs">Manually Corrected</Badge>
+                <UIBadge variant="secondary" className="text-xs">Manually Corrected</UIBadge>
               )}
             </CardContent>
           </Card>
@@ -448,9 +458,9 @@ export const PublishedEventsManager = () => {
                         <p><strong>Account:</strong> @{selectedEvent.instagram_post.instagram_account?.username}</p>
                         <p><strong>Post ID:</strong> {selectedEvent.instagram_post.post_id}</p>
                         {selectedEvent.instagram_post.ocr_confidence && (
-                          <Badge variant="outline">
+                          <UIBadge variant="outline">
                             OCR: {(selectedEvent.instagram_post.ocr_confidence * 100).toFixed(0)}%
-                          </Badge>
+                          </UIBadge>
                         )}
                         {selectedEvent.instagram_post.caption && (
                           <p className="text-muted-foreground line-clamp-3">{selectedEvent.instagram_post.caption}</p>
@@ -507,7 +517,7 @@ export const PublishedEventsManager = () => {
                       <div><strong>Address:</strong> {selectedEvent.location.formatted_address || "N/A"}</div>
                       <div><strong>Coordinates:</strong> {selectedEvent.location.location_lat}, {selectedEvent.location.location_lng}</div>
                       {selectedEvent.location.manual_override && (
-                        <Badge variant="secondary" className="mt-2">Manually Corrected</Badge>
+                        <UIBadge variant="secondary" className="mt-2">Manually Corrected</UIBadge>
                       )}
                     </div>
                   )}

@@ -864,6 +864,7 @@ export type Database = {
           signup_url: string | null
           source_event_id: string | null
           source_post_id: string | null
+          stored_image_url: string | null
           topic_label: string | null
           updated_at: string
           verified: boolean | null
@@ -894,6 +895,7 @@ export type Database = {
           signup_url?: string | null
           source_event_id?: string | null
           source_post_id?: string | null
+          stored_image_url?: string | null
           topic_label?: string | null
           updated_at?: string
           verified?: boolean | null
@@ -924,6 +926,7 @@ export type Database = {
           signup_url?: string | null
           source_event_id?: string | null
           source_post_id?: string | null
+          stored_image_url?: string | null
           topic_label?: string | null
           updated_at?: string
           verified?: boolean | null

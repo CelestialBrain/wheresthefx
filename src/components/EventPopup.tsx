@@ -127,9 +127,9 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
             <div className="space-y-4">
               {events.map((event) => (
                 <Card key={event.id} className="p-4 space-y-3">
-                  {event.image_url && (
+                  {(event.stored_image_url || event.image_url) && (
                     <ImageWithSkeleton
-                      src={event.image_url}
+                      src={event.stored_image_url || event.image_url}
                       alt={event.event_title || "Event"}
                       className="aspect-video rounded-lg bg-muted"
                     />

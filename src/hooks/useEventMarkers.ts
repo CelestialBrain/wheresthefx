@@ -18,7 +18,7 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
       // Read from published_events (canonical feed)
       let query = supabase
         .from('published_events')
-        .select('*') as any;
+        .select('*, stored_image_url') as any;
 
       // Filter by date range or default to future events
       if (options.dateRange) {
@@ -72,6 +72,7 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
         location_lat: event.location_lat,
         location_lng: event.location_lng,
         image_url: event.image_url,
+        stored_image_url: event.stored_image_url,
         is_free: event.is_free,
         price: event.price,
         signup_url: event.signup_url,
