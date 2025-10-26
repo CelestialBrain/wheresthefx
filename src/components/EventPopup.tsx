@@ -164,7 +164,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                           <Calendar className="h-3 w-3" />
                           <span>
                             {formatDateRange(event.event_date, event.event_end_date)}
-                            {(event.event_time || event.end_time) && ` at ${formatTimeRange(event.event_time, event.end_time)}`}
+                            {(event.event_time || event.end_time) && ` • ${formatTimeRange(event.event_time, event.end_time)}`}
                           </span>
                         </div>
                       )}
