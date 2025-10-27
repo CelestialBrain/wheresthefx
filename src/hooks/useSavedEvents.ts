@@ -17,21 +17,32 @@ export function useSavedEvents() {
           instagram_post_id,
           instagram_posts (
             id,
+            post_id,
             event_title,
             event_date,
             event_time,
+            event_end_date,
+            end_time,
             location_name,
             location_address,
+            location_lat,
+            location_lng,
             post_url,
             caption,
             is_free,
             price,
+            signup_url,
             image_url,
             stored_image_url,
+            likes_count,
+            comments_count,
+            posted_at,
             instagram_accounts (
               username,
               display_name,
-              profile_pic_url
+              profile_pic_url,
+              follower_count,
+              is_verified
             )
           )
         `)

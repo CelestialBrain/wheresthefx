@@ -1,6 +1,4 @@
-import { Heart, ExternalLink, Calendar, MapPin, DollarSign, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Heart } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -9,9 +7,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
 
 interface SavedEventsDrawerProps {
   open: boolean;
@@ -20,22 +16,6 @@ interface SavedEventsDrawerProps {
 
 export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
   const { data: savedEvents = [] } = useSavedEvents();
-  const queryClient = useQueryClient();
-
-  const handleUnsave = async (savedEventId: string, postId: string) => {
-    const { error } = await supabase
-      .from('saved_events')
-      .delete()
-      .eq('id', savedEventId);
-
-    if (error) {
-      toast.error("Failed to remove event");
-    } else {
-      toast.success("Event removed");
-      queryClient.invalidateQueries({ queryKey: ['saved-events'] });
-      queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
-    }
-  };
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -62,71 +42,37 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
                 const post = saved.instagram_posts;
                 if (!post) return null;
 
-                return (
-                  <Card key={saved.id} className="p-4">
-                    <div className="space-y-3">
-                      {(post.stored_image_url || post.image_url) && (
-                        <div className="aspect-video rounded-lg overflow-hidden bg-muted">
-                          <img
-                            src={post.stored_image_url || post.image_url}
-                            alt={post.event_title || "Event"}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
+                // Transform to InstagramPost interface
+                const postData: InstagramPost = {
+                  id: post.id,
+                  post_id: post.post_id || post.id,
+                  caption: post.caption,
+                  post_url: post.post_url,
+                  image_url: post.image_url,
+                  stored_image_url: post.stored_image_url,
+                  posted_at: post.posted_at || saved.created_at,
+                  likes_count: post.likes_count || 0,
+                  comments_count: post.comments_count || 0,
+                  event_title: post.event_title,
+                  event_date: post.event_date,
+                  event_time: post.event_time,
+                  event_end_date: post.event_end_date,
+                  end_time: post.end_time,
+                  location_name: post.location_name,
+                  location_address: post.location_address,
+                  location_lat: post.location_lat,
+                  location_lng: post.location_lng,
+                  signup_url: post.signup_url,
+                  is_event: true,
+                  instagram_accounts: {
+                    username: post.instagram_accounts?.username || 'unknown',
+                    display_name: post.instagram_accounts?.display_name || null,
+                    follower_count: post.instagram_accounts?.follower_count || null,
+                    is_verified: post.instagram_accounts?.is_verified || false,
+                  },
+                };
 
-                      <div className="space-y-2">
-                        <h3 className="font-semibold line-clamp-2">
-                          {post.event_title || "Untitled Event"}
-                        </h3>
-
-                        <div className="space-y-1 text-sm text-muted-foreground">
-                          {post.event_date && (
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-3 w-3" />
-                              <span className="text-xs">
-                                {new Date(post.event_date).toLocaleDateString()}
-                                {post.event_time && ` at ${post.event_time}`}
-                              </span>
-                            </div>
-                          )}
-
-                          {post.location_name && (
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-3 w-3" />
-                              <span className="text-xs line-clamp-1">
-                                {post.location_name}
-                              </span>
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="h-3 w-3" />
-                            <span className="text-xs">
-                              {post.is_free ? "Free" : post.price ? `₱${post.price}` : "TBA"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 pt-2">
-                          <Button asChild size="sm" className="flex-1">
-                            <a href={post.post_url} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                              View
-                            </a>
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleUnsave(saved.id, post.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
+                return <InstagramPostCard key={saved.id} post={postData} />;
               })}
             </div>
           )}
