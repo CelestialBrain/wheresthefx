@@ -64,7 +64,13 @@ export const MathVerification = ({ onVerified }: MathVerificationProps) => {
     <div className="space-y-4 max-w-md">
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">Age verification (solve to enter):</p>
-        <p className="text-lg font-medium math-function">{mathQuestion.question}</p>
+        <p className="text-lg font-medium">
+          <span className="text-muted-foreground">If </span>
+          <span className="math-function text-accent">{mathQuestion.question.split('If ')[1].split(', what')[0]}</span>
+          <span className="text-muted-foreground">, what is </span>
+          <span className="math-function text-accent">{mathQuestion.question.split('what is ')[1].split('?')[0]}</span>
+          <span className="text-muted-foreground">?</span>
+        </p>
       </div>
       <form onSubmit={handleSubmit} className="flex gap-2">
         <Input

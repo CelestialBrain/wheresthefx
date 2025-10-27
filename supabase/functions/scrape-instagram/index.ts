@@ -576,9 +576,14 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Note: We don't filter by past event dates during import
-        // The OCR will extract the actual event date from the image
-        // Past posts may still have future events advertised in them
+        // Skip events with past dates (unless force import)
+        if (eventInfo.eventDate && !forceImport) {
+          if (isEventInPast(eventInfo.eventDate)) {
+            totalSkipped++;
+            console.log(`Skipping post ${postId} - event date is in the past: ${eventInfo.eventDate}`);
+            continue;
+          }
+        }
 
         console.log(`Processing event: ${postId}, Date: ${eventInfo.eventDate || 'TBD'}, Time: ${eventInfo.eventTime || 'TBD'}, Location: ${eventInfo.locationName || 'TBD'}`);
 
@@ -892,6 +897,7 @@ Deno.serve(async (req) => {
       // Calculate 30 days ago for filtering
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoTimestamp = thirtyDaysAgo.toISOString();
 
       // Scrape each account
       for (const account of accounts) {
@@ -964,9 +970,12 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Note: We don't filter by past event dates during direct scraping
-            // The OCR will extract the actual event date from the image
-            // Past posts may still have future events advertised in them
+            // Skip events with past dates in direct scraping
+            if (eventInfo.eventDate && isEventInPast(eventInfo.eventDate)) {
+              totalSkipped++;
+              console.log(`Skipping post ${postId} - event date is in the past: ${eventInfo.eventDate}`);
+              continue;
+            }
 
             // Check if post exists
             const { data: existingPost } = await supabase

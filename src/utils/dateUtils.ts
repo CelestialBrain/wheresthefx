@@ -9,7 +9,7 @@ import { format, parse } from "date-fns";
  */
 export function formatDateRange(startDate: string | Date, endDate?: string | Date | null): string {
   if (!endDate) {
-    return format(new Date(startDate), "MMMM d");
+    return format(new Date(startDate), "MMM d");
   }
 
   const start = new Date(startDate);
@@ -17,17 +17,17 @@ export function formatDateRange(startDate: string | Date, endDate?: string | Dat
 
   // Check if same day
   if (format(start, "yyyy-MM-dd") === format(end, "yyyy-MM-dd")) {
-    return format(start, "MMMM d");
+    return format(start, "MMM d");
   }
 
   // Check if same month and year
   if (format(start, "yyyy-MM") === format(end, "yyyy-MM")) {
-    return `${format(start, "MMMM d")}-${format(end, "d")}`;
+    return `${format(start, "MMM d")}-${format(end, "d")}`;
   }
 
   // Check if same year but different month
   if (format(start, "yyyy") === format(end, "yyyy")) {
-    return `${format(start, "MMMM d")} - ${format(end, "MMMM d")}`;
+    return `${format(start, "MMM d")} - ${format(end, "MMM d")}`;
   }
 
   // Different years
@@ -88,7 +88,7 @@ export function isConsecutiveDates(dates: Date[]): boolean {
  */
 export function formatMultipleDates(dates: Date[]): string {
   if (dates.length === 0) return "";
-  if (dates.length === 1) return format(dates[0], "MMMM d");
+  if (dates.length === 1) return format(dates[0], "MMM d");
 
   const sortedDates = [...dates].sort((a, b) => a.getTime() - b.getTime());
 
@@ -98,7 +98,7 @@ export function formatMultipleDates(dates: Date[]): string {
 
   // Non-consecutive dates
   const firstDate = sortedDates[0];
-  const month = format(firstDate, "MMMM");
+  const month = format(firstDate, "MMM");
   const days = sortedDates.map(d => format(d, "d")).join(", ");
   
   return `${month} ${days}`;

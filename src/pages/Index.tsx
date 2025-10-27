@@ -21,6 +21,13 @@ const Index = () => {
   const { hasCompletedOnboarding } = useUserPreferences();
 
   useEffect(() => {
+    // Check if already verified in session
+    const hasVerified = sessionStorage.getItem('age_verified') === 'true';
+    if (hasVerified) {
+      setIsVerified(true);
+      setIsMapUnlocked(true);
+    }
+
     // Check authentication status and skip verification for authenticated users
     supabase.auth.getUser().then(({ data: { user } }) => {
       const authenticated = !!user;
@@ -28,6 +35,7 @@ const Index = () => {
       
       if (authenticated) {
         // Skip age verification for authenticated users
+        sessionStorage.setItem('age_verified', 'true');
         setIsVerified(true);
         setIsMapUnlocked(true);
       }
@@ -39,6 +47,7 @@ const Index = () => {
       setIsAuthenticated(authenticated);
       
       if (authenticated && !isMapUnlocked) {
+        sessionStorage.setItem('age_verified', 'true');
         setIsVerified(true);
         setIsMapUnlocked(true);
       }
@@ -55,6 +64,7 @@ const Index = () => {
   }, [isMapUnlocked, isAuthenticated, hasCompletedOnboarding]);
 
   const handleVerified = () => {
+    sessionStorage.setItem('age_verified', 'true');
     setIsVerified(true);
     // Start fade-out transition
     setTimeout(() => {

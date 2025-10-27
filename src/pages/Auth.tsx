@@ -125,8 +125,8 @@ const Auth = () => {
       <Button
         variant="ghost"
         size="sm"
-        className="absolute top-6 left-6"
-        onClick={() => navigate("/")}
+        className="absolute top-6 left-6 z-50"
+        onClick={() => navigate("/", { replace: true })}
       >
         <ArrowLeft className="h-4 w-4 mr-2" />
         Back
