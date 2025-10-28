@@ -55,16 +55,7 @@ export const PublishedEventsManager = () => {
   
   const queryClient = useQueryClient();
 
-  const formatTime = (timeStr: string | null): string => {
-    if (!timeStr) return "Not specified";
-    
-    // Handle HH:MM:SS format
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours % 12 || 12; // Convert 0 to 12 for midnight
-    
-    return `${String(displayHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
-  };
+  // Removed duplicate formatTime - now using formatTimeRange from dateUtils everywhere
 
   // Helper function to check if event is in the past
   const isPastEvent = (eventDate: string) => {
