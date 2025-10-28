@@ -40,6 +40,9 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       center: [14.651676537238625, 121.04921119789635],
       zoom: 13,
       zoomControl: false,
+      minZoom: 3,
+      maxBounds: [[-90, -180], [90, 180]],
+      maxBoundsViscosity: 1.0,
     });
 
     const tileLayer = L.tileLayer(

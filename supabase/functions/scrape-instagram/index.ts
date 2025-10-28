@@ -1,4 +1,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
+import {
+  preNormalizeText,
+  isVendorPost,
+  extractPrice,
+  extractTime,
+  extractDate,
+  extractVenue,
+  extractSignupUrl,
+} from './extractionUtils.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -171,24 +180,35 @@ function isValidTime(timeStr: string): boolean {
   return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
 }
 
-// Enhanced event parser with improved detection
+// Enhanced event parser with improved extraction utilities
 function parseEventFromCaption(caption: string, locationName?: string | null): {
   eventTitle?: string;
   eventDate?: string;
+  eventEndDate?: string;
   eventTime?: string;
+  endTime?: string;
   locationName?: string;
   locationAddress?: string;
   signupUrl?: string;
+  price?: number;
+  isFree?: boolean;
   isEvent: boolean;
   timeValidationFailed?: boolean;
 } {
   if (!caption) {
-    return { isEvent: false };
+    return { isEvent: false, isFree: true };
   }
 
-  const lowercaseCaption = caption.toLowerCase();
+  // Pre-normalize text to fix OCR issues
+  const normalized = preNormalizeText(caption);
+  const lowercaseCaption = normalized.toLowerCase();
   
-  // STEP 1: Check for exclusion patterns (skip generic celebrations)
+  // STEP 1: Check for vendor/merchant posts (not events)
+  if (isVendorPost(normalized)) {
+    return { isEvent: false, isFree: true };
+  }
+  
+  // STEP 2: Check for exclusion patterns (skip generic celebrations)
   const exclusionPatterns = [
     /happy\s+birthday(?!\s+(party|celebration|bash|event))/i,
     /#tbt\b/i,
@@ -199,31 +219,24 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
   ];
   
   for (const pattern of exclusionPatterns) {
-    if (pattern.test(caption)) {
+    if (pattern.test(normalized)) {
       // Unless it's an anniversary with a date and location
-      const hasAnniversary = /anniversary/i.test(caption);
+      const hasAnniversary = /anniversary/i.test(normalized);
       if (hasAnniversary) {
-        // Check if there's a date
-        const datePatterns = [
-          /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?/i,
-          /\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/,
-          /(?:january|february|march|april|may|june|july|august|september|october|november|december) \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?/i,
-          /\d{1,2}-\d{1,2}-\d{2,4}/,
-        ];
-        const hasDate = datePatterns.some(p => p.test(caption));
-        const hasLocation = locationName || /(?:at|@|location:|venue:|place:)\s*([^\n,]+)/i.test(caption);
+        const dateInfo = extractDate(normalized);
+        const hasDate = !!dateInfo.eventDate;
+        const hasLocation = locationName || extractVenue(normalized, locationName).venueName;
         
         if (!hasDate || !hasLocation) {
-          return { isEvent: false };
+          return { isEvent: false, isFree: true };
         }
-        // Continue to event parsing
       } else {
-        return { isEvent: false };
+        return { isEvent: false, isFree: true };
       }
     }
   }
   
-  // STEP 2: Check for event indicators (expanded and more permissive)
+  // STEP 3: Check for event indicators
   const eventKeywords = [
     'party', 'event', 'happening', 'tonight', 'tomorrow', 'this weekend',
     'join us', 'rsvp', 'free entry', 'entrance', 'tickets', 'doors open',
@@ -237,173 +250,57 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
   const hasEventKeyword = eventKeywords.some(keyword => lowercaseCaption.includes(keyword));
 
   if (!hasEventKeyword) {
-    return { isEvent: false };
+    return { isEvent: false, isFree: true };
   }
 
-  // STEP 3: Extract location with pin emoji priority and street detection
-  let extractedLocation: string | undefined;
-  let extractedAddress: string | undefined;
-  
-  // Priority 1: Pin emoji (📍) - most explicit indicator
-  const pinEmojiPattern = /📍\s*([^\n]+)/;
-  const pinMatch = caption.match(pinEmojiPattern);
-  if (pinMatch) {
-    const locationText = pinMatch[1].trim();
-    // Split by comma to separate venue from address
-    const parts = locationText.split(',').map(p => p.trim());
-    extractedLocation = parts[0];
-    if (parts.length > 1) {
-      extractedAddress = parts.slice(1).join(', ');
-    }
-  }
-  
-  // Priority 2: Traditional keywords (at/location:/venue:)
-  if (!extractedLocation) {
-    const locationPattern = /(?:at|@|location:|venue:|place:)\s*([^\n,]+)/i;
-    const locationMatch = caption.match(locationPattern);
-    extractedLocation = locationMatch?.[1]?.trim();
-  }
-  
-  // Priority 3: Street name detection (Filipino patterns)
-  if (!extractedAddress && !extractedLocation) {
-    // Common Filipino street patterns
-    const streetPatterns = [
-      /\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:Street|St\.|Avenue|Ave\.|Road|Rd\.|Boulevard|Blvd\.))?/,
-      /(?:Katipunan|Tomas Morato|Jupiter|Makati|Bonifacio|Quezon|Maginhawa|Morato|Timog|Ortigas|EDSA|Ayala|Roxas|Aguirre|Esteban|Loyola|Panay|Kalayaan)\s+(?:Avenue|Ave\.|Street|St\.|Road|Rd\.)?/i,
-      /\b\d+(?:F|\/F|nd Floor|rd Floor|th Floor)\s+[A-Z][a-z]+/,
-    ];
-    
-    for (const pattern of streetPatterns) {
-      const streetMatch = caption.match(pattern);
-      if (streetMatch) {
-        extractedAddress = streetMatch[0].trim();
-        // Try to find venue name before or after the address
-        const lines = caption.split('\n');
-        for (const line of lines) {
-          if (line.includes(extractedAddress)) {
-            const parts = line.split(',').map(p => p.trim());
-            if (parts.length > 1 && parts[0] !== extractedAddress) {
-              extractedLocation = parts[0];
-            }
-            break;
-          }
-        }
-        break;
-      }
-    }
-  }
-  
-  // Priority 4: Instagram locationName metadata
-  const finalLocation = extractedLocation || locationName;
-
-  // STEP 4: Extract event details
-  const lines = caption.split('\n').filter(line => line.trim());
+  // STEP 4: Extract event details using improved utilities
+  const lines = normalized.split('\n').filter(line => line.trim());
   const eventTitle = lines[0]?.substring(0, 100) || undefined;
 
-  // Extract URLs (signup links)
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const urls = caption.match(urlRegex);
-  const signupUrl = urls?.[0];
-
-  // Enhanced date patterns
-  const datePatterns = [
-    /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?/i,
-    /\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/,
-    /(?:january|february|march|april|may|june|july|august|september|october|november|december) \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?/i,
-    /\d{1,2}-\d{1,2}-\d{2,4}/,
-  ];
-  
-  let eventDate: string | undefined;
-  for (const pattern of datePatterns) {
-    const match = caption.match(pattern);
-    if (match) {
-      // Normalize the date to YYYY-MM-DD format
-      const normalizedDate = parseAndNormalizeDate(match[0]);
-      if (normalizedDate) {
-        eventDate = normalizedDate;
-        break;
-      }
-    }
-  }
-  
-  // Handle relative dates
-  if (!eventDate) {
-    const relativeDate = parseRelativeDate(caption);
-    if (relativeDate) {
-      eventDate = relativeDate;
-    }
-  }
-
-  // Enhanced time patterns and normalization with validation
-  const timePattern = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?\b/gi;
-  const timeMatches = caption.matchAll(timePattern);
-  let eventTime: string | undefined;
-  let timeValidationFailed = false;
-  
-  for (const match of timeMatches) {
-    const hour = parseInt(match[1]);
-    const minute = parseInt(match[2] || '00');
-    const period = match[3]?.toUpperCase();
-    
-    // Validate minute first
-    if (minute > 59) {
-      console.log(`Invalid minute detected: ${minute}`);
-      timeValidationFailed = true;
-      continue;
-    }
-    
-    // Normalize to HH:MM format
-    let normalizedHour = hour;
-    if (period === 'PM' && hour !== 12) {
-      normalizedHour = hour + 12;
-    } else if (period === 'AM' && hour === 12) {
-      normalizedHour = 0;
-    } else if (!period && hour > 12 && hour < 24) {
-      // Already 24-hour format
-      normalizedHour = hour;
-    } else if (!period && hour <= 12) {
-      // Assume PM for nightlife context (after 6PM is common)
-      normalizedHour = hour >= 6 ? hour : hour + 12;
-    } else if (hour >= 24) {
-      console.log(`Invalid hour detected: ${hour}`);
-      timeValidationFailed = true;
-      continue;
-    }
-    
-    const candidateTime = `${normalizedHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    
-    // Final validation check
-    if (isValidTime(candidateTime)) {
-      eventTime = candidateTime;
-      break; // Take first valid time
-    } else {
-      timeValidationFailed = true;
-    }
-  }
+  // Extract structured data
+  const priceInfo = extractPrice(normalized);
+  const timeInfo = extractTime(normalized);
+  const dateInfo = extractDate(normalized);
+  const venueInfo = extractVenue(normalized, locationName);
+  const signupUrl = extractSignupUrl(normalized);
 
   // Consider it an event if we have event keywords + (date OR location)
-  const hasMinimumInfo = !!(finalLocation || eventDate);
+  const hasMinimumInfo = !!(venueInfo.venueName || dateInfo.eventDate);
   
   return {
     eventTitle,
-    eventDate,
-    eventTime: timeValidationFailed ? undefined : eventTime, // Set to undefined if validation failed
-    locationName: finalLocation || undefined,
-    locationAddress: extractedAddress || undefined,
-    signupUrl,
+    eventDate: dateInfo.eventDate || undefined,
+    eventEndDate: dateInfo.eventEndDate || undefined,
+    eventTime: timeInfo.startTime || undefined,
+    endTime: timeInfo.endTime || undefined,
+    locationName: venueInfo.venueName || undefined,
+    locationAddress: venueInfo.address || undefined,
+    signupUrl: signupUrl || undefined,
+    price: priceInfo?.amount,
+    isFree: priceInfo?.isFree ?? true,
     isEvent: hasMinimumInfo,
-    timeValidationFailed, // Flag for needs_review
+    timeValidationFailed: false,
   };
 }
 
-// Check if event date is in the past
-function isEventInPast(eventDateStr: string | undefined): boolean {
+// Check if event has ended (considering both start and end dates)
+function isEventInPast(eventDateStr: string | undefined, eventEndDateStr?: string | undefined): boolean {
   if (!eventDateStr) return false;
   
   try {
-    const eventDate = new Date(eventDateStr);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    
+    // If event has an end date, check if end date has passed
+    if (eventEndDateStr) {
+      const endDate = new Date(eventEndDateStr);
+      endDate.setHours(0, 0, 0, 0);
+      return endDate < today;
+    }
+    
+    // Otherwise check start date
+    const eventDate = new Date(eventDateStr);
+    eventDate.setHours(0, 0, 0, 0);
     return eventDate < today;
   } catch {
     return false;
@@ -417,6 +314,8 @@ Deno.serve(async (req) => {
   }
 
   let runId: string | undefined;
+  const startTime = Date.now();
+  const TIMEOUT_MS = 55 * 60 * 1000; // 55 minutes
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -576,13 +475,50 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Skip events with past dates (unless force import)
+        // Skip events that have ended (unless force import)
         if (eventInfo.eventDate && !forceImport) {
-          if (isEventInPast(eventInfo.eventDate)) {
+          if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate)) {
             totalSkipped++;
-            console.log(`Skipping post ${postId} - event date is in the past: ${eventInfo.eventDate}`);
+            console.log(`Skipping post ${postId} - event has ended. Start: ${eventInfo.eventDate}, End: ${eventInfo.eventEndDate || 'N/A'}`);
             continue;
           }
+        }
+
+        // Check if this post was previously rejected
+        const { data: rejection } = await supabase
+          .from('post_rejections')
+          .select('id')
+          .eq('post_id', postId)
+          .maybeSingle();
+
+        if (rejection && !forceImport) {
+          totalSkipped++;
+          console.log(`Skipping post ${postId} - previously rejected`);
+          continue;
+        }
+
+        // Check timeout
+        if (Date.now() - startTime > TIMEOUT_MS) {
+          console.log('Timeout approaching, saving progress and exiting...');
+          await supabase
+            .from('scrape_runs')
+            .update({
+              status: 'failed',
+              completed_at: new Date().toISOString(),
+              error_message: 'Process timed out after 55 minutes',
+              posts_added: totalScrapedPosts,
+              posts_updated: totalUpdatedPosts,
+            })
+            .eq('id', runId!);
+          
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Process timed out',
+              stats: { totalScrapedPosts, totalUpdatedPosts, totalSkipped },
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
 
         console.log(`Processing event: ${postId}, Date: ${eventInfo.eventDate || 'TBD'}, Time: ${eventInfo.eventTime || 'TBD'}, Location: ${eventInfo.locationName || 'TBD'}`);
@@ -970,11 +906,49 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Skip events with past dates in direct scraping
-            if (eventInfo.eventDate && isEventInPast(eventInfo.eventDate)) {
+            // Skip events that have ended in direct scraping
+            if (eventInfo.eventDate && isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate)) {
               totalSkipped++;
-              console.log(`Skipping post ${postId} - event date is in the past: ${eventInfo.eventDate}`);
+              console.log(`Skipping post ${postId} - event has ended. Start: ${eventInfo.eventDate}, End: ${eventInfo.eventEndDate || 'N/A'}`);
               continue;
+            }
+
+            // Check if this post was previously rejected
+            const { data: rejectionCheck } = await supabase
+              .from('post_rejections')
+              .select('id')
+              .eq('post_id', postId)
+              .maybeSingle();
+
+            if (rejectionCheck) {
+              totalSkipped++;
+              console.log(`Skipping post ${postId} - previously rejected`);
+              continue;
+            }
+
+            // Check timeout
+            if (Date.now() - startTime > TIMEOUT_MS) {
+              console.log('Timeout approaching during automated scraping, saving progress...');
+              await supabase
+                .from('scrape_runs')
+                .update({
+                  status: 'failed',
+                  completed_at: new Date().toISOString(),
+                  error_message: 'Process timed out after 55 minutes',
+                  posts_added: totalScrapedPosts,
+                  posts_updated: totalUpdatedPosts,
+                  accounts_found: accountsFound.size,
+                })
+                .eq('id', runId!);
+              
+              return new Response(
+                JSON.stringify({
+                  success: false,
+                  error: 'Process timed out',
+                  stats: { totalScrapedPosts, totalUpdatedPosts, totalSkipped },
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
             }
 
             // Check if post exists
@@ -993,14 +967,19 @@ Deno.serve(async (req) => {
                   await supabase
                     .from('instagram_posts')
                     .update({
-                      caption: post.caption,
-                      event_date: newEventInfo.eventDate,
-                      event_time: newEventInfo.eventTime,
-                      location_name: newEventInfo.locationName,
-                      location_address: newEventInfo.locationAddress,
-                      likes_count: likesCount,
-                      comments_count: commentsCount,
-                      updated_at: new Date().toISOString(),
+                    caption: post.caption,
+                    event_date: newEventInfo.eventDate,
+                    event_end_date: newEventInfo.eventEndDate,
+                    event_time: newEventInfo.eventTime,
+                    end_time: newEventInfo.endTime,
+                    location_name: newEventInfo.locationName,
+                    location_address: newEventInfo.locationAddress,
+                    price: newEventInfo.price,
+                    is_free: newEventInfo.isFree,
+                    signup_url: newEventInfo.signupUrl,
+                    likes_count: likesCount,
+                    comments_count: commentsCount,
+                    updated_at: new Date().toISOString(),
                     })
                     .eq('id', existingPost.id);
                   
@@ -1081,12 +1060,16 @@ Deno.serve(async (req) => {
                 hashtags: hashtags,
                 mentions: mentions,
                 is_event: true,
-                event_title: eventInfo.eventTitle,
-                event_date: eventInfo.eventDate,
-                event_time: eventInfo.eventTime,
-                location_name: eventInfo.locationName,
-                location_address: eventInfo.locationAddress,
-                signup_url: eventInfo.signupUrl,
+              event_title: eventInfo.eventTitle,
+              event_date: eventInfo.eventDate,
+              event_end_date: eventInfo.eventEndDate,
+              event_time: eventInfo.eventTime,
+              end_time: eventInfo.endTime,
+              location_name: eventInfo.locationName,
+              location_address: eventInfo.locationAddress,
+              signup_url: eventInfo.signupUrl,
+              price: eventInfo.price,
+              is_free: eventInfo.isFree,
                 needs_review: hasIncompleteData,
                 ocr_processed: false,
               })

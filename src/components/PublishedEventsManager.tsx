@@ -411,8 +411,14 @@ export const PublishedEventsManager = () => {
                   </div>
                   <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                     <Calendar className="w-3 h-3" />
-                    <span>{format(new Date(event.event_date), "MMM d, yyyy")}</span>
+                    <span>{formatDateRange(event.event_date, event.event_end_date)}</span>
                   </div>
+                  {event.event_time && (
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      <span>{formatTimeRange(event.event_time, event.end_time)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardHeader>
