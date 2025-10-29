@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L, { LatLngExpression, Map as LeafletMap, LayerGroup } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { createMiddleFingerIcon, type LocationMarker } from "@/utils/markerUtils";
@@ -40,29 +40,28 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       center: [14.651676537238625, 121.04921119789635],
       zoom: 13,
       zoomControl: false,
-      attributionControl: false, // ✅ hide bottom-right watermark
       minZoom: 3,
-      maxBounds: [
-        [-90, -180],
-        [90, 180],
-      ],
+      maxBounds: [[-90, -180], [90, 180]],
       maxBoundsViscosity: 1.0,
-      updateWhenIdle: true,
     });
 
-    const tileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      crossOrigin: true,
-      updateWhenZooming: false,
-      className: "eventmap-tiles",
-    }).addTo(map);
+    const tileLayer = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        crossOrigin: true, // Enable proper caching
+      }
+    ).addTo(map);
 
-    // ✅ Show black overlay while any tiles are loading (initial + pan/zoom)
-    tileLayer.on("loading", () => setIsMapLoading(true));
-    tileLayer.on("load", () => setIsMapLoading(false));
+    // Hide loading background once tiles load
+    tileLayer.on('load', () => {
+      setIsMapLoading(false);
+    });
 
     markersLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-  }, []); // run once
+  }, [mapCenter]);
 
   // Update center based on geolocation or most popular event (run once on load)
   useEffect(() => {
@@ -76,17 +75,24 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
         },
         () => {
           if (popularEvent?.location_lat && popularEvent?.location_lng) {
-            const center: [number, number] = [Number(popularEvent.location_lat), Number(popularEvent.location_lng)];
+            const center: [number, number] = [
+              Number(popularEvent.location_lat),
+              Number(popularEvent.location_lng),
+            ];
             setMapCenter(center);
             mapRef.current?.setView(center, 12);
           }
-        },
+        }
       );
     } else if (popularEvent?.location_lat && popularEvent?.location_lng) {
-      const center: [number, number] = [Number(popularEvent.location_lat), Number(popularEvent.location_lng)];
+      const center: [number, number] = [
+        Number(popularEvent.location_lat),
+        Number(popularEvent.location_lng),
+      ];
       setMapCenter(center);
       mapRef.current?.setView(center, 12);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popularEvent]);
 
   // Add user location marker
@@ -95,11 +101,13 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     if (!map || !userLocation) return;
 
     // Remove existing user location marker if any
-    userLocationMarkerRef.current?.remove();
+    if (userLocationMarkerRef.current) {
+      userLocationMarkerRef.current.remove();
+    }
 
     const userIcon = L.divIcon({
       html: '<div class="user-location-marker"></div>',
-      className: "",
+      className: '',
       iconSize: [8, 8],
       iconAnchor: [4, 4],
     });
@@ -111,7 +119,11 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
     userLocationMarkerRef.current = marker;
 
-    return () => userLocationMarkerRef.current?.remove();
+    return () => {
+      if (userLocationMarkerRef.current) {
+        userLocationMarkerRef.current.remove();
+      }
+    };
   }, [userLocation]);
 
   // Render markers whenever data changes
@@ -133,18 +145,25 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
   return (
     <>
-      {/* ✅ Black loading overlay above everything */}
-      {isMapLoading && <div className="fixed inset-0 z-[10000] bg-black pointer-events-none" />}
-
-      {/* ✅ Black base so no “grid lines”/seams show during loads */}
-      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0 bg-black" />
+      {/* Black loading background */}
+      {isMapLoading && (
+        <div className="fixed inset-0 w-full h-screen z-[1] bg-black" />
+      )}
+      
+      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0" />
 
       {selectedMarker && (
         <>
           {isDesktop ? (
-            <EventSidePanel events={selectedMarker.events} onClose={() => setSelectedMarker(null)} />
+            <EventSidePanel
+              events={selectedMarker.events}
+              onClose={() => setSelectedMarker(null)}
+            />
           ) : (
-            <EventPopup events={selectedMarker.events} onClose={() => setSelectedMarker(null)} />
+            <EventPopup
+              events={selectedMarker.events}
+              onClose={() => setSelectedMarker(null)}
+            />
           )}
         </>
       )}
