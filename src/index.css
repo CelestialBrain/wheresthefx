@@ -41,10 +41,10 @@ All colors MUST be HSL.
     --math-primary: 240 10% 15%;
     --math-accent: 280 85% 55%;
     --math-muted: 240 5% 65%;
-    
+
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    
+
     /* Frosted glass effects */
     --glass-bg: 255 255 255;
     --glass-bg-dark: 0 0 0;
@@ -80,23 +80,23 @@ All colors MUST be HSL.
   }
 }
 
-  /* Performance optimizations */
-  .performance-optimized {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 500px;
-  }
+/* Performance optimizations */
+.performance-optimized {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
 
-  /* Smooth scrolling performance */
-  * {
-    scroll-behavior: smooth;
-  }
+/* Smooth scrolling performance */
+* {
+  scroll-behavior: smooth;
+}
 
-  /* GPU acceleration for transforms */
-  .will-change-transform {
-    will-change: transform;
-  }
+/* GPU acceleration for transforms */
+.will-change-transform {
+  will-change: transform;
+}
 
-  @layer base {
+@layer base {
   * {
     @apply border-border;
   }
@@ -107,7 +107,7 @@ All colors MUST be HSL.
 
   /* Math notation styling */
   .math-function {
-    font-family: 'Georgia', 'Times New Roman', serif;
+    font-family: "Georgia", "Times New Roman", serif;
     font-style: italic;
   }
 
@@ -126,35 +126,35 @@ All colors MUST be HSL.
   .animate-zoom-into-fx {
     animation: zoomIntoFx 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
-  
+
   /* Frosted glass utility classes */
   .frosted-glass {
     @apply backdrop-blur-md bg-white/10 dark:bg-black/20 border border-white/20;
   }
-  
+
   .frosted-glass-purple {
     @apply backdrop-blur-md bg-purple-500/20 border border-purple-400/30 text-white;
   }
-  
-.frosted-glass-button {
-  @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 transition-all duration-200 shadow-none;
-}
 
-.frosted-glass-button:autofill,
-.frosted-glass-button:-webkit-autofill,
-.frosted-glass-button:-webkit-autofill:hover,
-.frosted-glass-button:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
-  -webkit-text-fill-color: inherit !important;
-  transition: background-color 5000s ease-in-out 0s;
-}
-  
+  .frosted-glass-button {
+    @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 transition-all duration-200 shadow-none;
+  }
+
+  .frosted-glass-button:autofill,
+  .frosted-glass-button:-webkit-autofill,
+  .frosted-glass-button:-webkit-autofill:hover,
+  .frosted-glass-button:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+    -webkit-text-fill-color: inherit !important;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+
   /* Gradient blur for bottom edges */
   .blur-gradient-bottom {
     mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
   }
-  
+
   /* Slide in animation */
   @keyframes slide-in-from-top {
     from {
@@ -166,11 +166,11 @@ All colors MUST be HSL.
       opacity: 1;
     }
   }
-  
+
   .animate-slide-in-from-top {
     animation: slide-in-from-top 0.3s ease-out;
   }
-  
+
   /* Remove search input decorations */
   input[type="search"]::-webkit-search-decoration,
   input[type="search"]::-webkit-search-cancel-button,
@@ -178,20 +178,38 @@ All colors MUST be HSL.
   input[type="search"]::-webkit-search-results-decoration {
     display: none;
   }
-  
+
   /* Stable focus styles for frosted glass inputs */
   .frosted-glass-button:focus {
-    background-color: rgba(255, 255, 255, 0.10);
+    background-color: rgba(255, 255, 255, 0.1);
   }
-  
+
   .dark .frosted-glass-button:focus {
-    background-color: rgba(0, 0, 0, 0.30);
+    background-color: rgba(0, 0, 0, 0.3);
   }
-  
-  /* Hide Leaflet attribution */
+
+  /* Hide Leaflet attribution (watermark) */
   .leaflet-control-attribution {
     display: none !important;
   }
+
+  /* ---- Leaflet fixes: remove tile "grid" lines & keep base black ---- */
+  .leaflet-container,
+  .leaflet-pane,
+  .leaflet-tile-pane,
+  .leaflet-layer {
+    background: #000 !important; /* prevents white flash & hides seams while loading */
+  }
+
+  .leaflet-container .leaflet-tile {
+    border: 0 !important;
+    outline: 1px solid transparent; /* masks subpixel gaps that can appear as grid lines */
+  }
+
+  .leaflet-container {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* ------------------------------------------------------------------ */
 
   /* User location marker with pulsating animation */
   .user-location-marker {
