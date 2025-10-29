@@ -3,8 +3,10 @@ import { MapPin, Calendar, Heart, MessageCircle, Instagram, ExternalLink, Bookma
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
 import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
 
@@ -40,10 +42,12 @@ export interface InstagramPost {
 
 interface InstagramPostCardProps {
   post: InstagramPost;
+  variant?: 'default' | 'popup';
 }
 
-export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
+export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCardProps) => {
   const [savedEvents, setSavedEvents] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
 
   const handleSave = async (eventId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -53,7 +57,21 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
       return;
     }
 
-    if (savedEvents.has(eventId)) {
+    const isSaved = savedEvents.has(eventId);
+    
+    // Optimistic update
+    if (isSaved) {
+      setSavedEvents(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(eventId);
+        return newSet;
+      });
+    } else {
+      setSavedEvents(prev => new Set(prev).add(eventId));
+    }
+
+    // Perform database operation
+    if (isSaved) {
       const { error } = await supabase
         .from('saved_events')
         .delete()
@@ -61,13 +79,13 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
         .eq('instagram_post_id', eventId);
 
       if (error) {
+        // Revert optimistic update
+        setSavedEvents(prev => new Set(prev).add(eventId));
         toast.error("Failed to remove event");
       } else {
-        setSavedEvents(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(eventId);
-          return newSet;
-        });
+        // Invalidate saved events query for instant sync
+        queryClient.invalidateQueries({ queryKey: ['saved-events'] });
+        queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
         toast.success("Event removed from saved");
       }
     } else {
@@ -76,9 +94,17 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
         .insert({ user_id: user.id, instagram_post_id: eventId });
 
       if (error) {
+        // Revert optimistic update
+        setSavedEvents(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(eventId);
+          return newSet;
+        });
         toast.error("Failed to save event");
       } else {
-        setSavedEvents(prev => new Set(prev).add(eventId));
+        // Invalidate saved events query for instant sync
+        queryClient.invalidateQueries({ queryKey: ['saved-events'] });
+        queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
         toast.success("Event saved!");
       }
     }
@@ -121,11 +147,23 @@ export const InstagramPostCard = ({ post }: InstagramPostCardProps) => {
       <div className="flex gap-3 mb-2">
         {/* Image */}
         {(post.stored_image_url || post.image_url) && (
-          <ImageWithSkeleton
-            src={post.stored_image_url || post.image_url}
-            alt={post.event_title || "Event"}
-            className="w-20 h-20 rounded-md flex-shrink-0 bg-muted"
-          />
+          variant === 'popup' ? (
+            <div className="w-20 flex-shrink-0">
+              <AspectRatio ratio={1 / 1}>
+                <ImageWithSkeleton
+                  src={post.stored_image_url || post.image_url}
+                  alt={post.event_title || "Event"}
+                  className="w-full h-full rounded-md object-cover bg-muted"
+                />
+              </AspectRatio>
+            </div>
+          ) : (
+            <ImageWithSkeleton
+              src={post.stored_image_url || post.image_url}
+              alt={post.event_title || "Event"}
+              className="w-20 h-20 rounded-md flex-shrink-0 bg-muted"
+            />
+          )
         )}
 
         {/* Username + Title (right of image) */}

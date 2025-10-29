@@ -1,3 +1,12 @@
+# Instagram Scraper Parser Code - For ChatGPT Review
+
+This document contains the complete Instagram scraper parsing logic for external review.
+
+## File 1: extractionUtils.ts
+
+Contains all extraction utility functions for parsing event information from Instagram captions.
+
+```typescript
 /**
  * Extraction utilities for parsing event information from Instagram captions
  * Supports English, Filipino, and OCR-corrupted text
@@ -344,3 +353,52 @@ export function extractSignupUrl(text: string): string | null {
   
   return urls[0].replace(/[.,!?;]+$/, ''); // Return first URL as fallback
 }
+```
+
+## Key Features & Patterns
+
+### Vendor Detection (Strict)
+- ANY vendor keyword triggers rejection
+- Covers: vendor recruitment, booth rentals, selling patterns
+- Example rejections: "CALLING ALL VENDORS", "booth rental", "for sale"
+
+### Price Extraction (PHP-focused)
+- Supports: ₱, PHP, P symbols
+- Handles: ranges (₱299-349), k/m suffixes (₱5k = ₱5000)
+- Free detection: "free", "libre", "walang bayad"
+
+### Time Extraction (Multi-format)
+- Filipino: "alas-7 ng gabi" → 19:00:00
+- European: "19h30" → 19:30:00
+- Standard: "7pm" or "7:00 PM" or "7-10pm"
+- Ranges: "7pm to 10pm"
+
+### Date Extraction (Bilingual)
+- English months: January, Feb, Dec
+- Filipino months: Enero, Pebrero, Disyembre
+- Filipino ordinals: "ika-5 ng Mayo"
+- Ranges: "Dec 25-27" or "December 25 to 27"
+- ISO: "2025-01-05"
+
+### Venue Extraction (Priority-based)
+1. Pin emoji 📍 (highest priority)
+2. Keywords: "venue:", "location:", "where:", "saan:"
+3. "at/@ [Place Name]" (avoiding Instagram handles)
+4. Fallback to Instagram location tag
+
+### Signup URL Extraction
+- Prioritizes known domains (eventbrite, forms.gle, bit.ly)
+- Looks for URLs near signup keywords
+- Returns first URL as fallback
+
+## Request for ChatGPT Review
+
+Please review this code and suggest improvements for:
+1. More robust regex patterns
+2. Edge cases we might be missing
+3. Better handling of OCR errors
+4. Additional Filipino language patterns
+5. Performance optimizations
+6. Better vendor detection patterns
+
+Focus on the Philippine event market context where posts mix English, Filipino (Tagalog), and occasional OCR errors from image text.

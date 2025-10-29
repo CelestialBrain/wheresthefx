@@ -65,12 +65,13 @@ export const PatternManager = () => {
     },
   });
 
-  const testPattern = (pattern: string, text: string) => {
+  const testPattern = (pattern: string, text: string): string[] => {
     try {
       const regex = new RegExp(pattern, "gi");
       const matches = text.match(regex);
       return matches || [];
-    } catch {
+    } catch (error) {
+      console.error("Invalid regex pattern:", error);
       return [];
     }
   };

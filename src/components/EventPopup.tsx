@@ -61,7 +61,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                 },
               };
               
-              return <InstagramPostCard key={event.id} post={postData} />;
+              return <InstagramPostCard key={event.id} post={postData} variant="popup" />;
             })}
           </div>
         </ScrollArea>
