@@ -26,7 +26,10 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
   const isMobile = useIsMobile();
   const isDesktop = !isMobile;
 
-  const { data: markers = [] } = useEventMarkers({ ...filters, searchQuery });
+  const { data: markers = [] } = useEventMarkers({
+    ...filters,
+    searchQuery,
+  });
   const { data: popularEvent } = useMostPopularEvent();
 
   // Initialize map once
@@ -48,32 +51,17 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     });
 
     const tileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      // crossOrigin removed on purpose; can cause issues in some envs
-      subdomains: ["a", "b", "c", "d"],
-      keepBuffer: 2,
+      crossOrigin: true,
+      updateWhenZooming: false,
       className: "eventmap-tiles",
     }).addTo(map);
 
-    // ✅ Hide overlay after the FIRST tile arrives (more reliable than 'load')
-    const onFirstTile = () => {
-      setIsMapLoading(false);
-      tileLayer.off("tileload", onFirstTile);
-    };
-    tileLayer.on("tileload", onFirstTile);
-
-    // If tiles error or are slow, fail-safe hide after 4s
-    const failSafe = window.setTimeout(() => setIsMapLoading(false), 4000);
-
-    tileLayer.on("tileerror", () => setIsMapLoading(false));
+    // ✅ Show black overlay while any tiles are loading (initial + pan/zoom)
+    tileLayer.on("loading", () => setIsMapLoading(true));
+    tileLayer.on("load", () => setIsMapLoading(false));
 
     markersLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-
-    return () => {
-      window.clearTimeout(failSafe);
-      tileLayer.off("tileload", onFirstTile);
-      tileLayer.off("tileerror");
-    };
   }, []); // run once
 
   // Update center based on geolocation or most popular event (run once on load)
@@ -106,6 +94,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     const map = mapRef.current;
     if (!map || !userLocation) return;
 
+    // Remove existing user location marker if any
     userLocationMarkerRef.current?.remove();
 
     const userIcon = L.divIcon({
@@ -117,7 +106,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
     const marker = L.marker(userLocation, {
       icon: userIcon,
-      zIndexOffset: 1000,
+      zIndexOffset: 1000, // Keep above event markers
     }).addTo(map);
 
     userLocationMarkerRef.current = marker;
@@ -144,10 +133,10 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
   return (
     <>
-      {/* ✅ Black loading overlay */}
-      {isMapLoading && <div className="fixed inset-0 z-[9999] bg-black pointer-events-none" />}
+      {/* ✅ Black loading overlay above everything */}
+      {isMapLoading && <div className="fixed inset-0 z-[10000] bg-black pointer-events-none" />}
 
-      {/* ✅ Black base so no white flash or seams */}
+      {/* ✅ Black base so no “grid lines”/seams show during loads */}
       <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0 bg-black" />
 
       {selectedMarker && (
