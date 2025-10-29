@@ -1,5 +1,5 @@
-import L from 'leaflet';
-import markerIcon from '@/assets/middle-finger-marker.png';
+import L from "leaflet";
+import markerIcon from "@/assets/middle-finger-marker.png";
 
 export interface LocationMarker {
   lat: number;
@@ -8,42 +8,63 @@ export interface LocationMarker {
   events: any[];
 }
 
+// Marker dimensions (match w-8 h-10 => 32x40)
+const ICON_W = 32;
+const ICON_H = 40;
+
+// Coordinates for the center of the palm in the image (px from top-left)
+const PALM_X = 16; // horizontal center
+const PALM_Y = 16; // slightly above vertical center = palm area
+
 export function createMiddleFingerIcon(count: number): L.DivIcon {
+  const hasCount = count > 1;
+
   const iconHtml = `
-    <div class="relative inline-flex items-center justify-center">
-      <img 
-        src="${markerIcon}" 
+    <div class="relative select-none" style="width:${ICON_W}px;height:${ICON_H}px">
+      <img
+        src="${markerIcon}"
         alt="Event marker"
-        class="w-8 h-10"
+        class="absolute inset-0 w-full h-full block pointer-events-none"
         style="filter: brightness(0) saturate(100%) invert(34%) sepia(98%) saturate(4764%) hue-rotate(280deg) brightness(95%) contrast(94%); transform: rotate(180deg);"
+        aria-hidden="true"
       />
-      ${count > 1 ? `
-        <div class="absolute inset-0 flex items-center justify-center" style="padding-bottom: 8px;">
-          <span class="text-white text-xs font-mono font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" style="text-shadow: 0 0 3px rgba(0,0,0,0.9), 0 1px 2px rgba(0,0,0,0.8);">
-            ${count}
-          </span>
-        </div>
-      ` : ''}
+      ${
+        hasCount
+          ? `
+        <span
+          class="absolute leading-none text-white font-semibold"
+          style="
+            left:${PALM_X}px;
+            top:${PALM_Y}px;
+            transform:translate(-50%,-50%);
+            font-size:12px;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+            pointer-events:none;
+          "
+        >${count}</span>
+      `
+          : ""
+      }
     </div>
   `;
 
   return L.divIcon({
     html: iconHtml,
-    className: 'custom-marker',
-    iconSize: [32, 40],
-    iconAnchor: [16, 20],
-    popupAnchor: [0, -20],
+    className: "custom-marker", // keep this if you want to target the wrapper in CSS
+    iconSize: [ICON_W, ICON_H],
+    iconAnchor: [ICON_W / 2, ICON_H - 2], // anchor near the (rotated) tip; adjust if needed
+    popupAnchor: [0, -ICON_H + 6],
   });
 }
 
 export function groupEventsByLocation(events: any[]): LocationMarker[] {
   const locationMap = new Map<string, LocationMarker>();
 
-  events.forEach(event => {
+  events.forEach((event) => {
     if (!event.location_lat || !event.location_lng) return;
 
     const key = `${event.location_lat.toFixed(4)},${event.location_lng.toFixed(4)}`;
-    
+
     if (locationMap.has(key)) {
       const marker = locationMap.get(key)!;
       marker.eventCount++;
