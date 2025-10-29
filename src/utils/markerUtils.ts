@@ -13,7 +13,7 @@ const ICON_W = 32;
 const ICON_H = 40;
 
 // Coordinates for the center of the palm in the image (px from top-left)
-const PALM_X = 14; // horizontal center
+const PALM_X = 13.5; // horizontal center
 const PALM_Y = 14; // slightly above vertical center = palm area
 
 export function createMiddleFingerIcon(count: number): L.DivIcon {
