@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Heart } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -8,6 +9,8 @@ import {
 } from "@/components/ui/sheet";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface SavedEventsDrawerProps {
   open: boolean;
@@ -16,6 +19,30 @@ interface SavedEventsDrawerProps {
 
 export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
   const { data: savedEvents = [] } = useSavedEvents();
+  const queryClient = useQueryClient();
+
+  // Realtime subscription for instant sync
+  useEffect(() => {
+    const channel = supabase
+      .channel('saved-events-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'saved_events'
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['saved-events'] });
+          queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   return (
     <Sheet open={open} onOpenChange={onClose}>

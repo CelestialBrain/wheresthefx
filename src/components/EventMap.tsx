@@ -40,14 +40,13 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       center: [14.651676537238625, 121.04921119789635],
       zoom: 13,
       zoomControl: false,
-      attributionControl: false, // ✅ hide bottom-right watermark
+      attributionControl: false,
       minZoom: 3,
       maxBounds: [
         [-90, -180],
         [90, 180],
       ],
       maxBoundsViscosity: 1.0,
-      updateWhenIdle: true,
     });
 
     const tileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -106,12 +105,14 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
     const marker = L.marker(userLocation, {
       icon: userIcon,
-      zIndexOffset: 1000, // Keep above event markers
+      zIndexOffset: 1000,
     }).addTo(map);
 
     userLocationMarkerRef.current = marker;
 
-    return () => userLocationMarkerRef.current?.remove();
+    return () => {
+      userLocationMarkerRef.current?.remove();
+    };
   }, [userLocation]);
 
   // Render markers whenever data changes

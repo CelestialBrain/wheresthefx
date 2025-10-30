@@ -1,15 +1,14 @@
 import { useState, useEffect } from "react";
-import { X, Bookmark, ExternalLink, Calendar, MapPin, DollarSign, Flag, Instagram } from "lucide-react";
+import { X, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ImageWithSkeleton } from "./ImageWithSkeleton";
-import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
+import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface EventSidePanelProps {
   events: any[];
@@ -17,69 +16,12 @@ interface EventSidePanelProps {
 }
 
 export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
-  const [savedEvents, setSavedEvents] = useState<Set<string>>(new Set());
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportingEventId, setReportingEventId] = useState<string | null>(null);
   const [reportType, setReportType] = useState<string>("outdated");
   const [reportDescription, setReportDescription] = useState("");
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const loadSavedEvents = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data } = await supabase
-        .from('saved_events')
-        .select('instagram_post_id')
-        .eq('user_id', user.id);
-
-      if (data) {
-        setSavedEvents(new Set(data.map(d => d.instagram_post_id)));
-      }
-    };
-    loadSavedEvents();
-  }, []);
-
-  const handleSave = async (event: any) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      toast.error("Please sign in to save events");
-      return;
-    }
-
-    const eventId = event.post_id;
-
-    if (savedEvents.has(eventId)) {
-      const { error } = await supabase
-        .from('saved_events')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('instagram_post_id', eventId);
-
-      if (error) {
-        toast.error("Failed to remove event");
-      } else {
-        setSavedEvents(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(eventId);
-          return newSet;
-        });
-        toast.success("Event removed from saved");
-      }
-    } else {
-      const { error } = await supabase
-        .from('saved_events')
-        .insert({ user_id: user.id, instagram_post_id: eventId });
-
-      if (error) {
-        toast.error("Failed to save event");
-      } else {
-        setSavedEvents(prev => new Set(prev).add(eventId));
-        toast.success("Event saved!");
-      }
-    }
-  };
 
   const handleReport = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -127,85 +69,53 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
           {/* Event List */}
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
-              {events.map((event) => (
-                <Card key={event.id} className="p-4 space-y-3">
-                  {event.image_url && (
-                    <ImageWithSkeleton
-                      src={event.image_url}
-                      alt={event.event_title || "Event"}
-                      className="aspect-video rounded-lg bg-muted"
-                    />
-                  )}
+              {events.map((event) => {
+                const postData: InstagramPost = {
+                  id: event.id,
+                  post_id: event.post_id || event.id,
+                  caption: event.caption,
+                  post_url: event.post_url,
+                  image_url: event.image_url,
+                  stored_image_url: event.stored_image_url,
+                  posted_at: event.posted_at,
+                  likes_count: event.likes_count || 0,
+                  comments_count: event.comments_count || 0,
+                  event_title: event.event_title,
+                  event_date: event.event_date,
+                  event_time: event.event_time,
+                  event_end_date: event.event_end_date,
+                  end_time: event.end_time,
+                  location_name: event.location_name,
+                  location_address: event.location_address,
+                  location_lat: event.location_lat,
+                  location_lng: event.location_lng,
+                  signup_url: event.signup_url,
+                  is_event: true,
+                  instagram_accounts: {
+                    username: event.instagram_accounts?.username || 'unknown',
+                    display_name: event.instagram_accounts?.display_name || null,
+                    follower_count: event.instagram_accounts?.follower_count || null,
+                    is_verified: event.instagram_accounts?.is_verified || false,
+                  },
+                };
 
-                  <div className="space-y-2">
-                    {event.instagram_accounts?.username && (
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <Instagram className="h-3 w-3 text-accent" />
-                          <span className="text-xs text-muted-foreground">
-                            @{event.instagram_accounts.username}
-                          </span>
-                        </div>
-                        <Bookmark
-                          className={`h-4 w-4 cursor-pointer transition-colors ${
-                            savedEvents.has(event.post_id) 
-                              ? "fill-purple-500 text-purple-500" 
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                          onClick={() => handleSave(event)}
-                        />
-                      </div>
-                    )}
-                    <h3 className="font-semibold">
-                      {event.event_title || "Untitled Event"}
-                    </h3>
-
-                    <div className="space-y-1 text-sm text-muted-foreground">
-                      {event.event_date && (
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-3 w-3" />
-                          <span>
-                            {formatDateRange(event.event_date, event.event_end_date)}
-                            {(event.event_time || event.end_time) && ` at ${formatTimeRange(event.event_time, event.end_time)}`}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="h-3 w-3" />
-                        <span>
-                          {event.is_free ? "Free" : event.price ? `₱${event.price}` : "TBA"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {event.caption && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {event.caption}
-                      </p>
-                    )}
-
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" asChild className="flex-1">
-                        <a href={event.post_url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                          View Post
-                        </a>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setReportingEventId(event.post_id);
-                          setReportDialogOpen(true);
-                        }}
-                      >
-                        <Flag className="h-3 w-3" />
-                      </Button>
-                    </div>
+                return (
+                  <div key={event.id} className="relative">
+                    <InstagramPostCard post={postData} variant="popup" />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="absolute top-2 right-2 h-7 w-7 p-0"
+                      onClick={() => {
+                        setReportingEventId(event.post_id);
+                        setReportDialogOpen(true);
+                      }}
+                    >
+                      <Flag className="h-3 w-3" />
+                    </Button>
                   </div>
-                </Card>
-              ))}
+                );
+              })}
             </div>
           </ScrollArea>
         </div>

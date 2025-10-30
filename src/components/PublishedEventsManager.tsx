@@ -404,12 +404,10 @@ export const PublishedEventsManager = () => {
                     <Calendar className="w-3 h-3" />
                     <span>{formatDateRange(event.event_date, event.event_end_date)}</span>
                   </div>
-                  {event.event_time && (
-                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                      <Clock className="w-3 h-3" />
-                      <span>{formatTimeRange(event.event_time, event.end_time)}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                    <Clock className="w-3 h-3" />
+                    <span>{formatTimeRange(event.event_time, event.end_time) || 'TBA'}</span>
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -472,7 +470,7 @@ export const PublishedEventsManager = () => {
                   <h3 className="font-medium">Event Details</h3>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div><strong>Date:</strong> {formatDateRange(selectedEvent.event_date, selectedEvent.event_end_date)}</div>
-                    <div><strong>Time:</strong> {formatTimeRange(selectedEvent.event_time, selectedEvent.end_time)}</div>
+                    <div><strong>Time:</strong> {formatTimeRange(selectedEvent.event_time, selectedEvent.end_time) || 'TBA'}</div>
                     <div><strong>Price:</strong> {selectedEvent.is_free ? "Free" : `₱${selectedEvent.price}`}</div>
                     {selectedEvent.signup_url && (
                       <div className="col-span-2">

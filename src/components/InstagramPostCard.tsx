@@ -200,7 +200,7 @@ export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCa
             <span className="truncate">
               {post.event_date && formatDate(post.event_date, post.event_end_date)}
               {post.event_date && (post.event_time || post.end_time) && ' • '}
-              {formatTime(post.event_time, post.end_time)}
+              {post.event_time || post.end_time ? formatTime(post.event_time, post.end_time) : 'TBA'}
             </span>
           </div>
         )}
