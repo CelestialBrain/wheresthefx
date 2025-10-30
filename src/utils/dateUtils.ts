@@ -40,8 +40,6 @@ export function formatDateRange(startDate: string | Date, endDate?: string | Dat
  * - Time range: "7:00 PM - 10:00 PM"
  */
 export function formatTimeRange(startTime: string | null, endTime?: string | null): string {
-  if (!startTime) return "Time TBA";
-
   // Parse time string (HH:MM:SS or HH:MM format)
   const parseTime = (timeStr: string) => {
     const [hours, minutes] = timeStr.split(':').map(Number);
@@ -50,13 +48,28 @@ export function formatTimeRange(startTime: string | null, endTime?: string | nul
     return `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
   };
 
-  const formattedStart = parseTime(startTime);
+  // If neither time exists, return TBA
+  if (!startTime && !endTime) return "Time TBA";
+  
+  // If only end time exists
+  if (!startTime && endTime) {
+    return parseTime(endTime);
+  }
+  
+  // If only start time exists
+  if (startTime && !endTime) {
+    return parseTime(startTime);
+  }
 
-  if (!endTime || endTime === startTime) {
+  // Both times exist
+  const formattedStart = parseTime(startTime!);
+  const formattedEnd = parseTime(endTime!);
+  
+  // If times are the same, show only once
+  if (endTime === startTime) {
     return formattedStart;
   }
 
-  const formattedEnd = parseTime(endTime);
   return `${formattedStart} - ${formattedEnd}`;
 }
 
