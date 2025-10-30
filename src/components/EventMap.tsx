@@ -47,11 +47,13 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
         [90, 180],
       ],
       maxBoundsViscosity: 1.0,
+      fadeAnimation: false,
     });
 
     const tileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       crossOrigin: true,
       updateWhenZooming: false,
+      keepBuffer: 4,
       className: "eventmap-tiles",
     }).addTo(map);
 
@@ -134,11 +136,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
   return (
     <>
-      {/* ✅ Black loading overlay above everything */}
-      {isMapLoading && <div className="fixed inset-0 z-[10000] bg-black pointer-events-none" />}
-
-      {/* ✅ Black base so no “grid lines”/seams show during loads */}
-      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0 bg-black" />
+      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0" />
 
       {selectedMarker && (
         <>

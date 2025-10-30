@@ -53,5 +53,8 @@ export function useSavedEvents() {
       return data || [];
     },
     staleTime: 30 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
