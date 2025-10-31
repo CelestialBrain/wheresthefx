@@ -33,7 +33,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
             {events.map((event) => {
               // Transform published_events data to match InstagramPost interface
               const postData: InstagramPost = {
-                id: event.id,
+                id: event.source_post_id || event.post_id,
                 post_id: event.post_id || event.id,
                 caption: event.caption || event.description,
                 post_url: event.post_url || event.instagram_post_url,

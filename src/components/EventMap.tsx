@@ -48,6 +48,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       ],
       maxBoundsViscosity: 1.0,
       fadeAnimation: false,
+      zoomAnimation: false,
     });
 
     const tileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -136,7 +137,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
   return (
     <>
-      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0" />
+      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0 bg-[#1f2124]" />
 
       {selectedMarker && (
         <>

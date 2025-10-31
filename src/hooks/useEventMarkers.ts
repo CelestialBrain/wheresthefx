@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { groupEventsByLocation, type LocationMarker } from "@/utils/markerUtils";
+import { groupEventsByProximity, type LocationMarker } from "@/utils/markerUtils";
 
 interface UseEventMarkersOptions {
   dateRange?: { start: Date; end: Date };
@@ -15,18 +15,21 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
   return useQuery({
     queryKey: ['event-markers', options],
     queryFn: async (): Promise<LocationMarker[]> => {
+      const today = new Date().toISOString().split('T')[0];
+      
       // Read from published_events (canonical feed)
       let query = supabase
         .from('published_events')
-        .select('*, stored_image_url, event_end_date, end_time, signup_url, instagram_post_url, caption') as any;
+        .select('*, stored_image_url, event_end_date, end_time, signup_url, instagram_post_url, caption, source_post_id') as any;
 
-      // Filter by date range or default to future events
+      // Filter by date range or default to future events only
       if (options.dateRange) {
         const startDate = options.dateRange.start.toISOString().split('T')[0];
         const endDate = options.dateRange.end.toISOString().split('T')[0];
         query = query.gte('event_date', startDate).lte('event_date', endDate);
       } else {
-        query = query.gte('event_date', new Date().toISOString().split('T')[0]);
+        // Show only upcoming events: either event_end_date >= today OR (no end_date AND event_date >= today)
+        query = query.or(`event_end_date.gte.${today},and(event_end_date.is.null,event_date.gte.${today})`);
       }
 
       // Apply ordering
@@ -61,7 +64,8 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
       // Transform published_events to match expected format
       const transformedData = (data || []).map((event: any) => ({
         id: event.id,
-        post_id: event.source_post_id || event.id,
+        post_id: event.post_id,
+        source_post_id: event.source_post_id,
         post_url: event.instagram_post_url,
         caption: event.caption || event.description,
         event_title: event.event_title,
@@ -85,7 +89,7 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
         } : null
       }));
       
-      return groupEventsByLocation(transformedData);
+      return groupEventsByProximity(transformedData, 100);
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

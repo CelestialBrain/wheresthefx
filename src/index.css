@@ -193,12 +193,12 @@ All colors MUST be HSL.
     display: none !important;
   }
 
-  /* ---- Leaflet fixes: remove tile "grid" lines & keep base black ---- */
+  /* ---- Leaflet fixes: remove tile "grid" lines & match sea gray ---- */
   .leaflet-container,
   .leaflet-pane,
   .leaflet-tile-pane,
   .leaflet-layer {
-    background: #000 !important; /* prevents white flash & hides seams while loading */
+    background: #1f2124 !important; /* sea gray - prevents white flash & hides seams while loading */
   }
 
   .leaflet-container .leaflet-tile {

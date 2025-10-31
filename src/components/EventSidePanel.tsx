@@ -71,7 +71,7 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
             <div className="space-y-4">
               {events.map((event) => {
                 const postData: InstagramPost = {
-                  id: event.id,
+                  id: event.source_post_id || event.post_id,
                   post_id: event.post_id || event.id,
                   caption: event.caption,
                   post_url: event.post_url,

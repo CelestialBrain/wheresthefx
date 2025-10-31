@@ -57,6 +57,66 @@ export function createMiddleFingerIcon(count: number): L.DivIcon {
   });
 }
 
+// Haversine formula to calculate distance between two lat/lng points in meters
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+// Group events by proximity (default 100m radius)
+export function groupEventsByProximity(events: any[], radiusMeters: number = 100): LocationMarker[] {
+  const clusters: LocationMarker[] = [];
+
+  events.forEach((event) => {
+    if (!event.location_lat || !event.location_lng) return;
+
+    const eventLat = parseFloat(event.location_lat);
+    const eventLng = parseFloat(event.location_lng);
+
+    // Find nearest cluster within radius
+    let nearestCluster: LocationMarker | null = null;
+    let minDistance = Infinity;
+
+    for (const cluster of clusters) {
+      const distance = calculateDistance(cluster.lat, cluster.lng, eventLat, eventLng);
+      if (distance <= radiusMeters && distance < minDistance) {
+        minDistance = distance;
+        nearestCluster = cluster;
+      }
+    }
+
+    if (nearestCluster) {
+      // Add to existing cluster
+      nearestCluster.eventCount++;
+      nearestCluster.events.push(event);
+      // Update cluster center to average position
+      const totalEvents = nearestCluster.events.length;
+      nearestCluster.lat = nearestCluster.events.reduce((sum, e) => sum + parseFloat(e.location_lat), 0) / totalEvents;
+      nearestCluster.lng = nearestCluster.events.reduce((sum, e) => sum + parseFloat(e.location_lng), 0) / totalEvents;
+    } else {
+      // Create new cluster
+      clusters.push({
+        lat: eventLat,
+        lng: eventLng,
+        eventCount: 1,
+        events: [event],
+      });
+    }
+  });
+
+  return clusters;
+}
+
 export function groupEventsByLocation(events: any[]): LocationMarker[] {
   const locationMap = new Map<string, LocationMarker>();
 
