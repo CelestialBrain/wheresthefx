@@ -204,10 +204,27 @@ All colors MUST be HSL.
   .leaflet-container .leaflet-tile {
     border: 0 !important;
     outline: 1px solid transparent; /* masks subpixel gaps that can appear as grid lines */
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+  }
+
+  .leaflet-container .leaflet-tile.leaflet-tile-loaded {
+    opacity: 1;
   }
 
   .leaflet-container {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smooth zoom transitions */
+  .leaflet-zoom-animated {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Smooth marker transitions */
+  .leaflet-marker-icon,
+  .leaflet-marker-shadow {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
   }
   /* ------------------------------------------------------------------ */
 

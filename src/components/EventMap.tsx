@@ -47,20 +47,29 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
         [90, 180],
       ],
       maxBoundsViscosity: 1.0,
-      fadeAnimation: false,
-      zoomAnimation: false,
+      zoomAnimation: true,
+      zoomAnimationThreshold: 4,
+      fadeAnimation: true,
+      markerZoomAnimation: true,
+      inertia: true,
+      inertiaDeceleration: 3000,
+      inertiaMaxSpeed: Infinity,
+      worldCopyJump: false,
     });
 
     const tileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       crossOrigin: true,
-      updateWhenZooming: false,
-      keepBuffer: 4,
+      updateWhenZooming: true,
+      updateWhenIdle: false,
+      keepBuffer: 6,
+      maxNativeZoom: 19,
+      maxZoom: 19,
       className: "eventmap-tiles",
     }).addTo(map);
 
-    // ✅ Show black overlay while any tiles are loading (initial + pan/zoom)
-    tileLayer.on("loading", () => setIsMapLoading(true));
-    tileLayer.on("load", () => setIsMapLoading(false));
+    // Remove loading indicators to prevent flash
+    tileLayer.off('loading');
+    tileLayer.off('load');
 
     markersLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
