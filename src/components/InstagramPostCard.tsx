@@ -49,6 +49,26 @@ export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCa
   const [savedEvents, setSavedEvents] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
+  // Initialize saved state from existing saved events
+  useEffect(() => {
+    const checkSavedStatus = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('saved_events')
+        .select('instagram_post_id')
+        .eq('user_id', user.id)
+        .eq('instagram_post_id', post.id);
+
+      if (data && data.length > 0) {
+        setSavedEvents(prev => new Set(prev).add(post.id));
+      }
+    };
+
+    checkSavedStatus();
+  }, [post.id]);
+
   const handleSave = async (eventId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     
