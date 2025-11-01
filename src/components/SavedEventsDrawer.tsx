@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Heart } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Heart, Flag } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -11,6 +11,17 @@ import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 interface SavedEventsDrawerProps {
   open: boolean;
@@ -20,6 +31,41 @@ interface SavedEventsDrawerProps {
 export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
   const { data: savedEvents = [] } = useSavedEvents();
   const queryClient = useQueryClient();
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportingPostId, setReportingPostId] = useState<string | null>(null);
+
+  const handleReport = (postId: string) => {
+    setReportingPostId(postId);
+    setReportDialogOpen(true);
+  };
+
+  const handleConfirmReport = async () => {
+    if (!reportingPostId) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Please sign in to report events");
+      return;
+    }
+
+    const { error } = await supabase
+      .from('event_reports')
+      .insert({
+        instagram_post_id: reportingPostId,
+        reporter_user_id: user.id,
+        report_type: 'inappropriate',
+        description: 'Reported from saved events',
+      });
+
+    if (error) {
+      toast.error("Failed to report event");
+    } else {
+      toast.success("Event reported successfully");
+    }
+
+    setReportDialogOpen(false);
+    setReportingPostId(null);
+  };
 
   // Realtime subscription for instant sync
   useEffect(() => {
@@ -66,45 +112,63 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
           ) : (
             <div className="space-y-4">
               {savedEvents.map((saved: any) => {
-                const post = saved.instagram_posts;
-                if (!post) return null;
+                const event = saved.published_events;
+                if (!event) return null;
 
                 // Transform to InstagramPost interface
                 const postData: InstagramPost = {
-                  id: post.id,
-                  post_id: post.post_id || post.id,
-                  caption: post.caption,
-                  post_url: post.post_url,
-                  image_url: post.image_url,
-                  stored_image_url: post.stored_image_url,
-                  posted_at: post.posted_at || saved.created_at,
-                  likes_count: post.likes_count || 0,
-                  comments_count: post.comments_count || 0,
-                  event_title: post.event_title,
-                  event_date: post.event_date,
-                  event_time: post.event_time,
-                  event_end_date: post.event_end_date,
-                  end_time: post.end_time,
-                  location_name: post.location_name,
-                  location_address: post.location_address,
-                  location_lat: post.location_lat,
-                  location_lng: post.location_lng,
-                  signup_url: post.signup_url,
+                  id: event.id,
+                  post_id: event.id,
+                  caption: event.caption || event.description,
+                  post_url: event.instagram_post_url || '',
+                  image_url: event.image_url,
+                  stored_image_url: event.stored_image_url,
+                  posted_at: event.created_at,
+                  likes_count: event.likes_count || 0,
+                  comments_count: event.comments_count || 0,
+                  event_title: event.event_title,
+                  event_date: event.event_date,
+                  event_time: event.event_time,
+                  event_end_date: event.event_end_date,
+                  end_time: event.end_time,
+                  location_name: event.location_name,
+                  location_address: event.location_address,
+                  location_lat: event.location_lat,
+                  location_lng: event.location_lng,
+                  signup_url: event.signup_url,
                   is_event: true,
+                  published_event_id: event.id,
                   instagram_accounts: {
-                    username: post.instagram_accounts?.username || 'unknown',
-                    display_name: post.instagram_accounts?.display_name || null,
-                    follower_count: post.instagram_accounts?.follower_count || null,
-                    is_verified: post.instagram_accounts?.is_verified || false,
+                    username: event.instagram_account_username || 'unknown',
+                    display_name: null,
+                    follower_count: null,
+                    is_verified: false,
                   },
                 };
 
-                return <InstagramPostCard key={saved.id} post={postData} />;
+                return <InstagramPostCard key={saved.id} post={postData} onReport={handleReport} />;
               })}
             </div>
           )}
         </ScrollArea>
       </SheetContent>
+
+      <AlertDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Report Event</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to report this event? This action will notify moderators.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmReport} className="bg-red-500 hover:bg-red-600">
+              Report
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }

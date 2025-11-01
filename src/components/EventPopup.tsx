@@ -1,9 +1,21 @@
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface EventPopupProps {
   events: any[];
@@ -11,7 +23,44 @@ interface EventPopupProps {
 }
 
 export function EventPopup({ events, onClose }: EventPopupProps) {
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportingPostId, setReportingPostId] = useState<string | null>(null);
+
+  const handleReport = (postId: string) => {
+    setReportingPostId(postId);
+    setReportDialogOpen(true);
+  };
+
+  const handleConfirmReport = async () => {
+    if (!reportingPostId) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Please sign in to report events");
+      return;
+    }
+
+    const { error } = await supabase
+      .from('event_reports')
+      .insert({
+        instagram_post_id: reportingPostId,
+        reporter_user_id: user.id,
+        report_type: 'inappropriate',
+        description: 'Reported from map popup',
+      });
+
+    if (error) {
+      toast.error("Failed to report event");
+    } else {
+      toast.success("Event reported successfully");
+    }
+
+    setReportDialogOpen(false);
+    setReportingPostId(null);
+  };
+
   return (
+    <>
     <div className="fixed inset-0 z-[2000] flex items-end md:items-center md:justify-center bg-black/80 backdrop-blur-sm">
       <Card className="relative w-full md:max-w-md max-h-[90vh] flex flex-col bg-card border-border rounded-t-2xl md:rounded-lg">
         <div className="p-4 border-b border-border flex items-center justify-between shrink-0">
@@ -33,7 +82,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
             {events.map((event) => {
               // Transform published_events data to match InstagramPost interface
               const postData: InstagramPost = {
-                id: event.source_post_id || event.post_id,
+                id: event.id,
                 post_id: event.post_id || event.id,
                 caption: event.caption || event.description,
                 post_url: event.post_url || event.instagram_post_url,
@@ -53,6 +102,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                 location_lng: event.location_lng,
                 signup_url: event.signup_url,
                 is_event: true,
+                published_event_id: event.id,
                 instagram_accounts: {
                   username: event.instagram_account_username || event.instagram_accounts?.username || 'unknown',
                   display_name: null,
@@ -61,11 +111,29 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                 },
               };
               
-              return <InstagramPostCard key={event.id} post={postData} variant="popup" />;
+              return <InstagramPostCard key={event.id} post={postData} variant="popup" onReport={handleReport} />;
             })}
           </div>
         </ScrollArea>
       </Card>
+
+      <AlertDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Report Event</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to report this event? This action will notify moderators.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmReport} className="bg-red-500 hover:bg-red-600">
+              Report
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+    </>
   );
 }

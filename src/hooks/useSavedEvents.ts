@@ -14,10 +14,9 @@ export function useSavedEvents() {
         .select(`
           id,
           created_at,
-          instagram_post_id,
-          instagram_posts (
+          published_event_id,
+          published_events (
             id,
-            post_id,
             event_title,
             event_date,
             event_time,
@@ -27,8 +26,9 @@ export function useSavedEvents() {
             location_address,
             location_lat,
             location_lng,
-            post_url,
+            instagram_post_url,
             caption,
+            description,
             is_free,
             price,
             signup_url,
@@ -36,17 +36,12 @@ export function useSavedEvents() {
             stored_image_url,
             likes_count,
             comments_count,
-            posted_at,
-            instagram_accounts (
-              username,
-              display_name,
-              profile_pic_url,
-              follower_count,
-              is_verified
-            )
+            created_at,
+            instagram_account_username
           )
         `)
         .eq('user_id', user.id)
+        .not('published_event_id', 'is', null)
         .order('created_at', { ascending: false });
       
       if (error) throw error;

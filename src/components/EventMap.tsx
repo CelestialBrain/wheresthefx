@@ -146,7 +146,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
   return (
     <>
-      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0 bg-[#1f2124]" />
+      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0 bg-[#262626]" />
 
       {selectedMarker && (
         <>

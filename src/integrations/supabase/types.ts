@@ -988,18 +988,21 @@ export type Database = {
           created_at: string | null
           id: string
           instagram_post_id: string | null
+          published_event_id: string | null
           user_id: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
           instagram_post_id?: string | null
+          published_event_id?: string | null
           user_id?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
           instagram_post_id?: string | null
+          published_event_id?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -1008,6 +1011,13 @@ export type Database = {
             columns: ["instagram_post_id"]
             isOneToOne: false
             referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_events_published_event_id_fkey"
+            columns: ["published_event_id"]
+            isOneToOne: false
+            referencedRelation: "published_events"
             referencedColumns: ["id"]
           },
           {

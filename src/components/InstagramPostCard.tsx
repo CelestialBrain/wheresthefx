@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MapPin, Calendar, Heart, MessageCircle, Instagram, ExternalLink, Bookmark } from "lucide-react";
+import { MapPin, Calendar, Heart, MessageCircle, Instagram, ExternalLink, Bookmark, Flag } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ export interface InstagramPost {
   distance?: number;
   location_lat?: number | null;
   location_lng?: number | null;
+  published_event_id?: string | null;
   instagram_accounts: {
     username: string;
     display_name: string | null;
@@ -43,9 +44,10 @@ export interface InstagramPost {
 interface InstagramPostCardProps {
   post: InstagramPost;
   variant?: 'default' | 'popup';
+  onReport?: (postId: string) => void;
 }
 
-export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCardProps) => {
+export const InstagramPostCard = ({ post, variant = 'default', onReport }: InstagramPostCardProps) => {
   const [savedEvents, setSavedEvents] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
@@ -55,11 +57,19 @@ export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCa
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data } = await supabase
+      // Check by published_event_id first, fallback to instagram_post_id
+      const query = supabase
         .from('saved_events')
-        .select('instagram_post_id')
-        .eq('user_id', user.id)
-        .eq('instagram_post_id', post.id);
+        .select('id')
+        .eq('user_id', user.id);
+
+      if (post.published_event_id) {
+        query.eq('published_event_id', post.published_event_id);
+      } else {
+        query.eq('instagram_post_id', post.id);
+      }
+
+      const { data } = await query;
 
       if (data && data.length > 0) {
         setSavedEvents(prev => new Set(prev).add(post.id));
@@ -67,7 +77,7 @@ export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCa
     };
 
     checkSavedStatus();
-  }, [post.id]);
+  }, [post.id, post.published_event_id]);
 
   const handleSave = async (eventId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -92,11 +102,19 @@ export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCa
 
     // Perform database operation
     if (isSaved) {
-      const { error } = await supabase
+      // Delete by published_event_id if available, otherwise by instagram_post_id
+      const deleteQuery = supabase
         .from('saved_events')
         .delete()
-        .eq('user_id', user.id)
-        .eq('instagram_post_id', eventId);
+        .eq('user_id', user.id);
+
+      if (post.published_event_id) {
+        deleteQuery.eq('published_event_id', post.published_event_id);
+      } else {
+        deleteQuery.eq('instagram_post_id', eventId);
+      }
+
+      const { error } = await deleteQuery;
 
       if (error) {
         // Revert optimistic update
@@ -109,9 +127,18 @@ export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCa
         toast.success("Event removed from saved");
       }
     } else {
+      // Save with published_event_id if available, otherwise use instagram_post_id
+      const insertData: any = { user_id: user.id };
+      
+      if (post.published_event_id) {
+        insertData.published_event_id = post.published_event_id;
+      } else {
+        insertData.instagram_post_id = eventId;
+      }
+
       const { error } = await supabase
         .from('saved_events')
-        .insert({ user_id: user.id, instagram_post_id: eventId });
+        .insert(insertData);
 
       if (error) {
         // Revert optimistic update
@@ -252,8 +279,18 @@ export const InstagramPostCard = ({ post, variant = 'default' }: InstagramPostCa
             </div>
           </div>
 
-          {/* Right: Save Button + Link Button + Event Badge */}
+          {/* Right: Report + Save Button + Link Button + Event Badge */}
           <div className="flex items-center gap-2">
+            {post.is_event && onReport && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 hover:text-red-500"
+                onClick={() => onReport(post.id)}
+              >
+                <Flag className="h-3 w-3" />
+              </Button>
+            )}
             {post.is_event && (
               <Button
                 variant="ghost"
