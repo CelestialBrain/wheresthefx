@@ -82,6 +82,7 @@ serve(async (req) => {
       event_date: post.event_date,
       event_time: post.event_time,
       event_end_date: post.event_end_date,
+      end_time: post.end_time,
       location_name: post.location_name,
       location_address: post.location_address,
       location_lat: post.location_lat,
