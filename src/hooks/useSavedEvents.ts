@@ -1,7 +1,33 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useEffect } from "react";
 
 export function useSavedEvents() {
+  const queryClient = useQueryClient();
+
+  // Realtime subscription for instant cross-device sync
+  useEffect(() => {
+    const channel = supabase
+      .channel('saved-events-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'saved_events'
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['saved-events'] });
+          queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ['saved-events'],
     queryFn: async () => {

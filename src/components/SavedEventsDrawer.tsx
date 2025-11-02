@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Heart, Flag } from "lucide-react";
+import { useState } from "react";
+import { Heart } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -10,7 +10,6 @@ import {
 import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +29,6 @@ interface SavedEventsDrawerProps {
 
 export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
   const { data: savedEvents = [] } = useSavedEvents();
-  const queryClient = useQueryClient();
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
 
@@ -67,28 +65,6 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
     setReportingPostId(null);
   };
 
-  // Realtime subscription for instant sync
-  useEffect(() => {
-    const channel = supabase
-      .channel('saved-events-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'saved_events'
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['saved-events'] });
-          queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -146,7 +122,7 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
                   },
                 };
 
-                return <InstagramPostCard key={saved.id} post={postData} onReport={handleReport} />;
+                return <InstagramPostCard key={saved.id} post={postData} onReport={handleReport} isSaved={true} />;
               })}
             </div>
           )}

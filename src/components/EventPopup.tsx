@@ -25,6 +25,13 @@ interface EventPopupProps {
 export function EventPopup({ events, onClose }: EventPopupProps) {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
+  const { data: savedEventsData = [] } = useSavedEvents();
+  
+  const savedEventIds = new Set(
+    savedEventsData
+      .map((saved: any) => saved.published_event_id)
+      .filter(Boolean)
+  );
 
   const handleReport = (postId: string) => {
     setReportingPostId(postId);
