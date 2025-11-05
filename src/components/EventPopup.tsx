@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { X, Flag } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
+import { useSavedEvents } from "@/hooks/useSavedEvents";
 import {
   AlertDialog,
   AlertDialogAction,
