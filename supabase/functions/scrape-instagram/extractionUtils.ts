@@ -1,7 +1,11 @@
 /**
  * Extraction utilities for parsing event information from Instagram captions
  * Supports English, Filipino, and OCR-corrupted text
+ * NOW INTEGRATED WITH LEARNED PATTERNS FROM DATABASE
  */
+
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
+import { extractWithLearnedPatterns } from './patternFetcher.ts';
 
 // Pre-normalize text to fix OCR issues and Unicode problems
 export function preNormalizeText(text: string): string {
@@ -57,8 +61,28 @@ export function isVendorPost(text: string): boolean {
   return strictVendorPatterns.some(pattern => pattern.test(text));
 }
 
-// Extract price information
-export function extractPrice(text: string): { amount: number; currency: string; isFree: boolean } | null {
+// Extract price with learned patterns
+export async function extractPrice(
+  text: string,
+  supabase?: SupabaseClient
+): Promise<{ amount: number; currency: string; isFree: boolean; patternId?: string | null } | null> {
+  // Try learned patterns first if supabase client provided
+  if (supabase) {
+    const learned = await extractWithLearnedPatterns(supabase, text, 'price');
+    if (learned.value) {
+      const amount = parseFloat(learned.value.replace(/[^0-9.]/g, ''));
+      if (!isNaN(amount)) {
+        return {
+          amount,
+          currency: 'PHP',
+          isFree: false,
+          patternId: learned.patternId
+        };
+      }
+    }
+  }
+  
+  // Fall back to hardcoded patterns
   // Check for free keywords first (English + Filipino)
   if (/\b(free|complimentary|walang\s*bayad|libre|free\s*admission|free\s*entrance)\b/i.test(text)) {
     return { amount: 0, currency: 'PHP', isFree: true };
@@ -98,8 +122,24 @@ export function extractPrice(text: string): { amount: number; currency: string; 
   return null;
 }
 
-// Extract time information (supports 12h, 24h, Filipino "alas-", ranges)
-export function extractTime(text: string): { startTime: string | null; endTime: string | null } {
+// Extract time information with learned patterns
+export async function extractTime(
+  text: string,
+  supabase?: SupabaseClient
+): Promise<{ startTime: string | null; endTime: string | null; patternId?: string | null }> {
+  // Try learned patterns first if supabase client provided
+  if (supabase) {
+    const learned = await extractWithLearnedPatterns(supabase, text, 'event_time');
+    if (learned.value) {
+      return { 
+        startTime: learned.value, 
+        endTime: null,
+        patternId: learned.patternId 
+      };
+    }
+  }
+  
+  // Fall back to hardcoded patterns
   // Filipino "alas-7 ng gabi" pattern
   const filipinoPattern = /alas[-\s]?(\d{1,2})(?::(\d{2}))?\s*(?:ng\s*)?(umaga|tanghali|hapon|gabi)?/gi;
   const filipinoMatches = [...text.matchAll(filipinoPattern)];
@@ -175,8 +215,24 @@ export function extractTime(text: string): { startTime: string | null; endTime: 
   return { startTime, endTime };
 }
 
-// Extract date information (supports English/Filipino months, ordinals, ISO, ranges)
-export function extractDate(text: string): { eventDate: string | null; eventEndDate: string | null } {
+// Extract date information with learned patterns
+export async function extractDate(
+  text: string,
+  supabase?: SupabaseClient
+): Promise<{ eventDate: string | null; eventEndDate: string | null; patternId?: string | null }> {
+  // Try learned patterns first if supabase client provided
+  if (supabase) {
+    const learned = await extractWithLearnedPatterns(supabase, text, 'event_date');
+    if (learned.value) {
+      return {
+        eventDate: learned.value,
+        eventEndDate: null,
+        patternId: learned.patternId
+      };
+    }
+  }
+  
+  // Fall back to hardcoded patterns
   const filipinoMonths: Record<string, number> = {
     'enero': 1, 'pebrero': 2, 'marso': 3, 'abril': 4,
     'mayo': 5, 'hunyo': 6, 'hulyo': 7, 'agosto': 8,

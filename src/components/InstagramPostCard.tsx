@@ -45,14 +45,17 @@ interface InstagramPostCardProps {
   post: InstagramPost;
   variant?: 'default' | 'popup';
   onReport?: (postId: string) => void;
+  isSaved?: boolean;
 }
 
-export const InstagramPostCard = ({ post, variant = 'default', onReport }: InstagramPostCardProps) => {
-  const [savedEvents, setSavedEvents] = useState<Set<string>>(new Set());
+export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved }: InstagramPostCardProps) => {
+  const [savedEvents, setSavedEvents] = useState<Set<string>>(isSaved ? new Set([post.id]) : new Set());
   const queryClient = useQueryClient();
 
   // Initialize saved state from existing saved events
   useEffect(() => {
+    if (isSaved !== undefined) return; // Skip if parent provided saved state
+    
     const checkSavedStatus = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -77,7 +80,7 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport }: Insta
     };
 
     checkSavedStatus();
-  }, [post.id, post.published_event_id]);
+  }, [post.id, post.published_event_id, isSaved]);
 
   const handleSave = async (eventId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
