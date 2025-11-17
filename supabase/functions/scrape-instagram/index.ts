@@ -8,6 +8,7 @@ import {
   extractVenue,
   extractSignupUrl,
 } from './extractionUtils.ts';
+import { ScraperLogger } from './logger.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -229,7 +230,7 @@ async function parseEventFromCaption(
       if (hasAnniversary) {
         const dateInfo = await extractDate(normalized, supabase);
         const hasDate = !!dateInfo.eventDate;
-        const venueInfo = await extractVenue(normalized, locationName, supabase);
+        const venueInfo = await extractVenue(normalized, supabase);
         const hasLocation = locationName || venueInfo.venueName;
         
         if (!hasDate || !hasLocation) {
@@ -266,7 +267,7 @@ async function parseEventFromCaption(
   const priceInfo = await extractPrice(normalized, supabase);
   const timeInfo = await extractTime(normalized, supabase);
   const dateInfo = await extractDate(normalized, supabase);
-  const venueInfo = await extractVenue(normalized, locationName, supabase);
+  const venueInfo = await extractVenue(normalized, supabase);
   const signupUrl = extractSignupUrl(normalized);
 
   // Consider it an event if we have event keywords + (date OR location)
@@ -390,6 +391,10 @@ Deno.serve(async (req) => {
     runId = scrapeRun?.id;
 
     console.log(`Starting Instagram data import... Run ID: ${runId}, Type: ${runType}`);
+    
+    // Initialize logger
+    const logger = new ScraperLogger(supabase, runId!);
+    await logger.info('fetch', `Starting scrape run: ${runType}`, { datasetId, runType });
 
     let totalScrapedPosts = 0;
     let totalUpdatedPosts = 0;
@@ -401,14 +406,18 @@ Deno.serve(async (req) => {
     // MODE 1: Dataset Import
     if (datasetId && finalToken) {
       console.log(`Fetching data from dataset: ${datasetId}`);
+      await logger.info('fetch', `Fetching dataset: ${datasetId}`, { datasetId });
       
+      const fetchStart = Date.now();
       const apifyResponse = await fetch(
         `https://api.apify.com/v2/datasets/${datasetId}/items?token=${finalToken}&clean=1`
       );
+      const fetchDuration = Date.now() - fetchStart;
 
       if (!apifyResponse.ok) {
         const errorMsg = `Failed to fetch dataset (${apifyResponse.status}): ${apifyResponse.statusText}`;
         console.error(errorMsg);
+        await logger.error('fetch', 'Dataset fetch failed', { datasetId, status: apifyResponse.status }, { error: errorMsg });
         
         if (runId) {
           await supabase.from('scrape_runs').update({
@@ -418,11 +427,17 @@ Deno.serve(async (req) => {
           }).eq('id', runId);
         }
         
+        await logger.close();
         throw new Error(errorMsg);
       }
 
       const apifyData: ApifyDatasetItem[] = await apifyResponse.json();
       console.log(`Dataset returned ${apifyData.length} items`);
+      await logger.success('fetch', `Dataset fetched: ${apifyData.length} items`, { 
+        datasetId, 
+        itemCount: apifyData.length,
+        duration_ms: fetchDuration 
+      });
 
       // Process each item
       for (const item of apifyData) {
@@ -471,11 +486,19 @@ Deno.serve(async (req) => {
         const postUrl = item.url || `https://www.instagram.com/p/${item.shortCode}/`;
 
         // Parse event information
-        const eventInfo = parseEventFromCaption(item.caption || '', item.locationName);
+        const parseStart = Date.now();
+        const eventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase);
+        const parseDuration = Date.now() - parseStart;
+        
+        await logger.logParsing(postId, undefined, item.caption || '', eventInfo, parseDuration);
 
         // Skip non-events (unless force import)
         if (!eventInfo.isEvent && !forceImport) {
           totalSkipped++;
+          await logger.logSkip(postId, 'Not an event', { 
+            caption_preview: item.caption?.substring(0, 100),
+            forceImport 
+          });
           console.log(`Skipping post ${postId} - not an event. Caption: "${item.caption?.substring(0, 100)}..."`);
           continue;
         }
@@ -484,6 +507,10 @@ Deno.serve(async (req) => {
         if (eventInfo.eventDate && !forceImport) {
           if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate)) {
             totalSkipped++;
+            await logger.logSkip(postId, 'Event has ended', { 
+              eventDate: eventInfo.eventDate,
+              eventEndDate: eventInfo.eventEndDate 
+            });
             console.log(`Skipping post ${postId} - event has ended. Start: ${eventInfo.eventDate}, End: ${eventInfo.eventEndDate || 'N/A'}`);
             continue;
           }
@@ -498,6 +525,7 @@ Deno.serve(async (req) => {
 
         if (rejection && !forceImport) {
           totalSkipped++;
+          await logger.logSkip(postId, 'Previously rejected', { rejectionId: rejection.id });
           console.log(`Skipping post ${postId} - previously rejected`);
           continue;
         }
@@ -584,7 +612,7 @@ Deno.serve(async (req) => {
           
           // Check if caption changed (indicating potential update)
           if (existingPost.caption !== item.caption) {
-            const newEventInfo = parseEventFromCaption(item.caption || '', item.locationName);
+            const newEventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase);
             
             // Only update if new event info is valid
             if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
@@ -903,7 +931,7 @@ Deno.serve(async (req) => {
             const postUrl = post.url || `https://www.instagram.com/p/${post.shortCode}/`;
 
             // Parse event information
-            const eventInfo = parseEventFromCaption(post.caption || '', post.locationName);
+            const eventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase);
 
             // Skip non-events
             if (!eventInfo.isEvent) {
@@ -966,7 +994,7 @@ Deno.serve(async (req) => {
             if (existingPost) {
               // Check for caption changes
               if (existingPost.caption !== post.caption) {
-                const newEventInfo = parseEventFromCaption(post.caption || '', post.locationName);
+                const newEventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase);
                 
                 if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
                   await supabase
