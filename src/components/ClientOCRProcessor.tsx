@@ -109,8 +109,11 @@ export function ClientOCRProcessor() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Time regex patterns
+    // Time regex patterns - Enhanced with Filipino patterns
     const timePatterns = [
+      // Filipino time patterns
+      /alas-?(\d{1,2})(?::(\d{2}))?\s*(?:ng\s+)?(umaga|tanghali|hapon|gabi)/gi,
+      // Standard patterns
       /(\d{1,2}):(\d{2})\s*(am|pm)/gi,
       /(\d{1,2})\s*(am|pm)/gi,
     ];
@@ -132,26 +135,69 @@ export function ClientOCRProcessor() {
     let date = null;
     let time = null;
     let price = null;
-    let isFree = combinedText.includes("free") || combinedText.includes("libre");
+    let isFree = /\b(free|libre|walang bayad|gratis|no (entrance )?fee|free (entrance|admission))\b/i.test(combinedText);
     let venue = null;
     
-    // Simple date extraction (keep basic for now)
-    const simpleDate = combinedText.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
-    if (simpleDate) date = simpleDate[0];
+    // Enhanced date extraction with Filipino months
+    const filipinoMonths: { [key: string]: number } = {
+      'enero': 0, 'pebrero': 1, 'marso': 2, 'abril': 3, 'mayo': 4, 'hunyo': 5,
+      'hulyo': 6, 'agosto': 7, 'setyembre': 8, 'oktubre': 9, 'nobyembre': 10, 'disyembre': 11
+    };
     
-    // Extract time
-    for (const pattern of timePatterns) {
-      const match = combinedText.match(pattern);
-      if (match && match[0]) {
-        const rawTime = match[0];
-        time = convertTimeTo24Hour(rawTime);
-        break;
+    // Try Filipino date pattern first
+    const filipinoDateMatch = combinedText.match(/(\d{1,2})\s+(?:ng\s+)?(enero|pebrero|marso|abril|mayo|hunyo|hulyo|agosto|setyembre|oktubre|nobyembre|disyembre)/i);
+    if (filipinoDateMatch) {
+      const day = filipinoDateMatch[1];
+      const month = filipinoMonths[filipinoDateMatch[2].toLowerCase()];
+      if (month !== undefined) {
+        const year = new Date().getFullYear();
+        date = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.padStart(2, '0')}`;
       }
     }
     
-    // Extract price - add null checks
+    // Fallback to simple date extraction
+    if (!date) {
+      const simpleDate = combinedText.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
+      if (simpleDate) date = simpleDate[0];
+    }
+    
+    // Extract time - handle Filipino time patterns
+    for (const pattern of timePatterns) {
+      const match = combinedText.match(pattern);
+      if (match && match[0]) {
+        const rawTime = match[0].toLowerCase();
+        
+        // Handle Filipino time pattern: "alas-8 ng gabi" -> "20:00:00"
+        if (rawTime.includes('alas')) {
+          const hourMatch = rawTime.match(/alas-?(\d{1,2})/);
+          if (hourMatch) {
+            let hours = parseInt(hourMatch[1]);
+            if (rawTime.includes('gabi') || rawTime.includes('hapon')) {
+              if (hours < 12) hours += 12;
+            } else if (rawTime.includes('umaga') && hours === 12) {
+              hours = 0;
+            }
+            time = `${hours.toString().padStart(2, '0')}:00:00`;
+            break;
+          }
+        } else {
+          time = convertTimeTo24Hour(rawTime);
+        }
+        
+        if (time) break;
+      }
+    }
+    
+    // Extract price - Enhanced with Filipino currency patterns
     if (!isFree) {
-      for (const pattern of pricePatterns) {
+      const filipinoPricePatterns = [
+        /₱\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/g,
+        /php\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/gi,
+        /pesos?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/gi,
+        /\$\s*(\d+(?:\.\d{2})?)/g,
+      ];
+      
+      for (const pattern of [...filipinoPricePatterns, ...pricePatterns]) {
         const match = combinedText.match(pattern);
         if (match && match[1]) {
           const priceStr = match[1].replace(/,/g, "");

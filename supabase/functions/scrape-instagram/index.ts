@@ -180,8 +180,12 @@ function isValidTime(timeStr: string): boolean {
   return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
 }
 
-// Enhanced event parser with improved extraction utilities
-function parseEventFromCaption(caption: string, locationName?: string | null): {
+// Enhanced event parser with learned patterns integration
+async function parseEventFromCaption(
+  caption: string,
+  locationName?: string | null,
+  supabase?: any
+): Promise<{
   eventTitle?: string;
   eventDate?: string;
   eventEndDate?: string;
@@ -194,7 +198,7 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
   isFree?: boolean;
   isEvent: boolean;
   timeValidationFailed?: boolean;
-} {
+}> {
   if (!caption) {
     return { isEvent: false, isFree: true };
   }
@@ -223,9 +227,10 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
       // Unless it's an anniversary with a date and location
       const hasAnniversary = /anniversary/i.test(normalized);
       if (hasAnniversary) {
-        const dateInfo = extractDate(normalized);
+        const dateInfo = await extractDate(normalized, supabase);
         const hasDate = !!dateInfo.eventDate;
-        const hasLocation = locationName || extractVenue(normalized, locationName).venueName;
+        const venueInfo = await extractVenue(normalized, locationName, supabase);
+        const hasLocation = locationName || venueInfo.venueName;
         
         if (!hasDate || !hasLocation) {
           return { isEvent: false, isFree: true };
@@ -253,15 +258,15 @@ function parseEventFromCaption(caption: string, locationName?: string | null): {
     return { isEvent: false, isFree: true };
   }
 
-  // STEP 4: Extract event details using improved utilities
+  // STEP 4: Extract event details using improved utilities with learned patterns
   const lines = normalized.split('\n').filter(line => line.trim());
   const eventTitle = lines[0]?.substring(0, 100) || undefined;
 
-  // Extract structured data
-  const priceInfo = extractPrice(normalized);
-  const timeInfo = extractTime(normalized);
-  const dateInfo = extractDate(normalized);
-  const venueInfo = extractVenue(normalized, locationName);
+  // Extract structured data - now async with learned patterns
+  const priceInfo = await extractPrice(normalized, supabase);
+  const timeInfo = await extractTime(normalized, supabase);
+  const dateInfo = await extractDate(normalized, supabase);
+  const venueInfo = await extractVenue(normalized, locationName, supabase);
   const signupUrl = extractSignupUrl(normalized);
 
   // Consider it an event if we have event keywords + (date OR location)
