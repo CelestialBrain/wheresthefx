@@ -11,6 +11,7 @@ import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
 import { PatternManager } from "@/components/PatternManager";
+import { ScraperLogs } from "@/components/ScraperLogs";
 
 interface InstagramAccount {
   id: string;
@@ -631,6 +632,10 @@ const Admin = () => {
 
           <TabsContent value="templates">
             <LocationTemplatesManager />
+          </TabsContent>
+
+          <TabsContent value="logs">
+            <ScraperLogs />
           </TabsContent>
         </Tabs>
       </div>

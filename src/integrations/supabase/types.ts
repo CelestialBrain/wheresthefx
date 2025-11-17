@@ -1068,6 +1068,63 @@ export type Database = {
         }
         Relationships: []
       }
+      scraper_logs: {
+        Row: {
+          created_at: string | null
+          data: Json | null
+          duration_ms: number | null
+          error_details: Json | null
+          id: string
+          instagram_post_id: string | null
+          log_level: string
+          message: string
+          post_id: string | null
+          run_id: string | null
+          stage: string
+        }
+        Insert: {
+          created_at?: string | null
+          data?: Json | null
+          duration_ms?: number | null
+          error_details?: Json | null
+          id?: string
+          instagram_post_id?: string | null
+          log_level: string
+          message: string
+          post_id?: string | null
+          run_id?: string | null
+          stage: string
+        }
+        Update: {
+          created_at?: string | null
+          data?: Json | null
+          duration_ms?: number | null
+          error_details?: Json | null
+          id?: string
+          instagram_post_id?: string | null
+          log_level?: string
+          message?: string
+          post_id?: string | null
+          run_id?: string | null
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scraper_logs_instagram_post_id_fkey"
+            columns: ["instagram_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scraper_logs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "scrape_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
