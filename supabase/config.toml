@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.geocode-location]
 verify_jwt = false
 
+[functions.validate-venue]
+verify_jwt = false
+
 [functions.suggest-location-corrections]
 verify_jwt = true
 

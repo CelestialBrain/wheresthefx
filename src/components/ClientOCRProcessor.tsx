@@ -53,6 +53,7 @@ export function ClientOCRProcessor() {
       entities: any;
     }) => {
       const updates: any = {
+        ocr_text: ocrText, // PHASE 1: Store raw OCR text
         ocr_confidence: confidence,
         event_title: entities.title || null,
         event_date: entities.date || null,
@@ -64,7 +65,7 @@ export function ClientOCRProcessor() {
         is_free: entities.isFree,
         is_event: entities.isEvent,
         ocr_processed: true,
-        needs_review: true, // Always review OCR results - admin can reject if not event
+        needs_review: true,
       };
 
       const { error } = await supabase
@@ -259,6 +260,29 @@ export function ClientOCRProcessor() {
       });
 
       try {
+        // PHASE 2: Pre-filter small images (< 200x200)
+        const imageToProcess = post.stored_image_url || post.image_url;
+        const img = new Image();
+        img.src = imageToProcess;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+
+        if (img.width < 200 || img.height < 200) {
+          console.log(`Skipping OCR for ${post.id}: Image too small (${img.width}x${img.height})`);
+          await supabase
+            .from('instagram_posts')
+            .update({
+              ocr_processed: true,
+              ocr_confidence: 0,
+              needs_review: false,
+              is_event: false,
+            })
+            .eq('id', post.id);
+          continue;
+        }
+
         // Check OCR cache first - use stored_image_url if available
         const imageHash = post.stored_image_url || post.image_url;
         const { data: cached } = await supabase

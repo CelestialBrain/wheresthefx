@@ -122,6 +122,36 @@ export async function extractPrice(
   return null;
 }
 
+/**
+ * Infer AM/PM from context when time lacks explicit meridiem
+ * Uses contextual keywords and reasonable defaults
+ */
+function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
+  const lowerText = text.toLowerCase();
+  
+  // If hour is clearly 24h format (13-23), convert to PM
+  if (hour >= 13 && hour <= 23) return 'PM';
+  
+  // If hour is clearly early morning (0-5), it's AM
+  if (hour >= 0 && hour <= 5) return 'AM';
+  
+  // Context clues for ambiguous hours (6-12)
+  const pmKeywords = ['evening', 'night', 'dinner', 'sunset', 'gabi', 'hapunan', 'nightlife', 'concert'];
+  const amKeywords = ['morning', 'breakfast', 'brunch', 'umaga', 'almusal', 'sunrise'];
+  
+  const hasPMContext = pmKeywords.some(kw => lowerText.includes(kw));
+  const hasAMContext = amKeywords.some(kw => lowerText.includes(kw));
+  
+  if (hasPMContext && !hasAMContext) return 'PM';
+  if (hasAMContext && !hasPMContext) return 'AM';
+  
+  // Default assumptions for ambiguous hours without context
+  if (hour >= 6 && hour <= 11) return 'PM'; // 6-11 assume evening events
+  if (hour === 12) return 'PM'; // 12 assume noon/midnight context
+  
+  return null; // Unable to infer
+}
+
 // Extract time information with learned patterns
 export async function extractTime(
   text: string,
@@ -209,10 +239,69 @@ export async function extractTime(
     startMeridiem = endMeridiem;
   }
   
+  // PHASE 2: Smart AM/PM inference if still missing
+  if (!startMeridiem) {
+    const inferred = inferAMPM(startHour, text);
+    if (inferred) startMeridiem = inferred.toLowerCase();
+  }
+  if (endHour && !endMeridiem) {
+    const inferred = inferAMPM(endHour, text);
+    if (inferred) endMeridiem = inferred.toLowerCase();
+  }
+  
   const startTime = convertTo24h(startHour, startMin, startMeridiem);
   const endTime = endHour ? convertTo24h(endHour, endMin, endMeridiem) : null;
   
   return { startTime, endTime };
+}
+
+/**
+ * Parse relative dates like "this Friday", "next week", "this weekend"
+ * Returns Date object or null if no match
+ */
+function parseRelativeDate(text: string, referenceDate: Date = new Date()): Date | null {
+  const lowerText = text.toLowerCase();
+  
+  // Get current day of week (0=Sunday, 6=Saturday)
+  const currentDay = referenceDate.getDay();
+  
+  // Days of week patterns
+  const dayPatterns: Record<string, number> = {
+    'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4,
+    'friday': 5, 'saturday': 6, 'sunday': 0
+  };
+  
+  // "this [day]" - next occurrence of that day this week
+  for (const [dayName, dayNum] of Object.entries(dayPatterns)) {
+    const thisPattern = new RegExp(`\\bthis\\s+${dayName}\\b`, 'i');
+    if (thisPattern.test(lowerText)) {
+      const daysUntil = (dayNum - currentDay + 7) % 7 || 7;
+      return new Date(referenceDate.getTime() + daysUntil * 86400000);
+    }
+  }
+  
+  // "next [day]" - same day next week
+  for (const [dayName, dayNum] of Object.entries(dayPatterns)) {
+    const nextPattern = new RegExp(`\\bnext\\s+${dayName}\\b`, 'i');
+    if (nextPattern.test(lowerText)) {
+      const daysUntil = ((dayNum - currentDay + 7) % 7) + 7;
+      return new Date(referenceDate.getTime() + daysUntil * 86400000);
+    }
+  }
+  
+  // "this weekend" (assume Saturday)
+  if (lowerText.match(/\bthis\s+weekend\b/)) {
+    const daysUntilSaturday = (6 - currentDay + 7) % 7 || 7;
+    return new Date(referenceDate.getTime() + daysUntilSaturday * 86400000);
+  }
+  
+  // "next week" (assume Monday next week)
+  if (lowerText.match(/\bnext\s+week\b/)) {
+    const daysUntilNextMonday = (8 - currentDay) % 7 + 7;
+    return new Date(referenceDate.getTime() + daysUntilNextMonday * 86400000);
+  }
+  
+  return null;
 }
 
 // Extract date information with learned patterns
@@ -230,6 +319,16 @@ export async function extractDate(
         patternId: learned.patternId
       };
     }
+  }
+  
+  // PHASE 2: Try relative date parsing first (highest priority)
+  const relativeDate = parseRelativeDate(text);
+  if (relativeDate) {
+    return {
+      eventDate: relativeDate.toISOString().split('T')[0],
+      eventEndDate: null,
+      patternId: null,
+    };
   }
   
   // Fall back to hardcoded patterns
@@ -317,40 +416,77 @@ export async function extractDate(
   return { eventDate: null, eventEndDate: null };
 }
 
-// Extract venue information
+/**
+ * Validate if a string looks like a real street address
+ */
+function isValidAddress(address: string): boolean {
+  if (!address || address.length < 10) return false;
+  
+  // Must contain street indicators
+  const streetIndicators = /\b(street|st|avenue|ave|road|rd|blvd|boulevard|drive|dr|lane|ln|kalye|kanto)\b/i;
+  
+  // Or barangay/city indicators (Filipino)
+  const locationIndicators = /\b(brgy|barangay|city|manila|quezon|makati|taguig|pasig|pasay|mandaluyong)\b/i;
+  
+  return streetIndicators.test(address) || locationIndicators.test(address);
+}
+
+// PHASE 3: Enhanced venue extraction with address validation
 export function extractVenue(text: string, locationName?: string | null): { venueName: string | null; address: string | null } {
-  // Priority 1: Pin emoji 📍
+  // Priority 1: Pin emoji 📍 with venue and optional address
   const pinPattern = /📍\s*([^\n,]+?)(?:,\s*([^\n]+?))?(?=\n|$|[📍🗓️⏰🎟️])/;
   const pinMatch = text.match(pinPattern);
   
   if (pinMatch) {
+    const venueName = pinMatch[1].trim();
+    const potentialAddress = pinMatch[2]?.trim() || null;
+    
     return {
-      venueName: pinMatch[1].trim(),
-      address: pinMatch[2]?.trim() || null,
+      venueName,
+      address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
     };
   }
   
-  // Priority 2: Venue/location keywords (English + Filipino)
-  const venuePattern = /\b(?:venue|location|where|saan|lugar)\s*[:\-]?\s*([^,\n.;#@]+?)(?=\n|$|when|kailan|time|date)/i;
-  const venueMatch = text.match(venuePattern);
+  // Priority 2: Explicit "Venue:" or "Location:" prefix
+  const venueKeywordPattern = /\b(?:venue|location|lugar|place)\s*[:\-]\s*([^,\n]+?)(?:,\s*([^\n]+?))?(?=\n|$|when|kailan|time|date)/i;
+  const venueKeywordMatch = text.match(venueKeywordPattern);
   
-  if (venueMatch) {
-    const venue = venueMatch[1].trim();
-    // Avoid capturing "when", "time", "date" keywords
-    if (!/\b(when|kailan|time|oras|date|petsa)\b/i.test(venue)) {
-      return { venueName: venue, address: null };
+  if (venueKeywordMatch) {
+    const venueName = venueKeywordMatch[1].trim();
+    const potentialAddress = venueKeywordMatch[2]?.trim() || null;
+    
+    // Avoid capturing timing keywords as venues
+    if (!/\b(when|kailan|time|oras|date|petsa|am|pm)\b/i.test(venueName)) {
+      return {
+        venueName,
+        address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+      };
     }
   }
   
-  // Priority 3: "at/@" patterns (but avoid Instagram handles like @username)
-  const atPattern = /\b(?:at|@)\s+(?![\w.]+\s*$)([A-Z][^\n,@#]{2,}?)(?=\n|$|when|time|date|@)/;
+  // Priority 3: "@" mentions (common for venue tags)
+  const mentionPattern = /@([a-zA-Z0-9._]+)/;
+  const mentionMatch = text.match(mentionPattern);
+  
+  if (mentionMatch) {
+    const venueName = mentionMatch[1].replace(/_/g, ' ').trim();
+    return { venueName, address: null };
+  }
+  
+  // Priority 4: "at" or "sa" (Filipino) patterns
+  const atPattern = /\b(?:at|sa)\s+(?![\w.]+\s*$)([A-Z][^\n,@#]{2,40})(?:,\s*([^\n]+))?/;
   const atMatch = text.match(atPattern);
   
   if (atMatch) {
-    const venue = atMatch[1].trim();
-    // Make sure it's not an Instagram handle (no spaces usually)
-    if (venue.includes(' ') || /^The\s/.test(venue)) {
-      return { venueName: venue, address: null };
+    const venueName = atMatch[1].trim();
+    const potentialAddress = atMatch[2]?.trim() || null;
+    
+    // Make sure it's not an Instagram handle and has space or starts with "The"
+    if (venueName.includes(' ') || /^The\s/.test(venueName)) {
+      return {
+        venueName,
+        address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+      };
     }
   }
   
@@ -360,6 +496,93 @@ export function extractVenue(text: string, locationName?: string | null): { venu
   }
   
   return { venueName: null, address: null };
+}
+
+/**
+ * PHASE 1: Auto-tagging system for better filtering
+ * Generates tags based on caption, OCR text, and extracted entities
+ */
+export function autoTagPost(
+  caption: string,
+  ocrText: string,
+  entities: {
+    price?: number | null;
+    isFree?: boolean;
+    eventDate?: string | null;
+    eventTime?: string | null;
+  }
+): string[] {
+  const tags: string[] = [];
+  const combinedText = `${caption} ${ocrText}`.toLowerCase();
+  
+  // Music & Performance
+  if (/\b(concert|music|band|dj|live|performance|gig|acoustic)\b/i.test(combinedText)) {
+    tags.push('music');
+  }
+  
+  // Food & Dining
+  if (/\b(food|dinner|brunch|breakfast|restaurant|cafe|culinary|chef|tasting)\b/i.test(combinedText)) {
+    tags.push('food');
+  }
+  
+  // Nightlife & Party
+  if (/\b(party|club|nightlife|rave|bar|drinks|dancing)\b/i.test(combinedText)) {
+    tags.push('nightlife');
+  }
+  
+  // Art & Culture
+  if (/\b(art|gallery|exhibit|museum|cultural|theater|theatre|performance|workshop)\b/i.test(combinedText)) {
+    tags.push('arts');
+  }
+  
+  // Outdoor & Nature
+  if (/\b(outdoor|beach|hiking|nature|park|camping|adventure)\b/i.test(combinedText)) {
+    tags.push('outdoor');
+  }
+  
+  // Sports & Fitness
+  if (/\b(sports?|fitness|yoga|running|marathon|workout|gym|athletic)\b/i.test(combinedText)) {
+    tags.push('sports');
+  }
+  
+  // Market & Shopping
+  if (/\b(market|bazaar|thrift|shopping|sale|pop-?up|makers?)\b/i.test(combinedText)) {
+    tags.push('market');
+  }
+  
+  // Community & Networking
+  if (/\b(community|networking|meetup|social|gathering)\b/i.test(combinedText)) {
+    tags.push('community');
+  }
+  
+  // Price-based tags
+  if (entities.isFree) {
+    tags.push('free');
+  } else if (entities.price && entities.price > 0) {
+    tags.push('paid');
+  }
+  
+  // Time-based tags (weekend/weekday)
+  if (entities.eventDate) {
+    const date = new Date(entities.eventDate);
+    const dayOfWeek = date.getDay();
+    
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      tags.push('weekend');
+    } else {
+      tags.push('weekday');
+    }
+    
+    // Evening events (after 6pm)
+    if (entities.eventTime) {
+      const hour = parseInt(entities.eventTime.split(':')[0]);
+      if (hour >= 18 || hour <= 2) {
+        tags.push('evening');
+      }
+    }
+  }
+  
+  return [...new Set(tags)]; // Remove duplicates
 }
 
 // Extract signup URL
