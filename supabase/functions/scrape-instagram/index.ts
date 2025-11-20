@@ -7,6 +7,7 @@ import {
   extractDate,
   extractVenue,
   extractSignupUrl,
+  autoTagPost,
 } from './extractionUtils.ts';
 import { ScraperLogger } from './logger.ts';
 
@@ -763,6 +764,14 @@ Deno.serve(async (req) => {
           }
         }
 
+        // PHASE 1: Generate auto-tags for the post
+        const tags = autoTagPost(item.caption || '', '', {
+          price: eventInfo.price,
+          isFree: eventInfo.isFree,
+          eventDate: eventInfo.eventDate,
+          eventTime: eventInfo.eventTime
+        });
+
         // Prepare insert data - allow NULL for missing data
         const insertData: any = {
           post_id: postId,
@@ -783,6 +792,7 @@ Deno.serve(async (req) => {
           location_address: eventInfo.locationAddress,
           signup_url: eventInfo.signupUrl,
           needs_review: needsReview,
+          tags: tags, // PHASE 1: Add auto-generated tags
         };
 
         // Only add event_time if we have a valid value
@@ -809,19 +819,8 @@ Deno.serve(async (req) => {
           totalScrapedPosts++;
           console.log(`✓ Inserted post ${postId}${needsReview ? ' (needs review)' : ''}`);
 
-          // If needs review, trigger OCR enrichment
-          if (needsReview && insertedPost && imageUrl) {
-            console.log(`Triggering OCR enrichment for post ${insertedPost.id}`);
-            
-            try {
-              await supabase.functions.invoke('enrich-post-ocr', {
-                body: { postId: insertedPost.id }
-              });
-            } catch (ocrError) {
-              console.error(`OCR enrichment failed for ${insertedPost.id}:`, ocrError);
-              // Don't fail the entire import if OCR fails
-            }
-          }
+          // PHASE 1: Removed enrich-post-ocr call - OCR is handled by ClientOCRProcessor
+          // Mark post for admin review instead
         } catch (unexpectedError) {
           console.error(`Unexpected error inserting post ${postId}:`, unexpectedError);
           totalFailed++;
@@ -835,10 +834,10 @@ Deno.serve(async (req) => {
         throw new Error('APIFY_API_KEY secret not configured. Please add it in backend settings.');
       }
 
-      // Get active Instagram accounts
+      // PHASE 2: Get active Instagram accounts with scrape_depth
       const { data: accounts, error: accountsError } = await supabase
         .from('instagram_accounts')
-        .select('*')
+        .select('id, username, display_name, scrape_depth, last_scraped_at, is_active')
         .eq('is_active', true);
 
       if (accountsError) {
@@ -875,6 +874,9 @@ Deno.serve(async (req) => {
         try {
           console.log(`Scraping account: @${account.username}`);
 
+          // PHASE 2: Use configurable scrape depth per account
+          const scrapeDepth = account.scrape_depth || 5;
+          
           const apifyResponse = await fetch(
             `https://api.apify.com/v2/acts/nH2AHrwxeTRJoN5hX/run-sync-get-dataset-items?token=${apifyApiKeySecret}`,
             {
@@ -882,7 +884,7 @@ Deno.serve(async (req) => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 username: [account.username],
-                resultsLimit: 5,
+                resultsLimit: scrapeDepth,
               }),
             }
           );
@@ -1114,16 +1116,8 @@ Deno.serve(async (req) => {
             } else {
               totalScrapedPosts++;
 
-              // Trigger OCR for incomplete posts
-              if (hasIncompleteData && insertedPost) {
-                try {
-                  await supabase.functions.invoke('enrich-post-ocr', {
-                    body: { postId: insertedPost.id }
-                  });
-                } catch (ocrError) {
-                  console.error(`Failed to trigger OCR for post ${postId}:`, ocrError);
-                }
-              }
+              // PHASE 1: Removed enrich-post-ocr call - OCR is handled by ClientOCRProcessor
+              // Posts marked needs_review will appear in admin queue
             }
           }
         } catch (accountError) {

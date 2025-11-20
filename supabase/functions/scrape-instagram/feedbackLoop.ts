@@ -62,7 +62,8 @@ export async function recordPatternFailure(
 }
 
 /**
- * Update pattern confidence score based on success/failure ratio
+ * Update pattern confidence score using Wilson Score Interval
+ * More statistically robust than simple ratio - accounts for sample size
  */
 export async function updatePatternConfidence(
   supabase: SupabaseClient,
@@ -76,15 +77,22 @@ export async function updatePatternConfidence(
 
   if (!pattern) return;
 
-  const totalAttempts = pattern.success_count + pattern.failure_count;
-  if (totalAttempts === 0) return;
+  const n = pattern.success_count + pattern.failure_count;
+  if (n === 0) return;
 
-  const confidence = pattern.success_count / totalAttempts;
+  // Wilson Score Interval (95% confidence, z=1.96)
+  // Lower bound of confidence interval - conservative estimate
+  const p = pattern.success_count / n;
+  const z = 1.96;
+  
+  const confidence = (
+    p + z * z / (2 * n) - z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n)
+  ) / (1 + z * z / n);
 
   await supabase
     .from('extraction_patterns')
     .update({
-      confidence_score: confidence,
+      confidence_score: Math.max(0, Math.min(1, confidence)), // Clamp to [0, 1]
       is_active: confidence >= 0.3, // Deactivate if confidence drops below 30%
     })
     .eq('id', patternId);

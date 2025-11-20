@@ -376,6 +376,7 @@ export type Database = {
           is_verified: boolean | null
           last_scraped_at: string | null
           profile_pic_url: string | null
+          scrape_depth: number | null
           updated_at: string
           username: string
         }
@@ -389,6 +390,7 @@ export type Database = {
           is_verified?: boolean | null
           last_scraped_at?: string | null
           profile_pic_url?: string | null
+          scrape_depth?: number | null
           updated_at?: string
           username: string
         }
@@ -402,6 +404,7 @@ export type Database = {
           is_verified?: boolean | null
           last_scraped_at?: string | null
           profile_pic_url?: string | null
+          scrape_depth?: number | null
           updated_at?: string
           username?: string
         }
@@ -438,12 +441,14 @@ export type Database = {
           ocr_last_attempt_at: string | null
           ocr_last_error: string | null
           ocr_processed: boolean | null
+          ocr_text: string | null
           post_id: string
           post_url: string
           posted_at: string
           price: number | null
           signup_url: string | null
           stored_image_url: string | null
+          tags: string[] | null
           topic_confidence: number | null
           topic_label: string | null
           updated_at: string
@@ -478,12 +483,14 @@ export type Database = {
           ocr_last_attempt_at?: string | null
           ocr_last_error?: string | null
           ocr_processed?: boolean | null
+          ocr_text?: string | null
           post_id: string
           post_url: string
           posted_at: string
           price?: number | null
           signup_url?: string | null
           stored_image_url?: string | null
+          tags?: string[] | null
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
@@ -518,12 +525,14 @@ export type Database = {
           ocr_last_attempt_at?: string | null
           ocr_last_error?: string | null
           ocr_processed?: boolean | null
+          ocr_text?: string | null
           post_id?: string
           post_url?: string
           posted_at?: string
           price?: number | null
           signup_url?: string | null
           stored_image_url?: string | null
+          tags?: string[] | null
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
