@@ -35,30 +35,61 @@ export function preNormalizeText(text: string): string {
   return normalized.trim();
 }
 
-// Check if post is a vendor/merchant listing (not an event)
-export function isVendorPost(text: string): boolean {
-  // AGGRESSIVE vendor detection - ANY vendor keyword = reject
+// Check if post is DEFINITELY a vendor/merchant listing (hard reject)
+// This is a strict filter for obvious non-event vendor posts
+export function isVendorPostStrict(text: string): boolean {
   const strictVendorPatterns = [
     // Vendor recruitment/applications
     /\b(calling all vendors|vendor applications?|looking for vendors|vendor registration|vendor booth|vendor slots?|vendors? wanted)\b/i,
     /\b(apply as vendor|become a vendor|join as vendor|vendor inquiry)\b/i,
     
-    // Selling/commerce patterns
-    /\b(for sale|selling|buy now|purchase|order now|shop|available|in stock|limited quantity|pre-?order)\b/i,
+    // Direct selling/commerce patterns (strong signals)
     /\b(₱\d+|PHP\d+|P\d+)\s*(each|per|\/pc|\/piece|\/set|\/item)\b/i, // Price per item
     /\b(brand new|unused|sealed|authentic|original|replica)\b/i,
     
-    // Vendor logistics
-    /\b(delivery|shipping|meet-?up|cod|cash on delivery|courier|nationwide shipping)\b/i,
+    // Vendor logistics (very specific)
     /\b(booth rental|table rental|selling space|market stall|bazaar booth)\b/i,
+    /\b(cod|cash on delivery|nationwide shipping)\b/i,
     
-    // Sales inquiry patterns
-    /\b(inquiry|inquire|interested\?|dm for price|pm for price|message for price|whatsapp|viber)\b/i,
-    /\b(size|sizes|color|colors|available colors?|stocks?|variants?)\b/i,
+    // Sales inquiry patterns (strong signals)
+    /\b(dm for price|pm for price|message for price)\b/i,
+    /\b(size|sizes|color|colors)\s*[:\/]?\s*\b(s|m|l|xl|small|medium|large)\b/i, // Size variants
   ];
 
-  // ANY vendor pattern = automatically reject (no need to check event indicators)
   return strictVendorPatterns.some(pattern => pattern.test(text));
+}
+
+// Check if post has merchant/vendor-ish language (soft signal)
+// This doesn't hard-reject but indicates the post might be promotional
+export function isPossiblyVendorPost(text: string): boolean {
+  const softVendorPatterns = [
+    // Generic sales/shop language
+    /\b(for sale|selling|buy now|purchase|order now|shop now|available now|in stock|pre-?order)\b/i,
+    /\b(limited quantity|limited stock|while supplies last|get yours)\b/i,
+    
+    // Store/collection language
+    /\b(new collection|new arrival|now available|shop|store|boutique)\b/i,
+    /\b(check out our|visit our|browse our)\b/i,
+    
+    // Promotional language
+    /\b(sale|promo|discount|off|clearance|special offer)\b/i,
+    /\b(\d+%\s*off|buy \d+ get \d+)\b/i,
+    
+    // Softer logistics patterns
+    /\b(delivery|shipping|meet-?up|courier)\b/i,
+    
+    // Inquiry patterns (softer)
+    /\b(inquiry|inquire|interested\?|dm us|pm us|message us|whatsapp|viber)\b/i,
+    /\b(stocks?|variants?|available colors?)\b/i,
+  ];
+
+  return softVendorPatterns.some(pattern => pattern.test(text));
+}
+
+// Backward compatibility: keep isVendorPost as alias to strict version
+// This maintains existing behavior for current call sites
+export function isVendorPost(text: string): boolean {
+  return isVendorPostStrict(text);
 }
 
 // Extract price with learned patterns
@@ -546,13 +577,26 @@ export function autoTagPost(
   }
   
   // Market & Shopping
-  if (/\b(market|bazaar|thrift|shopping|sale|pop-?up|makers?)\b/i.test(combinedText)) {
+  if (/\b(market|bazaar|thrift|shopping|pop-?up|makers?)\b/i.test(combinedText)) {
     tags.push('market');
   }
   
   // Community & Networking
   if (/\b(community|networking|meetup|social|gathering)\b/i.test(combinedText)) {
     tags.push('community');
+  }
+  
+  // Merchant/Promotional content tags (new)
+  if (/\b(sale|promo|discount|clearance|\d+%\s*off|special offer|limited offer)\b/i.test(combinedText)) {
+    tags.push('sale');
+  }
+  
+  if (/\b(shop|store|boutique|buy now|purchase|order now|available now|new collection|new arrival)\b/i.test(combinedText)) {
+    tags.push('shop');
+  }
+  
+  if (/\b(for sale|selling|vendor|merchant|delivery|shipping|cod)\b/i.test(combinedText)) {
+    tags.push('promotion');
   }
   
   // Price-based tags
