@@ -829,7 +829,8 @@ Deno.serve(async (req) => {
         }
         
         // Optional: If post has merchant/promo tags and weak event structure, also flag for review
-        const hasMerchantTags = tags.some(tag => ['sale', 'shop', 'promotion'].includes(tag));
+        const merchantTagsSet = new Set(['sale', 'shop', 'promotion']);
+        const hasMerchantTags = tags.some(tag => merchantTagsSet.has(tag));
         const hasWeakEventStructure = !eventInfo.eventDate || !eventInfo.eventTime;
         if (hasMerchantTags && hasWeakEventStructure) {
           needsReview = true;

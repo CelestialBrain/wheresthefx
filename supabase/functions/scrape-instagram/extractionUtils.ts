@@ -64,7 +64,7 @@ export function isVendorPostStrict(text: string): boolean {
     
     // Sales inquiry patterns (strong signals)
     /\b(dm for price|pm for price|message for price)\b/i,
-    /\b(size|sizes|color|colors)\s*[:\/]?\s*\b(s|m|l|xl|small|medium|large)\b/i, // Size variants
+    /\b(size|sizes|color|colors)\s*[:\/]?\s*(?:s|m|l|xl|small|medium|large)\b/i, // Size variants
   ];
 
   return strictVendorPatterns.some(pattern => pattern.test(text));
