@@ -36,7 +36,22 @@ export function preNormalizeText(text: string): string {
 }
 
 // Check if post is a vendor/merchant listing (not an event)
-export function isVendorPost(text: string): boolean {
+export async function isVendorPost(
+  text: string,
+  supabase?: SupabaseClient
+): Promise<{ isVendor: boolean; patternId?: string | null }> {
+  // Try learned patterns first if supabase client provided
+  if (supabase) {
+    const learned = await extractWithLearnedPatterns(supabase, text, 'vendor');
+    if (learned.value) {
+      // If pattern matched and value is truthy, it's a vendor post
+      return {
+        isVendor: true,
+        patternId: learned.patternId
+      };
+    }
+  }
+
   // AGGRESSIVE vendor detection - ANY vendor keyword = reject
   const strictVendorPatterns = [
     // Vendor recruitment/applications
@@ -58,7 +73,8 @@ export function isVendorPost(text: string): boolean {
   ];
 
   // ANY vendor pattern = automatically reject (no need to check event indicators)
-  return strictVendorPatterns.some(pattern => pattern.test(text));
+  const isVendor = strictVendorPatterns.some(pattern => pattern.test(text));
+  return { isVendor };
 }
 
 // Extract price with learned patterns
@@ -431,8 +447,25 @@ function isValidAddress(address: string): boolean {
   return streetIndicators.test(address) || locationIndicators.test(address);
 }
 
-// PHASE 3: Enhanced venue extraction with address validation
-export function extractVenue(text: string, locationName?: string | null): { venueName: string | null; address: string | null } {
+// PHASE 3: Enhanced venue extraction with address validation and learned patterns
+export async function extractVenue(
+  text: string,
+  locationName?: string | null,
+  supabase?: SupabaseClient
+): Promise<{ venueName: string | null; address: string | null; patternId?: string | null }> {
+  // Try learned patterns first if supabase client provided
+  if (supabase) {
+    const learned = await extractWithLearnedPatterns(supabase, text, 'venue');
+    if (learned.value) {
+      return {
+        venueName: learned.value,
+        address: null,
+        patternId: learned.patternId
+      };
+    }
+  }
+
+  // Fall back to hardcoded patterns
   // Priority 1: Pin emoji 📍 with venue and optional address
   const pinPattern = /📍\s*([^\n,]+?)(?:,\s*([^\n]+?))?(?=\n|$|[📍🗓️⏰🎟️])/;
   const pinMatch = text.match(pinPattern);

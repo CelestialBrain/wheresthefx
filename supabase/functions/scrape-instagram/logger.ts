@@ -103,6 +103,7 @@ export class ScraperLogger {
     extracted_value: any,
     method: string,
     pattern_used?: string,
+    pattern_id?: string | null,
     duration_ms?: number
   ) {
     await this.log({
@@ -116,6 +117,7 @@ export class ScraperLogger {
         extracted_value,
         method,
         pattern_used,
+        pattern_id,
       },
       duration_ms,
     });
@@ -160,6 +162,14 @@ export class ScraperLogger {
         caption_preview: caption.substring(0, 200),
         parsed_fields: Object.keys(parsed_data).filter(k => parsed_data[k] !== undefined),
         parsed_data,
+        // Include pattern IDs if present
+        pattern_ids: {
+          price: parsed_data.pricePatternId,
+          date: parsed_data.datePatternId,
+          time: parsed_data.timePatternId,
+          venue: parsed_data.venuePatternId,
+          vendor: parsed_data.vendorPatternId,
+        },
       },
       duration_ms,
     });
