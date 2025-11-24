@@ -2,6 +2,17 @@
  * Extraction utilities for parsing event information from Instagram captions
  * Supports English, Filipino, and OCR-corrupted text
  * NOW INTEGRATED WITH LEARNED PATTERNS FROM DATABASE
+ * 
+ * VENDOR DETECTION IMPROVEMENTS (Phase 1):
+ * - Split vendor detection into strict (hard reject) and soft (signal) functions
+ * - isVendorPostStrict(): Hard rejects obvious vendor posts (booth rentals, price per item, etc.)
+ * - isPossiblyVendorPost(): Soft detection for merchant-ish language (sales, promos, shop terms)
+ * - isVendorPost(): Maintained as alias to isVendorPostStrict() for backward compatibility
+ * 
+ * MERCHANT TAGGING (Phase 1):
+ * - autoTagPost() enhanced with merchant/promo tags: 'sale', 'shop', 'promotion'
+ * - These tags help identify borderline merchant/event posts
+ * - Used in conjunction with needsReview flag for conservative classification
  */
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
@@ -587,6 +598,7 @@ export function autoTagPost(
   }
   
   // Merchant/Promotional content tags (new)
+  // Note: 'sale' tag is separate from 'market' to distinguish merchant sales from market events
   if (/\b(sale|promo|discount|clearance|\d+%\s*off|special offer|limited offer)\b/i.test(combinedText)) {
     tags.push('sale');
   }

@@ -13,6 +13,23 @@ import {
 } from './extractionUtils.ts';
 import { ScraperLogger } from './logger.ts';
 
+/*
+ * DATABASE SCHEMA NOTES:
+ * 
+ * The instagram_posts table includes the following columns used by this function:
+ * - needs_review: BOOLEAN (already exists via migration 20251023171840)
+ *   Used to flag posts that need manual review due to:
+ *   a) Missing critical info (date, time, or location)
+ *   b) Borderline merchant/event classification
+ *   c) Merchant tags with weak event structure
+ * 
+ * - tags: TEXT[] (already exists)
+ *   Auto-generated tags including new merchant/promo tags:
+ *   'sale', 'shop', 'promotion' (for merchant content detection)
+ * 
+ * No schema migrations are needed for this change.
+ */
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -281,13 +298,15 @@ async function parseEventFromCaption(
   const maybeVendor = isPossiblyVendorPost(normalized);
   
   // STEP 6: Determine if this is a borderline case that needs review
+  // Conservative approach: borderline merchant/event posts are marked as events but flagged for review
+  // This prioritizes precision by ensuring suspicious posts get manual verification before going live
   const looksLikeEvent = hasEventKeyword && hasMinimumInfo;
   let needsReview = false;
   let isEvent = false;
   
   if (looksLikeEvent && maybeVendor) {
     // Borderline case: has event structure but also merchant signals
-    // Mark as event but flag for review (prioritizing precision)
+    // Mark as event but flag for manual review to catch merchant posts masquerading as events
     isEvent = true;
     needsReview = true;
   } else if (looksLikeEvent) {
