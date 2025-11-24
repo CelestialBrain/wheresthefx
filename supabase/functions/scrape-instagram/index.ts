@@ -2,6 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
 import {
   preNormalizeText,
   isVendorPost,
+  isVendorPostStrict,
+  isPossiblyVendorPost,
   extractPrice,
   extractTime,
   extractDate,
@@ -10,6 +12,23 @@ import {
   autoTagPost,
 } from './extractionUtils.ts';
 import { ScraperLogger } from './logger.ts';
+
+/*
+ * DATABASE SCHEMA NOTES:
+ * 
+ * The instagram_posts table includes the following columns used by this function:
+ * - needs_review: BOOLEAN (already exists via migration 20251023171840)
+ *   Used to flag posts that need manual review due to:
+ *   a) Missing critical info (date, time, or location)
+ *   b) Borderline merchant/event classification
+ *   c) Merchant tags with weak event structure
+ * 
+ * - tags: TEXT[] (already exists)
+ *   Auto-generated tags including new merchant/promo tags:
+ *   'sale', 'shop', 'promotion' (for merchant content detection)
+ * 
+ * No schema migrations are needed for this change.
+ */
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -199,19 +218,20 @@ async function parseEventFromCaption(
   price?: number;
   isFree?: boolean;
   isEvent: boolean;
+  needsReview?: boolean;
   timeValidationFailed?: boolean;
 }> {
   if (!caption) {
-    return { isEvent: false, isFree: true };
+    return { isEvent: false, isFree: true, needsReview: false };
   }
 
   // Pre-normalize text to fix OCR issues
   const normalized = preNormalizeText(caption);
   const lowercaseCaption = normalized.toLowerCase();
   
-  // STEP 1: Check for vendor/merchant posts (not events)
-  if (isVendorPost(normalized)) {
-    return { isEvent: false, isFree: true };
+  // STEP 1: Check for vendor/merchant posts using STRICT detection (hard reject)
+  if (isVendorPostStrict(normalized)) {
+    return { isEvent: false, isFree: true, needsReview: false };
   }
   
   // STEP 2: Check for exclusion patterns (skip generic celebrations)
@@ -235,10 +255,10 @@ async function parseEventFromCaption(
         const hasLocation = locationName || venueInfo.venueName;
         
         if (!hasDate || !hasLocation) {
-          return { isEvent: false, isFree: true };
+          return { isEvent: false, isFree: true, needsReview: false };
         }
       } else {
-        return { isEvent: false, isFree: true };
+        return { isEvent: false, isFree: true, needsReview: false };
       }
     }
   }
@@ -257,7 +277,7 @@ async function parseEventFromCaption(
   const hasEventKeyword = eventKeywords.some(keyword => lowercaseCaption.includes(keyword));
 
   if (!hasEventKeyword) {
-    return { isEvent: false, isFree: true };
+    return { isEvent: false, isFree: true, needsReview: false };
   }
 
   // STEP 4: Extract event details using improved utilities with learned patterns
@@ -274,6 +294,35 @@ async function parseEventFromCaption(
   // Consider it an event if we have event keywords + (date OR location)
   const hasMinimumInfo = !!(venueInfo.venueName || dateInfo.eventDate);
   
+  // STEP 5: Check for soft vendor signals (merchant-ish content)
+  const maybeVendor = isPossiblyVendorPost(normalized);
+  
+  // STEP 6: Determine if this is a borderline case that needs review
+  // Conservative approach: borderline merchant/event posts are marked as events but flagged for review
+  // This prioritizes precision by ensuring suspicious posts get manual verification before going live
+  const looksLikeEvent = hasEventKeyword && hasMinimumInfo;
+  let needsReview = false;
+  let isEvent = false;
+  
+  if (looksLikeEvent && maybeVendor) {
+    // Borderline case: has event structure but also merchant signals
+    // Mark as event but flag for manual review to catch merchant posts masquerading as events
+    isEvent = true;
+    needsReview = true;
+  } else if (looksLikeEvent) {
+    // Clear event case
+    isEvent = true;
+    needsReview = false;
+  } else if (maybeVendor) {
+    // Has merchant signals but not enough event structure
+    isEvent = false;
+    needsReview = false;
+  } else {
+    // Doesn't look like an event
+    isEvent = false;
+    needsReview = false;
+  }
+  
   return {
     eventTitle,
     eventDate: dateInfo.eventDate || undefined,
@@ -285,7 +334,8 @@ async function parseEventFromCaption(
     signupUrl: signupUrl || undefined,
     price: priceInfo?.amount,
     isFree: priceInfo?.isFree ?? true,
-    isEvent: hasMinimumInfo,
+    isEvent,
+    needsReview,
     timeValidationFailed: false,
   };
 }
@@ -711,9 +761,6 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Determine if post needs review (missing critical info or time validation failed)
-        const needsReview = forceImport || !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName || eventInfo.timeValidationFailed;
-
         // Extract image URL from Apify data (displayUrl or imageUrl)
         const imageUrl = item.displayUrl || item.imageUrl;
 
@@ -771,6 +818,23 @@ Deno.serve(async (req) => {
           eventDate: eventInfo.eventDate,
           eventTime: eventInfo.eventTime
         });
+
+        // Determine if post needs review
+        // Start with the needsReview flag from parseEventFromCaption (which detects borderline merchant/event cases)
+        let needsReview = eventInfo.needsReview || false;
+        
+        // Also flag for review if missing critical info or time validation failed
+        if (forceImport || !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName || eventInfo.timeValidationFailed) {
+          needsReview = true;
+        }
+        
+        // Optional: If post has merchant/promo tags and weak event structure, also flag for review
+        const merchantTagsSet = new Set(['sale', 'shop', 'promotion']);
+        const hasMerchantTags = tags.some(tag => merchantTagsSet.has(tag));
+        const hasWeakEventStructure = !eventInfo.eventDate || !eventInfo.eventTime;
+        if (hasMerchantTags && hasWeakEventStructure) {
+          needsReview = true;
+        }
 
         // Prepare insert data - allow NULL for missing data
         const insertData: any = {
@@ -1074,8 +1138,9 @@ Deno.serve(async (req) => {
               }
             }
 
-            // Detect incomplete data
+            // Detect incomplete data and combine with eventInfo.needsReview
             const hasIncompleteData = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
+            const needsReview = eventInfo.needsReview || hasIncompleteData;
 
             // Extract image URL from Apify data
             const imageUrl = post.displayUrl || post.imageUrl;
@@ -1105,7 +1170,7 @@ Deno.serve(async (req) => {
               signup_url: eventInfo.signupUrl,
               price: eventInfo.price,
               is_free: eventInfo.isFree,
-                needs_review: hasIncompleteData,
+                needs_review: needsReview,
                 ocr_processed: false,
               })
               .select()
