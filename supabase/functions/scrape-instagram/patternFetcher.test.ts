@@ -264,4 +264,3 @@ Deno.test('Pattern selection - multiple patterns with different priorities', () 
 });
 
 console.log('✓ All pattern selection tests passed!');
-

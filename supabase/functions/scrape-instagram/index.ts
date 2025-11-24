@@ -204,6 +204,7 @@ async function parseEventFromCaption(
   datePatternId?: string | null;
   timePatternId?: string | null;
   venuePatternId?: string | null;
+  vendorPatternId?: string | null;
 }> {
   if (!caption) {
     return { isEvent: false, isFree: true };
@@ -216,7 +217,11 @@ async function parseEventFromCaption(
   // STEP 1: Check for vendor/merchant posts (not events)
   const vendorCheck = await isVendorPost(normalized, supabase);
   if (vendorCheck.isVendor) {
-    return { isEvent: false, isFree: true };
+    return { 
+      isEvent: false, 
+      isFree: true,
+      vendorPatternId: vendorCheck.patternId
+    };
   }
   
   // STEP 2: Check for exclusion patterns (skip generic celebrations)
@@ -297,6 +302,7 @@ async function parseEventFromCaption(
     datePatternId: dateInfo.patternId,
     timePatternId: timeInfo.patternId,
     venuePatternId: venueInfo.patternId,
+    vendorPatternId: null, // Not a vendor post if we got here
   };
 }
 

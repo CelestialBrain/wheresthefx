@@ -79,10 +79,11 @@ async function updatePatternStats(
         .single();
 
       if (pattern) {
+        const currentCount = pattern[field] || 0;
         await supabase
           .from('extraction_patterns')
           .update({
-            [field]: (pattern[field as keyof typeof pattern] as number || 0) + 1,
+            [field]: currentCount + 1,
             last_used_at: new Date().toISOString(),
           })
           .eq('id', patternId);

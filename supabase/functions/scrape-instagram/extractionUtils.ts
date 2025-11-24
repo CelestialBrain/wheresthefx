@@ -477,6 +477,7 @@ export async function extractVenue(
     return {
       venueName,
       address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+      patternId: null,
     };
   }
   
@@ -493,6 +494,7 @@ export async function extractVenue(
       return {
         venueName,
         address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+        patternId: null,
       };
     }
   }
@@ -503,7 +505,7 @@ export async function extractVenue(
   
   if (mentionMatch) {
     const venueName = mentionMatch[1].replace(/_/g, ' ').trim();
-    return { venueName, address: null };
+    return { venueName, address: null, patternId: null };
   }
   
   // Priority 4: "at" or "sa" (Filipino) patterns
@@ -519,16 +521,17 @@ export async function extractVenue(
       return {
         venueName,
         address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+        patternId: null,
       };
     }
   }
   
   // Fallback to Instagram location tag if available
   if (locationName) {
-    return { venueName: locationName, address: null };
+    return { venueName: locationName, address: null, patternId: null };
   }
   
-  return { venueName: null, address: null };
+  return { venueName: null, address: null, patternId: null };
 }
 
 /**
