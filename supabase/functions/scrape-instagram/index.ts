@@ -10,6 +10,7 @@ import {
   extractVenue,
   extractSignupUrl,
   autoTagPost,
+  isValidAddress,
 } from './extractionUtils.ts';
 import { ScraperLogger } from './logger.ts';
 
@@ -554,6 +555,59 @@ Deno.serve(async (req) => {
         
         await logger.logParsing(postId, undefined, item.caption || '', eventInfo, parseDuration);
 
+        // PHASE 3: Validate and geocode venue if address exists
+        let locationLat: number | null = null;
+        let locationLng: number | null = null;
+        let geocodedAddress: string | null = null;
+        
+        if (eventInfo.locationName && eventInfo.locationAddress && isValidAddress(eventInfo.locationAddress)) {
+          try {
+            await logger.info('validation', `Validating venue: ${eventInfo.locationName}`, { 
+              postId, 
+              venue: eventInfo.locationName,
+              address: eventInfo.locationAddress 
+            });
+            
+            const geocodeStart = Date.now();
+            const { data: geocodeData, error: geocodeError } = await supabase.functions.invoke('validate-venue', {
+              body: { 
+                venue: eventInfo.locationName, 
+                address: eventInfo.locationAddress 
+              },
+            });
+            const geocodeDuration = Date.now() - geocodeStart;
+            
+            if (!geocodeError && geocodeData?.isValid) {
+              locationLat = geocodeData.lat;
+              locationLng = geocodeData.lng;
+              geocodedAddress = geocodeData.formattedAddress || eventInfo.locationAddress;
+              
+              await logger.success('validation', 'Venue geocoded successfully', {
+                postId,
+                venue: eventInfo.locationName,
+                lat: geocodeData.lat,
+                lng: geocodeData.lng,
+                confidence: geocodeData.confidence,
+                duration_ms: geocodeDuration
+              });
+            } else {
+              await logger.warn('validation', 'Venue validation failed', {
+                postId,
+                venue: eventInfo.locationName,
+                error: geocodeError?.message || 'No valid coordinates returned'
+              });
+            }
+          } catch (err) {
+            const error = err as Error;
+            await logger.error('validation', 'Geocoding error', { 
+              postId, 
+              venue: eventInfo.locationName 
+            }, { 
+              error: error.message 
+            });
+          }
+        }
+
         // Skip non-events (unless force import)
         if (!eventInfo.isEvent && !forceImport) {
           totalSkipped++;
@@ -864,7 +918,9 @@ Deno.serve(async (req) => {
           event_title: eventInfo.eventTitle,
           event_date: eventInfo.eventDate || null, // Allow null for TBD dates
           location_name: eventInfo.locationName,
-          location_address: eventInfo.locationAddress,
+          location_address: geocodedAddress || eventInfo.locationAddress,
+          location_lat: locationLat,
+          location_lng: locationLng,
           signup_url: eventInfo.signupUrl,
           needs_review: needsReview,
           tags: tags, // PHASE 1: Add auto-generated tags
