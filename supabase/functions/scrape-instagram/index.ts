@@ -235,15 +235,8 @@ async function parseEventFromCaption(
   const lowercaseCaption = normalized.toLowerCase();
   
   // STEP 1: Check for vendor/merchant posts using STRICT detection (hard reject)
-  // Use async version first to try learned patterns
-  const vendorCheck = await isVendorPost(normalized, supabase);
-  if (vendorCheck.isVendor) {
-    return { 
-      isEvent: false, 
-      isFree: true,
-      needsReview: false,
-      vendorPatternId: vendorCheck.patternId
-    };
+  if (isVendorPostStrict(normalized)) {
+    return { isEvent: false, isFree: true, needsReview: false };
   }
   
   // STEP 2: Check for exclusion patterns (skip generic celebrations)
@@ -779,10 +772,6 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Determine if post needs review
-        // Combine the merchant/borderline detection with missing critical info checks
-        const needsReview = eventInfo.needsReview || forceImport || !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName || eventInfo.timeValidationFailed;
-
         // Extract image URL from Apify data (displayUrl or imageUrl)
         const imageUrl = item.displayUrl || item.imageUrl;
 
@@ -840,6 +829,23 @@ Deno.serve(async (req) => {
           eventDate: eventInfo.eventDate,
           eventTime: eventInfo.eventTime
         });
+
+        // Determine if post needs review
+        // Start with the needsReview flag from parseEventFromCaption (which detects borderline merchant/event cases)
+        let needsReview = eventInfo.needsReview || false;
+        
+        // Also flag for review if missing critical info or time validation failed
+        if (forceImport || !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName || eventInfo.timeValidationFailed) {
+          needsReview = true;
+        }
+        
+        // Optional: If post has merchant/promo tags and weak event structure, also flag for review
+        const merchantTagsSet = new Set(['sale', 'shop', 'promotion']);
+        const hasMerchantTags = tags.some(tag => merchantTagsSet.has(tag));
+        const hasWeakEventStructure = !eventInfo.eventDate || !eventInfo.eventTime;
+        if (hasMerchantTags && hasWeakEventStructure) {
+          needsReview = true;
+        }
 
         // Prepare insert data - allow NULL for missing data
         const insertData: any = {
@@ -1143,8 +1149,9 @@ Deno.serve(async (req) => {
               }
             }
 
-            // Detect incomplete data
+            // Detect incomplete data and combine with eventInfo.needsReview
             const hasIncompleteData = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
+            const needsReview = eventInfo.needsReview || hasIncompleteData;
 
             // Extract image URL from Apify data
             const imageUrl = post.displayUrl || post.imageUrl;
@@ -1174,7 +1181,7 @@ Deno.serve(async (req) => {
               signup_url: eventInfo.signupUrl,
               price: eventInfo.price,
               is_free: eventInfo.isFree,
-                needs_review: hasIncompleteData,
+                needs_review: needsReview,
                 ocr_processed: false,
               })
               .select()

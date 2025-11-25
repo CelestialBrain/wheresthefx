@@ -2,6 +2,17 @@
  * Extraction utilities for parsing event information from Instagram captions
  * Supports English, Filipino, and OCR-corrupted text
  * NOW INTEGRATED WITH LEARNED PATTERNS FROM DATABASE
+ * 
+ * VENDOR DETECTION IMPROVEMENTS (Phase 1):
+ * - Split vendor detection into strict (hard reject) and soft (signal) functions
+ * - isVendorPostStrict(): Hard rejects obvious vendor posts (booth rentals, price per item, etc.)
+ * - isPossiblyVendorPost(): Soft detection for merchant-ish language (sales, promos, shop terms)
+ * - isVendorPost(): Maintained as alias to isVendorPostStrict() for backward compatibility
+ * 
+ * MERCHANT TAGGING (Phase 1):
+ * - autoTagPost() enhanced with merchant/promo tags: 'sale', 'shop', 'promotion'
+ * - These tags help identify borderline merchant/event posts
+ * - Used in conjunction with needsReview flag for conservative classification
  */
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
@@ -86,27 +97,10 @@ export function isPossiblyVendorPost(text: string): boolean {
   return softVendorPatterns.some(pattern => pattern.test(text));
 }
 
-// Check if post is a vendor/merchant listing with learned pattern support
-// Async version that tries learned patterns first, then falls back to strict detection
-export async function isVendorPost(
-  text: string,
-  supabase?: SupabaseClient
-): Promise<{ isVendor: boolean; patternId?: string | null }> {
-  // Try learned patterns first if supabase client provided
-  if (supabase) {
-    const learned = await extractWithLearnedPatterns(supabase, text, 'vendor');
-    if (learned.value) {
-      // If pattern matched and value is truthy, it's a vendor post
-      return {
-        isVendor: true,
-        patternId: learned.patternId
-      };
-    }
-  }
-
-  // Fall back to strict vendor detection
-  const isVendor = isVendorPostStrict(text);
-  return { isVendor, patternId: null };
+// Backward compatibility: keep isVendorPost as alias to strict version
+// This maintains existing behavior for current call sites
+export function isVendorPost(text: string): boolean {
+  return isVendorPostStrict(text);
 }
 
 // Extract price with learned patterns
