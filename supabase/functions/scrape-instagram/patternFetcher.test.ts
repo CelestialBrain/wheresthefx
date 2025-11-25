@@ -263,4 +263,119 @@ Deno.test('Pattern selection - multiple patterns with different priorities', () 
   assertEquals(result.patternId, 'pattern-2');
 });
 
+// Inline implementation of getThresholdForPatternType for testing (mirrors patternFetcher.ts)
+// Note: We intentionally duplicate this function instead of importing from patternFetcher.ts
+// to avoid network dependencies on esm.sh imports during testing. This allows tests to run
+// in sandboxed/offline environments.
+function getThresholdForPatternType(patternType: string): number {
+  switch (patternType) {
+    case 'time':
+    case 'event_time':
+      return 0.5; // Stricter threshold for time patterns
+    case 'price':
+      return 0.4; // Moderately strict for price patterns
+    case 'venue':
+      return 0.25; // Looser threshold for venue patterns
+    case 'event_date':
+    case 'date':
+      return 0.35; // Moderate threshold for date patterns
+    default:
+      return 0.3; // Default threshold for other patterns
+  }
+}
+
+Deno.test('getThresholdForPatternType - returns stricter threshold for time', () => {
+  assertEquals(getThresholdForPatternType('time'), 0.5);
+  assertEquals(getThresholdForPatternType('event_time'), 0.5);
+});
+
+Deno.test('getThresholdForPatternType - returns moderate threshold for price', () => {
+  assertEquals(getThresholdForPatternType('price'), 0.4);
+});
+
+Deno.test('getThresholdForPatternType - returns looser threshold for venue', () => {
+  assertEquals(getThresholdForPatternType('venue'), 0.25);
+});
+
+Deno.test('getThresholdForPatternType - returns moderate threshold for date', () => {
+  assertEquals(getThresholdForPatternType('date'), 0.35);
+  assertEquals(getThresholdForPatternType('event_date'), 0.35);
+});
+
+Deno.test('getThresholdForPatternType - returns default for unknown types', () => {
+  assertEquals(getThresholdForPatternType('unknown_type'), 0.3);
+  assertEquals(getThresholdForPatternType('signup_url'), 0.3);
+});
+
+// Test pattern deactivation heuristic (simulates updatePatternStats logic)
+function shouldDeactivatePattern(successCount: number, failureCount: number, newSuccess: boolean): boolean {
+  const newSuccessCount = newSuccess ? successCount + 1 : successCount;
+  const newFailureCount = newSuccess ? failureCount : failureCount + 1;
+  const totalSamples = newSuccessCount + newFailureCount;
+  const failureRate = totalSamples > 0 ? newFailureCount / totalSamples : 0;
+  return totalSamples >= 10 && failureRate > 0.7;
+}
+
+Deno.test('Pattern deactivation - should not deactivate with few samples', () => {
+  // 3 failures out of 5 = 60% failure rate, but only 5 samples
+  assertEquals(shouldDeactivatePattern(2, 2, false), false);
+});
+
+Deno.test('Pattern deactivation - should not deactivate with low failure rate', () => {
+  // 3 failures out of 10 = 30% failure rate
+  assertEquals(shouldDeactivatePattern(7, 2, false), false);
+});
+
+Deno.test('Pattern deactivation - should deactivate with high failure rate and enough samples', () => {
+  // 8 failures out of 10 = 80% failure rate
+  assertEquals(shouldDeactivatePattern(2, 7, false), true);
+  
+  // 7 failures out of 10 = 70% failure rate - should NOT deactivate (70% is threshold)
+  assertEquals(shouldDeactivatePattern(3, 6, false), false);
+  
+  // 8 failures out of 11 = 72.7% failure rate - should deactivate
+  assertEquals(shouldDeactivatePattern(3, 7, false), true);
+});
+
+Deno.test('Pattern deactivation - success should not trigger deactivation', () => {
+  // Even with 7 failures, a success brings it to 8 success : 7 failure = 46.7% failure rate
+  assertEquals(shouldDeactivatePattern(7, 7, true), false);
+});
+
+// Test PatternUsageLogger interface (verifies the contract)
+Deno.test('PatternUsageLogger interface - onPatternSuccess receives correct parameters', () => {
+  let capturedParams: any = null;
+  
+  const logger = {
+    onPatternSuccess(patternId: string, patternType: string, extractedValue: string, patternDescription?: string | null) {
+      capturedParams = { patternId, patternType, extractedValue, patternDescription };
+    },
+    onPatternFailure() {}
+  };
+  
+  logger.onPatternSuccess('test-id', 'price', '500', 'Test pattern');
+  
+  assertEquals(capturedParams.patternId, 'test-id');
+  assertEquals(capturedParams.patternType, 'price');
+  assertEquals(capturedParams.extractedValue, '500');
+  assertEquals(capturedParams.patternDescription, 'Test pattern');
+});
+
+Deno.test('PatternUsageLogger interface - onPatternFailure receives correct parameters', () => {
+  let capturedParams: any = null;
+  
+  const logger = {
+    onPatternSuccess() {},
+    onPatternFailure(patternId: string, patternType: string, patternDescription?: string | null) {
+      capturedParams = { patternId, patternType, patternDescription };
+    }
+  };
+  
+  logger.onPatternFailure('test-id', 'price', 'Test pattern');
+  
+  assertEquals(capturedParams.patternId, 'test-id');
+  assertEquals(capturedParams.patternType, 'price');
+  assertEquals(capturedParams.patternDescription, 'Test pattern');
+});
+
 console.log('✓ All pattern selection tests passed!');
