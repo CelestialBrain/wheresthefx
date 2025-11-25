@@ -264,6 +264,9 @@ Deno.test('Pattern selection - multiple patterns with different priorities', () 
 });
 
 // Inline implementation of getThresholdForPatternType for testing (mirrors patternFetcher.ts)
+// Note: We intentionally duplicate this function instead of importing from patternFetcher.ts
+// to avoid network dependencies on esm.sh imports during testing. This allows tests to run
+// in sandboxed/offline environments.
 function getThresholdForPatternType(patternType: string): number {
   switch (patternType) {
     case 'time':

@@ -131,7 +131,6 @@ async function updatePatternStats(
   // Fire and forget - don't await this
   setTimeout(async () => {
     try {
-      const field = success ? 'success_count' : 'failure_count';
       const { data: pattern } = await supabase
         .from('extraction_patterns')
         .select('success_count, failure_count')
@@ -139,9 +138,8 @@ async function updatePatternStats(
         .single();
 
       if (pattern) {
-        const currentCount = pattern[field] || 0;
-        const newSuccessCount = success ? (pattern.success_count || 0) + 1 : (pattern.success_count || 0);
-        const newFailureCount = success ? (pattern.failure_count || 0) : (pattern.failure_count || 0) + 1;
+        const newSuccessCount = (pattern.success_count || 0) + (success ? 1 : 0);
+        const newFailureCount = (pattern.failure_count || 0) + (success ? 0 : 1);
         const totalSamples = newSuccessCount + newFailureCount;
         
         // Cooldown/deactivation heuristic:
@@ -150,7 +148,8 @@ async function updatePatternStats(
         const shouldDeactivate = totalSamples >= 10 && failureRate > 0.7;
         
         const updateData: Record<string, unknown> = {
-          [field]: currentCount + 1,
+          success_count: newSuccessCount,
+          failure_count: newFailureCount,
           last_used_at: new Date().toISOString(),
         };
         
