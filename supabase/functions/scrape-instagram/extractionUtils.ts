@@ -473,8 +473,25 @@ function isValidAddress(address: string): boolean {
   return streetIndicators.test(address) || locationIndicators.test(address);
 }
 
-// PHASE 3: Enhanced venue extraction with address validation
-export function extractVenue(text: string, locationName?: string | null): { venueName: string | null; address: string | null } {
+// PHASE 3: Enhanced venue extraction with address validation and learned patterns
+export async function extractVenue(
+  text: string,
+  locationName?: string | null,
+  supabase?: SupabaseClient
+): Promise<{ venueName: string | null; address: string | null; patternId?: string | null }> {
+  // Try learned patterns first if supabase client provided
+  if (supabase) {
+    const learned = await extractWithLearnedPatterns(supabase, text, 'venue');
+    if (learned.value) {
+      return {
+        venueName: learned.value,
+        address: null,
+        patternId: learned.patternId
+      };
+    }
+  }
+
+  // Fall back to hardcoded patterns
   // Priority 1: Pin emoji 📍 with venue and optional address
   const pinPattern = /📍\s*([^\n,]+?)(?:,\s*([^\n]+?))?(?=\n|$|[📍🗓️⏰🎟️])/;
   const pinMatch = text.match(pinPattern);
@@ -486,6 +503,7 @@ export function extractVenue(text: string, locationName?: string | null): { venu
     return {
       venueName,
       address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+      patternId: null,
     };
   }
   
@@ -502,6 +520,7 @@ export function extractVenue(text: string, locationName?: string | null): { venu
       return {
         venueName,
         address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+        patternId: null,
       };
     }
   }
@@ -512,7 +531,7 @@ export function extractVenue(text: string, locationName?: string | null): { venu
   
   if (mentionMatch) {
     const venueName = mentionMatch[1].replace(/_/g, ' ').trim();
-    return { venueName, address: null };
+    return { venueName, address: null, patternId: null };
   }
   
   // Priority 4: "at" or "sa" (Filipino) patterns
@@ -528,16 +547,17 @@ export function extractVenue(text: string, locationName?: string | null): { venu
       return {
         venueName,
         address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+        patternId: null,
       };
     }
   }
   
   // Fallback to Instagram location tag if available
   if (locationName) {
-    return { venueName: locationName, address: null };
+    return { venueName: locationName, address: null, patternId: null };
   }
   
-  return { venueName: null, address: null };
+  return { venueName: null, address: null, patternId: null };
 }
 
 /**

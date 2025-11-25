@@ -220,6 +220,11 @@ async function parseEventFromCaption(
   isEvent: boolean;
   needsReview?: boolean;
   timeValidationFailed?: boolean;
+  pricePatternId?: string | null;
+  datePatternId?: string | null;
+  timePatternId?: string | null;
+  venuePatternId?: string | null;
+  vendorPatternId?: string | null;
 }> {
   if (!caption) {
     return { isEvent: false, isFree: true, needsReview: false };
@@ -251,7 +256,7 @@ async function parseEventFromCaption(
       if (hasAnniversary) {
         const dateInfo = await extractDate(normalized, supabase);
         const hasDate = !!dateInfo.eventDate;
-        const venueInfo = await extractVenue(normalized, supabase);
+        const venueInfo = await extractVenue(normalized, locationName, supabase);
         const hasLocation = locationName || venueInfo.venueName;
         
         if (!hasDate || !hasLocation) {
@@ -288,7 +293,7 @@ async function parseEventFromCaption(
   const priceInfo = await extractPrice(normalized, supabase);
   const timeInfo = await extractTime(normalized, supabase);
   const dateInfo = await extractDate(normalized, supabase);
-  const venueInfo = await extractVenue(normalized, supabase);
+  const venueInfo = await extractVenue(normalized, locationName, supabase);
   const signupUrl = extractSignupUrl(normalized);
 
   // Consider it an event if we have event keywords + (date OR location)
@@ -337,6 +342,12 @@ async function parseEventFromCaption(
     isEvent,
     needsReview,
     timeValidationFailed: false,
+    // Pattern IDs for logging and analytics
+    pricePatternId: priceInfo?.patternId,
+    datePatternId: dateInfo.patternId,
+    timePatternId: timeInfo.patternId,
+    venuePatternId: venueInfo.patternId,
+    vendorPatternId: null, // Not a vendor post if we got here
   };
 }
 
