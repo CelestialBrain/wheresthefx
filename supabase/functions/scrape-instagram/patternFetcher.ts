@@ -48,7 +48,6 @@ export async function fetchLearnedPatterns(
     .eq('pattern_type', patternType)
     .eq('is_active', true)
     .gte('confidence_score', 0.3) // Lower threshold to allow learning
-    .order('priority', { ascending: true, nullsFirst: false }) // Lower priority = higher ranking
     .order('confidence_score', { ascending: false })
     .limit(20);
 
