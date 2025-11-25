@@ -74,7 +74,7 @@ async function updatePatternStats(
       const field = success ? 'success_count' : 'failure_count';
       const { data: pattern } = await supabase
         .from('extraction_patterns')
-        .select(field)
+        .select('success_count, failure_count')
         .eq('id', patternId)
         .single();
 

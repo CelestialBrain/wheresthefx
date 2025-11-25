@@ -461,7 +461,7 @@ export async function extractDate(
 /**
  * Validate if a string looks like a real street address
  */
-function isValidAddress(address: string): boolean {
+export function isValidAddress(address: string): boolean {
   if (!address || address.length < 10) return false;
   
   // Must contain street indicators
