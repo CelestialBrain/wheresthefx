@@ -13,6 +13,12 @@
  * - autoTagPost() enhanced with merchant/promo tags: 'sale', 'shop', 'promotion'
  * - These tags help identify borderline merchant/event posts
  * - Used in conjunction with needsReview flag for conservative classification
+ *
+ * PHASE 2 IMPROVEMENTS:
+ * - Time validation: Robust validation ensuring hours 0-23, minutes 0-59
+ * - Location normalization: Strip emojis, sentence fragments, sponsor text
+ * - Venue aliasing: Canonicalize venue names before geocoding
+ * - isEvent classification: Better detection of markets, pop-ups, fairs with date ranges
  */
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
@@ -20,6 +26,293 @@ import { extractWithLearnedPatterns } from './patternFetcher.ts';
 // Type-only import to avoid circular dependencies
 import type { PatternUsageLogger } from './patternFetcher.ts';
 import type { ScraperLogger } from './logger.ts';
+
+// ============================================================
+// TIME VALIDATION UTILITIES
+// ============================================================
+
+/**
+ * Validates if a time string represents a valid wall-clock time.
+ * Returns true if hour is 0-23 and minute is 0-59.
+ */
+export function isValidTime(timeStr: string | null | undefined): boolean {
+  if (!timeStr) return false;
+  
+  // Handle both HH:MM:SS and HH:MM formats
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return false;
+  
+  const hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  const second = match[3] ? parseInt(match[3], 10) : 0;
+  
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59;
+}
+
+/**
+ * Result type for time extraction with validation info
+ */
+export interface TimeExtractionResult {
+  startTime: string | null;
+  endTime: string | null;
+  timeValidationFailed: boolean;
+  rawStartTime?: string | null;
+  rawEndTime?: string | null;
+  patternId?: string | null;
+}
+
+/**
+ * Validates extracted times and returns cleaned result.
+ * Invalid times (e.g., "34:00:00") are set to null with timeValidationFailed: true
+ */
+export function validateAndCleanTimes(
+  startTime: string | null,
+  endTime: string | null,
+  patternId?: string | null
+): TimeExtractionResult {
+  const startValid = isValidTime(startTime);
+  const endValid = endTime ? isValidTime(endTime) : true; // null is considered valid (absence is OK)
+  
+  const timeValidationFailed = (startTime !== null && !startValid) || (endTime !== null && !endValid);
+  
+  return {
+    startTime: startValid ? startTime : null,
+    endTime: endValid ? endTime : null,
+    timeValidationFailed,
+    rawStartTime: timeValidationFailed && startTime ? startTime : undefined,
+    rawEndTime: timeValidationFailed && endTime && !endValid ? endTime : undefined,
+    patternId,
+  };
+}
+
+// ============================================================
+// LOCATION NORMALIZATION UTILITIES
+// ============================================================
+
+/**
+ * Strips emojis from a string
+ */
+export function stripEmojis(text: string): string {
+  // Remove emoji-like characters using a broad Unicode range approach
+  // This catches most common emojis while avoiding regex complexity issues
+  return text
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Miscellaneous Symbols and Pictographs, Emoticons, etc.
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')   // Miscellaneous symbols
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')   // Variation selectors
+    .replace(/[\u{1FA00}-\u{1FAFF}]/gu, '') // Extended symbols and pictographs
+    .replace(/[\u{231A}\u{231B}]/gu, '')    // Watch, hourglass
+    .replace(/[\u{23E9}-\u{23FA}]/gu, '')   // Media control symbols
+    .replace(/[\u{25AA}-\u{25FE}]/gu, '')   // Geometric shapes
+    .trim();
+}
+
+/**
+ * Normalizes a location name by:
+ * - Stripping emojis
+ * - Removing trailing punctuation
+ * - Handling sentence fragments (text after a period followed by lowercase)
+ * - Removing obvious non-location words
+ */
+export function normalizeLocationName(name: string | null | undefined): string | null {
+  if (!name || typeof name !== 'string') return null;
+  
+  let cleaned = name.trim();
+  
+  // Strip emojis
+  cleaned = stripEmojis(cleaned);
+  
+  // If string contains a period followed by lowercase letter and more text, 
+  // keep only part before the period (e.g., "Jess & Pat's.When a listener" -> "Jess & Pat's")
+  const periodSplit = cleaned.match(/^(.+?)\.\s*[a-z]/);
+  if (periodSplit && periodSplit[1].length >= 3) {
+    cleaned = periodSplit[1].trim();
+  }
+  
+  // Remove trailing punctuation (but keep apostrophes in venue names)
+  cleaned = cleaned.replace(/[.,!?;:]+$/, '').trim();
+  
+  // Remove obvious non-location phrases
+  const nonLocationPhrases = [
+    /^limited slots available\.?$/i,
+    /^slots? available\.?$/i,
+    /^available\.?$/i,
+    /^limited\.?$/i,
+    /^register now\.?$/i,
+    /^book now\.?$/i,
+    /^join us\.?$/i,
+  ];
+  
+  for (const pattern of nonLocationPhrases) {
+    if (pattern.test(cleaned)) {
+      return null;
+    }
+  }
+  
+  // If result is too short or just punctuation, return null
+  if (cleaned.length < 2 || !/[a-zA-Z]/.test(cleaned)) {
+    return null;
+  }
+  
+  return cleaned;
+}
+
+/**
+ * Normalizes a location address by:
+ * - Stripping emojis
+ * - Removing sponsor text ("Made possible by:", "Powered by")
+ * - Removing @handles
+ * - Cleaning up excess whitespace
+ */
+export function normalizeLocationAddress(address: string | null | undefined): string | null {
+  if (!address || typeof address !== 'string') return null;
+  
+  let cleaned = address.trim();
+  
+  // Strip emojis
+  cleaned = stripEmojis(cleaned);
+  
+  // Remove @handles
+  cleaned = cleaned.replace(/@[\w.]+/g, '').trim();
+  
+  // Remove sponsor text and everything after it
+  const sponsorPatterns = [
+    /\s*Made possible by:.*$/i,
+    /\s*Powered by:?.*$/i,
+    /\s*Sponsored by:?.*$/i,
+    /\s*Presented by:?.*$/i,
+    /\s*In partnership with:?.*$/i,
+  ];
+  
+  for (const pattern of sponsorPatterns) {
+    cleaned = cleaned.replace(pattern, '').trim();
+  }
+  
+  // Collapse multiple spaces
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  // Remove trailing punctuation
+  cleaned = cleaned.replace(/[.,!?;:]+$/, '').trim();
+  
+  // If result is too short, return null
+  if (cleaned.length < 3) {
+    return null;
+  }
+  
+  return cleaned;
+}
+
+// ============================================================
+// VENUE ALIASING SYSTEM
+// ============================================================
+
+/**
+ * Venue alias configuration for canonicalizing venue names
+ * Key: alias (what might appear in captions)
+ * Value: { canonical: normalized name, context?: optional address substring to match }
+ */
+export const VENUE_ALIASES: Record<string, { canonical: string; context?: string }> = {
+  'the victor art installation': { canonical: 'The Victor', context: 'Bridgetowne' },
+  'victor art installation': { canonical: 'The Victor', context: 'Bridgetowne' },
+  'the victor bridgetowne': { canonical: 'The Victor', context: 'Pasig' },
+  // Add more aliases as needed
+};
+
+/**
+ * Canonicalizes a venue name using the alias configuration.
+ * Returns the canonical name if found, otherwise returns the original.
+ */
+export function canonicalizeVenueName(
+  venueName: string | null | undefined,
+  address?: string | null
+): { canonical: string | null; wasAliased: boolean } {
+  if (!venueName) return { canonical: null, wasAliased: false };
+  
+  const lowerName = venueName.toLowerCase().trim();
+  const alias = VENUE_ALIASES[lowerName];
+  
+  if (alias) {
+    // If alias has a context requirement, check the address
+    if (alias.context) {
+      const lowerAddress = (address || '').toLowerCase();
+      if (lowerAddress.includes(alias.context.toLowerCase())) {
+        return { canonical: alias.canonical, wasAliased: true };
+      }
+    } else {
+      return { canonical: alias.canonical, wasAliased: true };
+    }
+  }
+  
+  return { canonical: venueName, wasAliased: false };
+}
+
+// ============================================================
+// isEvent CLASSIFICATION HELPERS
+// ============================================================
+
+/**
+ * Checks if text contains temporal event indicators
+ * (date ranges, "coming to", pop-up, market, etc.)
+ */
+export function hasTemporalEventIndicators(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  
+  // Date range patterns (Nov 29-30, October 28-29, Dec. 5-7)
+  const dateRangePatterns = [
+    /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{1,2}\s*[-–]\s*\d{1,2}/i,
+    /\b\d{1,2}\s*[-–]\s*\d{1,2}\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/i,
+  ];
+  
+  const hasDateRange = dateRangePatterns.some(p => p.test(text));
+  
+  // Temporal occurrence phrases
+  const temporalPhrases = [
+    'coming to',
+    'coming this',
+    'for the first time',
+    'first time',
+    'this weekend',
+    'this saturday',
+    'this sunday',
+    'this friday',
+    'pop-up',
+    'pop up',
+    'popup',
+    'one day only',
+    'one night only',
+    'limited time',
+    'happening on',
+    'happening this',
+    'see you on',
+    'see you this',
+    'join us on',
+    'join us this',
+  ];
+  
+  const hasTemporalPhrase = temporalPhrases.some(p => lowerText.includes(p));
+  
+  // Event type keywords that suggest time-bound activity
+  const eventTypeKeywords = [
+    'market',
+    'flea market',
+    'fleamarket',
+    'bazaar',
+    'fair',
+    'festival',
+    'pop-up',
+    'popup',
+    'community market',
+    'night market',
+    'weekend market',
+  ];
+  
+  const hasEventType = eventTypeKeywords.some(k => lowerText.includes(k));
+  
+  return hasDateRange || (hasTemporalPhrase && hasEventType) || (hasDateRange && hasEventType);
+}
+
+// ============================================================
+// PRE-NORMALIZE TEXT
+// ============================================================
 
 // Pre-normalize text to fix OCR issues and Unicode problems
 export function preNormalizeText(text: string): string {
@@ -67,7 +360,7 @@ export function isVendorPostStrict(text: string): boolean {
     
     // Sales inquiry patterns (strong signals)
     /\b(dm for price|pm for price|message for price)\b/i,
-    /\b(size|sizes|color|colors)\s*[:\/]?\s*(?:s|m|l|xl|small|medium|large)\b/i, // Size variants
+    /\b(size|sizes|color|colors)\s*[:/]?\s*(?:s|m|l|xl|small|medium|large)\b/i, // Size variants
   ];
 
   return strictVendorPatterns.some(pattern => pattern.test(text));
@@ -236,22 +529,20 @@ function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
 }
 
 // Extract time information with learned patterns
+// Returns validated times - invalid times (hour > 23 or minute > 59) are set to null
 export async function extractTime(
   text: string,
   supabase?: SupabaseClient,
   logger?: ScraperLogger
-): Promise<{ startTime: string | null; endTime: string | null; patternId?: string | null }> {
+): Promise<TimeExtractionResult> {
   // Try learned patterns first if supabase client provided
   if (supabase) {
     // Create usage logger if ScraperLogger is provided
     const usageLogger = logger ? createPatternUsageLogger(logger) : undefined;
     const learned = await extractWithLearnedPatterns(supabase, text, 'event_time', usageLogger);
     if (learned.value) {
-      return { 
-        startTime: learned.value, 
-        endTime: null,
-        patternId: learned.patternId 
-      };
+      // Validate the learned pattern result
+      return validateAndCleanTimes(learned.value, null, learned.patternId);
     }
   }
   
@@ -272,16 +563,13 @@ export async function extractTime(
       } else if (period === 'tanghali') { // Noon
         hour = 12;
       } else if (period === 'hapon' || period === 'gabi') { // Afternoon/Evening (PM)
-        if (hour !== 12) hour += 12;
+        if (hour !== 12 && hour < 12) hour += 12;
       }
       
       return `${String(hour).padStart(2, '0')}:${minute}:00`;
     });
     
-    return {
-      startTime: times[0] || null,
-      endTime: times[1] || null,
-    };
+    return validateAndCleanTimes(times[0] || null, times[1] || null);
   }
   
   // European 19h30 format
@@ -292,21 +580,21 @@ export async function extractTime(
     const times = europeanMatches.map(match => 
       `${match[1].padStart(2, '0')}:${match[2]}:00`
     );
-    return {
-      startTime: times[0] || null,
-      endTime: times[1] || null,
-    };
+    return validateAndCleanTimes(times[0] || null, times[1] || null);
   }
   
   // Standard time pattern with optional range
   const timePattern = /\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)?\s*(?:[-–]|to|hanggang)?\s*(\d{1,2})?(?::([0-5]\d))?\s*(am|pm)?\b/gi;
   const matches = [...text.matchAll(timePattern)];
   
-  if (matches.length === 0) return { startTime: null, endTime: null };
+  if (matches.length === 0) {
+    return { startTime: null, endTime: null, timeValidationFailed: false };
+  }
   
-  const convertTo24h = (hour: number, minute: string, meridiem?: string) => {
+  const convertTo24h = (hour: number, minute: string, meridiem?: string): string => {
     let h = hour;
-    if (meridiem === 'pm' && h !== 12) h += 12;
+    // Only convert if hour is in valid 12-hour range
+    if (meridiem === 'pm' && h !== 12 && h < 12) h += 12;
     if (meridiem === 'am' && h === 12) h = 0;
     return `${String(h).padStart(2, '0')}:${minute || '00'}:00`;
   };
@@ -326,11 +614,12 @@ export async function extractTime(
   }
   
   // PHASE 2: Smart AM/PM inference if still missing
-  if (!startMeridiem) {
+  // Only infer if the hour is in valid 12-hour range
+  if (!startMeridiem && startHour <= 12) {
     const inferred = inferAMPM(startHour, text);
     if (inferred) startMeridiem = inferred.toLowerCase();
   }
-  if (endHour && !endMeridiem) {
+  if (endHour && !endMeridiem && endHour <= 12) {
     const inferred = inferAMPM(endHour, text);
     if (inferred) endMeridiem = inferred.toLowerCase();
   }
@@ -338,7 +627,8 @@ export async function extractTime(
   const startTime = convertTo24h(startHour, startMin, startMeridiem);
   const endTime = endHour ? convertTo24h(endHour, endMin, endMeridiem) : null;
   
-  return { startTime, endTime };
+  // Validate and return cleaned times
+  return validateAndCleanTimes(startTime, endTime);
 }
 
 /**
@@ -517,19 +807,29 @@ export function isValidAddress(address: string): boolean {
   return streetIndicators.test(address) || locationIndicators.test(address);
 }
 
-// PHASE 3: Enhanced venue extraction with address validation and learned patterns
+// PHASE 3: Enhanced venue extraction with address validation, learned patterns, and normalization
 export async function extractVenue(
   text: string,
   locationName?: string | null,
   supabase?: SupabaseClient
-): Promise<{ venueName: string | null; address: string | null; patternId?: string | null }> {
+): Promise<{ 
+  venueName: string | null; 
+  address: string | null; 
+  rawLocationName?: string | null;
+  canonicalVenueName?: string | null;
+  patternId?: string | null 
+}> {
   // Try learned patterns first if supabase client provided
   if (supabase) {
     const learned = await extractWithLearnedPatterns(supabase, text, 'venue');
     if (learned.value) {
+      const normalized = normalizeLocationName(learned.value);
+      const { canonical, wasAliased } = canonicalizeVenueName(normalized);
       return {
-        venueName: learned.value,
+        venueName: normalized,
         address: null,
+        rawLocationName: wasAliased ? learned.value : undefined,
+        canonicalVenueName: wasAliased ? canonical : undefined,
         patternId: learned.patternId
       };
     }
@@ -537,33 +837,50 @@ export async function extractVenue(
 
   // Fall back to hardcoded patterns
   // Priority 1: Pin emoji 📍 with venue and optional address
-  const pinPattern = /📍\s*([^\n,]+?)(?:,\s*([^\n]+?))?(?=\n|$|[📍🗓️⏰🎟️])/;
+  // Using Unicode escape for emojis to avoid regex linting issues
+  const pinPattern = /\u{1F4CD}\s*([^\n,]+?)(?:,\s*([^\n]+?))?(?=\n|$)/u;
   const pinMatch = text.match(pinPattern);
   
   if (pinMatch) {
-    const venueName = pinMatch[1].trim();
-    const potentialAddress = pinMatch[2]?.trim() || null;
+    const rawVenueName = pinMatch[1].trim();
+    const rawAddress = pinMatch[2]?.trim() || null;
+    
+    // Normalize venue name and address
+    const venueName = normalizeLocationName(rawVenueName);
+    const address = normalizeLocationAddress(rawAddress);
+    
+    // Apply venue aliasing
+    const { canonical, wasAliased } = canonicalizeVenueName(venueName, address);
     
     return {
       venueName,
-      address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+      address: address && isValidAddress(address) ? address : null,
+      rawLocationName: wasAliased ? rawVenueName : undefined,
+      canonicalVenueName: wasAliased ? canonical : undefined,
       patternId: null,
     };
   }
   
   // Priority 2: Explicit "Venue:" or "Location:" prefix
-  const venueKeywordPattern = /\b(?:venue|location|lugar|place)\s*[:\-]\s*([^,\n]+?)(?:,\s*([^\n]+?))?(?=\n|$|when|kailan|time|date)/i;
+  const venueKeywordPattern = /\b(?:venue|location|lugar|place)\s*[:|-]\s*([^,\n]+?)(?:,\s*([^\n]+?))?(?=\n|$|when|kailan|time|date)/i;
   const venueKeywordMatch = text.match(venueKeywordPattern);
   
   if (venueKeywordMatch) {
-    const venueName = venueKeywordMatch[1].trim();
-    const potentialAddress = venueKeywordMatch[2]?.trim() || null;
+    const rawVenueName = venueKeywordMatch[1].trim();
+    const rawAddress = venueKeywordMatch[2]?.trim() || null;
+    
+    // Normalize venue name
+    const venueName = normalizeLocationName(rawVenueName);
+    const address = normalizeLocationAddress(rawAddress);
     
     // Avoid capturing timing keywords as venues
-    if (!/\b(when|kailan|time|oras|date|petsa|am|pm)\b/i.test(venueName)) {
+    if (venueName && !/\b(when|kailan|time|oras|date|petsa|am|pm)\b/i.test(venueName)) {
+      const { canonical, wasAliased } = canonicalizeVenueName(venueName, address);
       return {
         venueName,
-        address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+        address: address && isValidAddress(address) ? address : null,
+        rawLocationName: wasAliased ? rawVenueName : undefined,
+        canonicalVenueName: wasAliased ? canonical : undefined,
         patternId: null,
       };
     }
@@ -574,7 +891,8 @@ export async function extractVenue(
   const mentionMatch = text.match(mentionPattern);
   
   if (mentionMatch) {
-    const venueName = mentionMatch[1].replace(/_/g, ' ').trim();
+    const rawVenueName = mentionMatch[1].replace(/_/g, ' ').trim();
+    const venueName = normalizeLocationName(rawVenueName);
     return { venueName, address: null, patternId: null };
   }
   
@@ -583,14 +901,20 @@ export async function extractVenue(
   const atMatch = text.match(atPattern);
   
   if (atMatch) {
-    const venueName = atMatch[1].trim();
-    const potentialAddress = atMatch[2]?.trim() || null;
+    const rawVenueName = atMatch[1].trim();
+    const rawAddress = atMatch[2]?.trim() || null;
+    
+    const venueName = normalizeLocationName(rawVenueName);
+    const address = normalizeLocationAddress(rawAddress);
     
     // Make sure it's not an Instagram handle and has space or starts with "The"
-    if (venueName.includes(' ') || /^The\s/.test(venueName)) {
+    if (venueName && (venueName.includes(' ') || /^The\s/.test(venueName))) {
+      const { canonical, wasAliased } = canonicalizeVenueName(venueName, address);
       return {
         venueName,
-        address: potentialAddress && isValidAddress(potentialAddress) ? potentialAddress : null,
+        address: address && isValidAddress(address) ? address : null,
+        rawLocationName: wasAliased ? rawVenueName : undefined,
+        canonicalVenueName: wasAliased ? canonical : undefined,
         patternId: null,
       };
     }
@@ -598,7 +922,15 @@ export async function extractVenue(
   
   // Fallback to Instagram location tag if available
   if (locationName) {
-    return { venueName: locationName, address: null, patternId: null };
+    const venueName = normalizeLocationName(locationName);
+    const { canonical, wasAliased } = canonicalizeVenueName(venueName);
+    return { 
+      venueName, 
+      address: null, 
+      rawLocationName: wasAliased ? locationName : undefined,
+      canonicalVenueName: wasAliased ? canonical : undefined,
+      patternId: null 
+    };
   }
   
   return { venueName: null, address: null, patternId: null };

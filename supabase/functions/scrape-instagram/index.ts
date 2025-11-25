@@ -11,6 +11,9 @@ import {
   extractSignupUrl,
   autoTagPost,
   isValidAddress,
+  hasTemporalEventIndicators,
+  normalizeLocationAddress,
+  canonicalizeVenueName,
 } from './extractionUtils.ts';
 import { ScraperLogger } from './logger.ts';
 
@@ -215,12 +218,16 @@ async function parseEventFromCaption(
   endTime?: string;
   locationName?: string;
   locationAddress?: string;
+  rawLocationName?: string;
+  canonicalVenueName?: string;
   signupUrl?: string;
   price?: number;
   isFree?: boolean;
   isEvent: boolean;
   needsReview?: boolean;
   timeValidationFailed?: boolean;
+  rawEventTime?: string;
+  rawEndTime?: string;
   pricePatternId?: string | null;
   datePatternId?: string | null;
   timePatternId?: string | null;
@@ -269,7 +276,7 @@ async function parseEventFromCaption(
     }
   }
   
-  // STEP 3: Check for event indicators
+  // STEP 3: Check for event indicators (enhanced with temporal event detection)
   const eventKeywords = [
     'party', 'event', 'happening', 'tonight', 'tomorrow', 'this weekend',
     'join us', 'rsvp', 'free entry', 'entrance', 'tickets', 'doors open',
@@ -278,11 +285,17 @@ async function parseEventFromCaption(
     'anniversary', 'opening', 'launch', 'festival', 'market',
     'book now', 'reservations', 'save the date', 'see you', 'come by',
     'drop by', 'visit us', 'limited slots', 'register', 'sign up',
-    'admission', 'cover charge', 'entry fee', 'open to public'
+    'admission', 'cover charge', 'entry fee', 'open to public',
+    // Added for market/fair/pop-up detection
+    'flea market', 'fleamarket', 'bazaar', 'fair', 'pop-up', 'popup',
+    'coming to', 'for the first time', 'community market', 'night market'
   ];
   const hasEventKeyword = eventKeywords.some(keyword => lowercaseCaption.includes(keyword));
+  
+  // Also check for temporal event indicators (date ranges + market/fair/pop-up keywords)
+  const hasTemporalIndicators = hasTemporalEventIndicators(normalized);
 
-  if (!hasEventKeyword) {
+  if (!hasEventKeyword && !hasTemporalIndicators) {
     return { isEvent: false, isFree: true, needsReview: false };
   }
 
@@ -298,15 +311,15 @@ async function parseEventFromCaption(
   const signupUrl = extractSignupUrl(normalized);
 
   // Consider it an event if we have event keywords + (date OR location)
+  // OR if we have temporal indicators (date range with market/pop-up keywords)
   const hasMinimumInfo = !!(venueInfo.venueName || dateInfo.eventDate);
   
   // STEP 5: Check for soft vendor signals (merchant-ish content)
   const maybeVendor = isPossiblyVendorPost(normalized);
   
   // STEP 6: Determine if this is a borderline case that needs review
-  // Conservative approach: borderline merchant/event posts are marked as events but flagged for review
-  // This prioritizes precision by ensuring suspicious posts get manual verification before going live
-  const looksLikeEvent = hasEventKeyword && hasMinimumInfo;
+  // Enhanced: temporal indicators (date ranges + market keywords) are a strong signal
+  const looksLikeEvent = (hasEventKeyword && hasMinimumInfo) || (hasTemporalIndicators && hasMinimumInfo);
   let needsReview = false;
   let isEvent = false;
   
@@ -319,6 +332,10 @@ async function parseEventFromCaption(
     // Clear event case
     isEvent = true;
     needsReview = false;
+  } else if (hasTemporalIndicators) {
+    // Has temporal indicators but missing key info - still likely an event, flag for review
+    isEvent = true;
+    needsReview = true;
   } else if (maybeVendor) {
     // Has merchant signals but not enough event structure
     isEvent = false;
@@ -333,16 +350,22 @@ async function parseEventFromCaption(
     eventTitle,
     eventDate: dateInfo.eventDate || undefined,
     eventEndDate: dateInfo.eventEndDate || undefined,
+    // Only include time if validation passed
     eventTime: timeInfo.startTime || undefined,
     endTime: timeInfo.endTime || undefined,
     locationName: venueInfo.venueName || undefined,
     locationAddress: venueInfo.address || undefined,
+    rawLocationName: venueInfo.rawLocationName || undefined,
+    canonicalVenueName: venueInfo.canonicalVenueName || undefined,
     signupUrl: signupUrl || undefined,
     price: priceInfo?.amount,
     isFree: priceInfo?.isFree ?? true,
     isEvent,
     needsReview,
-    timeValidationFailed: false,
+    // Time validation info
+    timeValidationFailed: timeInfo.timeValidationFailed,
+    rawEventTime: timeInfo.rawStartTime || undefined,
+    rawEndTime: timeInfo.rawEndTime || undefined,
     // Pattern IDs for logging and analytics
     pricePatternId: priceInfo?.patternId,
     datePatternId: dateInfo.patternId,
