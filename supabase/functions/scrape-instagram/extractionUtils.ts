@@ -17,6 +17,9 @@
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
 import { extractWithLearnedPatterns } from './patternFetcher.ts';
+// Type-only import to avoid circular dependencies
+import type { PatternUsageLogger } from './patternFetcher.ts';
+import type { ScraperLogger } from './logger.ts';
 
 // Pre-normalize text to fix OCR issues and Unicode problems
 export function preNormalizeText(text: string): string {
@@ -103,14 +106,52 @@ export function isVendorPost(text: string): boolean {
   return isVendorPostStrict(text);
 }
 
+/**
+ * Creates a PatternUsageLogger that logs to a ScraperLogger.
+ * Used to hook learned-pattern activity into the scraper_logs table.
+ */
+function createPatternUsageLogger(logger: ScraperLogger): PatternUsageLogger {
+  return {
+    onPatternSuccess(
+      patternId: string,
+      patternType: string,
+      extractedValue: string,
+      patternDescription?: string | null
+    ): void {
+      // Log pattern match success at debug level
+      logger.debug('extraction', `Learned pattern matched for ${patternType}`, {
+        patternId,
+        patternType,
+        extractedValue: extractedValue.substring(0, 50),
+        patternDescription,
+      });
+    },
+    onPatternFailure(
+      patternId: string,
+      patternType: string,
+      patternDescription?: string | null
+    ): void {
+      // Log pattern miss at debug level
+      logger.debug('extraction', `Learned pattern miss for ${patternType}`, {
+        patternId,
+        patternType,
+        patternDescription,
+      });
+    },
+  };
+}
+
 // Extract price with learned patterns
 export async function extractPrice(
   text: string,
-  supabase?: SupabaseClient
+  supabase?: SupabaseClient,
+  logger?: ScraperLogger
 ): Promise<{ amount: number; currency: string; isFree: boolean; patternId?: string | null } | null> {
   // Try learned patterns first if supabase client provided
   if (supabase) {
-    const learned = await extractWithLearnedPatterns(supabase, text, 'price');
+    // Create usage logger if ScraperLogger is provided
+    const usageLogger = logger ? createPatternUsageLogger(logger) : undefined;
+    const learned = await extractWithLearnedPatterns(supabase, text, 'price', usageLogger);
     if (learned.value) {
       const amount = parseFloat(learned.value.replace(/[^0-9.]/g, ''));
       if (!isNaN(amount)) {
@@ -197,11 +238,14 @@ function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
 // Extract time information with learned patterns
 export async function extractTime(
   text: string,
-  supabase?: SupabaseClient
+  supabase?: SupabaseClient,
+  logger?: ScraperLogger
 ): Promise<{ startTime: string | null; endTime: string | null; patternId?: string | null }> {
   // Try learned patterns first if supabase client provided
   if (supabase) {
-    const learned = await extractWithLearnedPatterns(supabase, text, 'event_time');
+    // Create usage logger if ScraperLogger is provided
+    const usageLogger = logger ? createPatternUsageLogger(logger) : undefined;
+    const learned = await extractWithLearnedPatterns(supabase, text, 'event_time', usageLogger);
     if (learned.value) {
       return { 
         startTime: learned.value, 
