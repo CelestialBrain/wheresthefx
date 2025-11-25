@@ -563,7 +563,7 @@ export async function extractTime(
       } else if (period === 'tanghali') { // Noon
         hour = 12;
       } else if (period === 'hapon' || period === 'gabi') { // Afternoon/Evening (PM)
-        if (hour !== 12 && hour < 12) hour += 12;
+        if (hour < 12) hour += 12;
       }
       
       return `${String(hour).padStart(2, '0')}:${minute}:00`;
@@ -594,7 +594,7 @@ export async function extractTime(
   const convertTo24h = (hour: number, minute: string, meridiem?: string): string => {
     let h = hour;
     // Only convert if hour is in valid 12-hour range
-    if (meridiem === 'pm' && h !== 12 && h < 12) h += 12;
+    if (meridiem === 'pm' && h < 12) h += 12;
     if (meridiem === 'am' && h === 12) h = 0;
     return `${String(h).padStart(2, '0')}:${minute || '00'}:00`;
   };
@@ -862,7 +862,7 @@ export async function extractVenue(
   }
   
   // Priority 2: Explicit "Venue:" or "Location:" prefix
-  const venueKeywordPattern = /\b(?:venue|location|lugar|place)\s*[:|-]\s*([^,\n]+?)(?:,\s*([^\n]+?))?(?=\n|$|when|kailan|time|date)/i;
+  const venueKeywordPattern = /\b(?:venue|location|lugar|place)\s*[:|\\-]\s*([^,\n]+?)(?:,\s*([^\n]+?))?(?=\n|$|when|kailan|time|date)/i;
   const venueKeywordMatch = text.match(venueKeywordPattern);
   
   if (venueKeywordMatch) {
