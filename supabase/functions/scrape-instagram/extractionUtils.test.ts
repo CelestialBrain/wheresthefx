@@ -430,3 +430,71 @@ Deno.test("Regression: Address with sponsor text should be cleaned", () => {
   const normalized = normalizeLocationAddress(rawAddress);
   assertEquals(normalized, "Bridgetowne, Pasig");
 });
+
+// ============================================================
+// ADDITIONAL TIME VALIDATION EDGE CASE TESTS
+// ============================================================
+
+Deno.test("isValidTime - should validate HH:MM format (without seconds)", () => {
+  assertEquals(isValidTime("00:00"), true);
+  assertEquals(isValidTime("12:30"), true);
+  assertEquals(isValidTime("23:59"), true);
+  assertEquals(isValidTime("24:00"), false);
+  assertEquals(isValidTime("12:60"), false);
+});
+
+Deno.test("validateAndCleanTimes - should preserve patternId", () => {
+  const result = validateAndCleanTimes("15:00:00", null, "pattern-123");
+  assertEquals(result.patternId, "pattern-123");
+});
+
+Deno.test("validateAndCleanTimes - null times should not trigger validation failure", () => {
+  const result = validateAndCleanTimes(null, null);
+  assertEquals(result.startTime, null);
+  assertEquals(result.endTime, null);
+  assertEquals(result.timeValidationFailed, false);
+});
+
+// ============================================================
+// ADDITIONAL VENUE ALIASING TESTS
+// ============================================================
+
+Deno.test("canonicalizeVenueName - should handle null/undefined inputs", () => {
+  assertEquals(canonicalizeVenueName(null).canonical, null);
+  assertEquals(canonicalizeVenueName(undefined).canonical, null);
+  assertEquals(canonicalizeVenueName("").canonical, null);
+});
+
+Deno.test("canonicalizeVenueName - case insensitivity", () => {
+  const result1 = canonicalizeVenueName("THE VICTOR ART INSTALLATION", "Bridgetowne");
+  assertEquals(result1.canonical, "The Victor");
+  assertEquals(result1.wasAliased, true);
+  
+  const result2 = canonicalizeVenueName("the victor art installation", "bridgetowne");
+  assertEquals(result2.canonical, "The Victor");
+  assertEquals(result2.wasAliased, true);
+});
+
+// ============================================================
+// ADDITIONAL LOCATION NAME CLEANUP TESTS
+// ============================================================
+
+Deno.test("normalizeLocationName - should handle exclamation mark followed by emoji", () => {
+  const result = normalizeLocationName("Salcedo Market! 💛✨");
+  // Should strip emojis but keep the venue name
+  assertEquals(result !== null && result.includes("Salcedo Market"), true);
+});
+
+Deno.test("normalizeLocationName - should handle null and empty strings", () => {
+  assertEquals(normalizeLocationName(null), null);
+  assertEquals(normalizeLocationName(undefined), null);
+  assertEquals(normalizeLocationName(""), null);
+  assertEquals(normalizeLocationName("  "), null);
+});
+
+Deno.test("normalizeLocationAddress - should handle null and empty strings", () => {
+  assertEquals(normalizeLocationAddress(null), null);
+  assertEquals(normalizeLocationAddress(undefined), null);
+  assertEquals(normalizeLocationAddress(""), null);
+  assertEquals(normalizeLocationAddress("ab"), null); // Too short
+});

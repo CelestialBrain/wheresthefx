@@ -5,11 +5,55 @@ export interface LogEntry {
   post_id?: string;
   instagram_post_id?: string;
   log_level: 'info' | 'warn' | 'error' | 'debug' | 'success';
-  stage: 'fetch' | 'ocr' | 'parse' | 'extraction' | 'validation' | 'save' | 'skip';
+  stage: 'fetch' | 'ocr' | 'parse' | 'extraction' | 'validation' | 'save' | 'skip' | 'rejection';
   message: string;
   data?: any;
   duration_ms?: number;
   error_details?: any;
+}
+
+// ============================================================
+// REJECTED POST LOGGING TYPES
+// ============================================================
+
+/**
+ * Enum for reasons a post may be rejected from the scraper pipeline.
+ * Used for consistent categorization and filtering of rejected posts.
+ */
+export type RejectedPostReason =
+  | 'NOT_EVENT'
+  | 'EVENT_ENDED'
+  | 'VENUE_VALIDATION_FAILED'
+  | 'PARSE_FAILED'
+  | 'TIME_VALIDATION_FAILED';
+
+/**
+ * Data structure for logging rejected posts.
+ * Includes required fields and optional context for debugging.
+ */
+export interface RejectedPostLogData {
+  /** The internal post ID (e.g., from Instagram shortCode or Apify ID) */
+  postId: string;
+  /** The Instagram post ID if different from postId */
+  instagramPostId?: string;
+  /** The reason the post was rejected */
+  reason: RejectedPostReason;
+  /** Human-readable explanation of the rejection */
+  reasonMessage: string;
+  /** Optional: Event date if available */
+  eventDate?: string | null;
+  /** Optional: Event time if available */
+  eventTime?: string | null;
+  /** Optional: End time if available */
+  endTime?: string | null;
+  /** Optional: Location name if available */
+  locationName?: string | null;
+  /** Optional: Location address if available */
+  locationAddress?: string | null;
+  /** Optional: Preview of the caption (first 200 chars) */
+  captionPreview?: string | null;
+  /** Optional: Arbitrary extra data for debugging */
+  extra?: Record<string, unknown>;
 }
 
 export class ScraperLogger {
@@ -207,6 +251,34 @@ export class ScraperLogger {
       stage: 'skip',
       message: `Skipping post: ${reason}`,
       data,
+    });
+  }
+
+  /**
+   * Log a rejected post with structured data.
+   * Emits a single log entry with stage='rejection' and all rejection context
+   * nested under a 'rejected_post' key in the data field.
+   */
+  async logRejectedPost(data: RejectedPostLogData) {
+    await this.log({
+      post_id: data.postId,
+      instagram_post_id: data.instagramPostId,
+      log_level: 'warn',
+      stage: 'rejection',
+      message: 'Post rejected',
+      data: {
+        rejected_post: {
+          reason: data.reason,
+          reasonMessage: data.reasonMessage,
+          eventDate: data.eventDate,
+          eventTime: data.eventTime,
+          endTime: data.endTime,
+          locationName: data.locationName,
+          locationAddress: data.locationAddress,
+          captionPreview: data.captionPreview,
+          extra: data.extra,
+        },
+      },
     });
   }
 }

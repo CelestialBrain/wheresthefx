@@ -15,7 +15,7 @@ import {
   normalizeLocationAddress,
   canonicalizeVenueName,
 } from './extractionUtils.ts';
-import { ScraperLogger } from './logger.ts';
+import { ScraperLogger, RejectedPostLogData } from './logger.ts';
 
 /*
  * DATABASE SCHEMA NOTES:
@@ -573,7 +573,23 @@ Deno.serve(async (req) => {
 
         // Parse event information
         const parseStart = Date.now();
-        const eventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase);
+        let eventInfo;
+        try {
+          eventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase);
+        } catch (parseError) {
+          const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
+          totalSkipped++;
+          await logger.error('parse', 'Caption parsing failed', { postId }, { error: errorMessage });
+          // Log as rejected post for parse failure
+          await logger.logRejectedPost({
+            postId,
+            reason: 'PARSE_FAILED',
+            reasonMessage: `Caption parsing error: ${errorMessage}`,
+            captionPreview: item.caption?.substring(0, 200) || null,
+          });
+          console.log(`Skipping post ${postId} - parse failed: ${errorMessage}`);
+          continue;
+        }
         const parseDuration = Date.now() - parseStart;
         
         await logger.logParsing(postId, undefined, item.caption || '', eventInfo, parseDuration);
@@ -619,6 +635,17 @@ Deno.serve(async (req) => {
                 venue: eventInfo.locationName,
                 error: geocodeError?.message || 'No valid coordinates returned'
               });
+              // Log as rejected post for venue validation failure (post continues without coordinates)
+              await logger.logRejectedPost({
+                postId,
+                reason: 'VENUE_VALIDATION_FAILED',
+                reasonMessage: geocodeError?.message || 'No valid coordinates returned',
+                captionPreview: item.caption?.substring(0, 200) || null,
+                locationName: eventInfo.locationName || null,
+                locationAddress: eventInfo.locationAddress || null,
+                eventDate: eventInfo.eventDate || null,
+                eventTime: eventInfo.eventTime || null,
+              });
             }
           } catch (err) {
             const error = err as Error;
@@ -638,6 +665,16 @@ Deno.serve(async (req) => {
             caption_preview: item.caption?.substring(0, 100),
             forceImport 
           });
+          // Also log as rejected post with structured data
+          await logger.logRejectedPost({
+            postId,
+            reason: 'NOT_EVENT',
+            reasonMessage: 'Post classified as not an event',
+            captionPreview: item.caption?.substring(0, 200) || null,
+            locationName: eventInfo.locationName || null,
+            eventDate: eventInfo.eventDate || null,
+            eventTime: eventInfo.eventTime || null,
+          });
           console.log(`Skipping post ${postId} - not an event. Caption: "${item.caption?.substring(0, 100)}..."`);
           continue;
         }
@@ -649,6 +686,17 @@ Deno.serve(async (req) => {
             await logger.logSkip(postId, 'Event has ended', { 
               eventDate: eventInfo.eventDate,
               eventEndDate: eventInfo.eventEndDate 
+            });
+            // Also log as rejected post with structured data
+            await logger.logRejectedPost({
+              postId,
+              reason: 'EVENT_ENDED',
+              reasonMessage: `Event has ended (date: ${eventInfo.eventDate}${eventInfo.eventEndDate ? `, end: ${eventInfo.eventEndDate}` : ''})`,
+              captionPreview: item.caption?.substring(0, 200) || null,
+              eventDate: eventInfo.eventDate,
+              eventTime: eventInfo.eventTime || null,
+              locationName: eventInfo.locationName || null,
+              extra: { eventEndDate: eventInfo.eventEndDate },
             });
             console.log(`Skipping post ${postId} - event has ended. Start: ${eventInfo.eventDate}, End: ${eventInfo.eventEndDate || 'N/A'}`);
             continue;
@@ -916,6 +964,24 @@ Deno.serve(async (req) => {
           needsReview = true;
         }
         
+        // Log time validation failures as rejected post (but continue with post insertion)
+        if (eventInfo.timeValidationFailed) {
+          await logger.logRejectedPost({
+            postId,
+            reason: 'TIME_VALIDATION_FAILED',
+            reasonMessage: `Invalid time format: ${eventInfo.rawEventTime || eventInfo.rawEndTime || 'unknown'}`,
+            captionPreview: item.caption?.substring(0, 200) || null,
+            eventDate: eventInfo.eventDate || null,
+            eventTime: eventInfo.rawEventTime || null,
+            endTime: eventInfo.rawEndTime || null,
+            locationName: eventInfo.locationName || null,
+            extra: { 
+              rawEventTime: eventInfo.rawEventTime,
+              rawEndTime: eventInfo.rawEndTime,
+            },
+          });
+        }
+        
         // Optional: If post has merchant/promo tags and weak event structure, also flag for review
         const merchantTagsSet = new Set(['sale', 'shop', 'promotion']);
         const hasMerchantTags = tags.some(tag => merchantTagsSet.has(tag));
@@ -1087,7 +1153,15 @@ Deno.serve(async (req) => {
             const postUrl = post.url || `https://www.instagram.com/p/${post.shortCode}/`;
 
             // Parse event information
-            const eventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase);
+            let eventInfo;
+            try {
+              eventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase);
+            } catch (parseError) {
+              const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
+              totalSkipped++;
+              console.log(`Skipping post ${postId} - parse failed: ${errorMessage}`);
+              continue;
+            }
 
             // Skip non-events
             if (!eventInfo.isEvent) {
