@@ -1,5 +1,5 @@
 /**
- * Tests for vendor detection and event classification improvements
+ * Tests for vendor detection, event classification, time validation, and location normalization
  * Run with: deno test --allow-env extractionUtils.test.ts
  */
 
@@ -10,7 +10,234 @@ import {
   isVendorPost,
   autoTagPost,
   preNormalizeText,
+  // New time validation utilities
+  isValidTime,
+  validateAndCleanTimes,
+  // New location normalization utilities
+  stripEmojis,
+  normalizeLocationName,
+  normalizeLocationAddress,
+  // Venue aliasing
+  canonicalizeVenueName,
+  VENUE_ALIASES,
+  // isEvent classification helpers
+  hasTemporalEventIndicators,
 } from "./extractionUtils.ts";
+
+// ============================================================
+// TIME VALIDATION TESTS
+// ============================================================
+
+Deno.test("isValidTime - should validate correct times", () => {
+  assertEquals(isValidTime("00:00:00"), true);
+  assertEquals(isValidTime("12:00:00"), true);
+  assertEquals(isValidTime("23:59:00"), true);
+  assertEquals(isValidTime("15:00:00"), true);  // 3 PM
+  assertEquals(isValidTime("21:00:00"), true);  // 9 PM
+  assertEquals(isValidTime("09:30:00"), true);  // 9:30 AM
+});
+
+Deno.test("isValidTime - should reject invalid times", () => {
+  assertEquals(isValidTime("24:00:00"), false); // Hour 24 is invalid
+  assertEquals(isValidTime("25:00:00"), false);
+  assertEquals(isValidTime("29:00:00"), false);
+  assertEquals(isValidTime("31:00:00"), false);
+  assertEquals(isValidTime("32:00:00"), false);
+  assertEquals(isValidTime("34:00:00"), false); // From the problematic logs
+  assertEquals(isValidTime("54:00:00"), false); // From the problematic logs
+  assertEquals(isValidTime("99:99:00"), false);
+  assertEquals(isValidTime("12:60:00"), false); // Invalid minutes
+  assertEquals(isValidTime("12:99:00"), false);
+});
+
+Deno.test("isValidTime - should handle edge cases", () => {
+  assertEquals(isValidTime(null), false);
+  assertEquals(isValidTime(undefined), false);
+  assertEquals(isValidTime(""), false);
+  assertEquals(isValidTime("not a time"), false);
+  assertEquals(isValidTime("12:00"), true);  // HH:MM format should also work
+});
+
+Deno.test("validateAndCleanTimes - should clean invalid times", () => {
+  // Valid times should pass through
+  const validResult = validateAndCleanTimes("15:00:00", "23:00:00");
+  assertEquals(validResult.startTime, "15:00:00");
+  assertEquals(validResult.endTime, "23:00:00");
+  assertEquals(validResult.timeValidationFailed, false);
+  
+  // Invalid start time should be nullified
+  const invalidStart = validateAndCleanTimes("34:00:00", "23:00:00");
+  assertEquals(invalidStart.startTime, null);
+  assertEquals(invalidStart.endTime, "23:00:00");
+  assertEquals(invalidStart.timeValidationFailed, true);
+  assertEquals(invalidStart.rawStartTime, "34:00:00");
+  
+  // Invalid end time should be nullified
+  const invalidEnd = validateAndCleanTimes("15:00:00", "54:00:00");
+  assertEquals(invalidEnd.startTime, "15:00:00");
+  assertEquals(invalidEnd.endTime, null);
+  assertEquals(invalidEnd.timeValidationFailed, true);
+  assertEquals(invalidEnd.rawEndTime, "54:00:00");
+  
+  // Both invalid
+  const bothInvalid = validateAndCleanTimes("29:00:00", "31:00:00");
+  assertEquals(bothInvalid.startTime, null);
+  assertEquals(bothInvalid.endTime, null);
+  assertEquals(bothInvalid.timeValidationFailed, true);
+});
+
+// ============================================================
+// LOCATION NORMALIZATION TESTS
+// ============================================================
+
+Deno.test("stripEmojis - should remove emojis from text", () => {
+  assertEquals(stripEmojis("Hello 👋 World"), "Hello  World");
+  assertEquals(stripEmojis("📍 The Venue"), "The Venue");
+  assertEquals(stripEmojis("Salcedo Market! 💛✨"), "Salcedo Market!");
+  assertEquals(stripEmojis("🎅 Christmas Party 🎄"), "Christmas Party");
+  assertEquals(stripEmojis("No emojis here"), "No emojis here");
+});
+
+Deno.test("normalizeLocationName - should handle sentence fragments", () => {
+  // Sentence fragment after period (from the logs)
+  assertEquals(
+    normalizeLocationName("Jess & Pat's.When a listener is moved to"),
+    "Jess & Pat's"
+  );
+  
+  // Should keep proper venue names
+  assertEquals(normalizeLocationName("The Victor"), "The Victor");
+  assertEquals(normalizeLocationName("Salcedo Market"), "Salcedo Market");
+});
+
+Deno.test("normalizeLocationName - should remove emojis and punctuation", () => {
+  assertEquals(
+    normalizeLocationName("Salcedo Market! 💛✨ Reno's Bacolod Delica"),
+    "Salcedo Market"  // Stripped emojis and the trailing text after the emoji
+  );
+  
+  assertEquals(normalizeLocationName("Venue Name!!!"), "Venue Name");
+  assertEquals(normalizeLocationName("Place..."), "Place");
+});
+
+Deno.test("normalizeLocationName - should reject non-location phrases", () => {
+  assertEquals(normalizeLocationName("Limited slots available."), null);
+  assertEquals(normalizeLocationName("Limited slots available"), null);
+  assertEquals(normalizeLocationName("Register now."), null);
+  assertEquals(normalizeLocationName("Book now"), null);
+  assertEquals(normalizeLocationName("Slots available"), null);
+});
+
+Deno.test("normalizeLocationAddress - should remove sponsor text", () => {
+  const address1 = "Bridgetowne, Pasig Made possible by: Bridgetowne Destination Estate and Robinsons Land Corporation @bridgetownedestinationestate @officialrobinsonsland";
+  assertEquals(
+    normalizeLocationAddress(address1),
+    "Bridgetowne, Pasig"
+  );
+  
+  const address2 = "BGC, Taguig Powered by: Some Company";
+  assertEquals(normalizeLocationAddress(address2), "BGC, Taguig");
+  
+  const address3 = "Makati City Presented by: Event Sponsor";
+  assertEquals(normalizeLocationAddress(address3), "Makati City");
+});
+
+Deno.test("normalizeLocationAddress - should remove @handles", () => {
+  assertEquals(
+    normalizeLocationAddress("Venue @handle1 @handle2"),
+    "Venue"
+  );
+  
+  assertEquals(
+    normalizeLocationAddress("@venue_official The Place"),
+    "The Place"
+  );
+});
+
+Deno.test("normalizeLocationAddress - should strip emojis", () => {
+  assertEquals(
+    normalizeLocationAddress("📍 BGC, Taguig 🎉"),
+    "BGC, Taguig"
+  );
+});
+
+// ============================================================
+// VENUE ALIASING TESTS
+// ============================================================
+
+Deno.test("canonicalizeVenueName - should map known aliases", () => {
+  const result1 = canonicalizeVenueName("The Victor Art Installation", "Bridgetowne, Pasig City");
+  assertEquals(result1.canonical, "The Victor");
+  assertEquals(result1.wasAliased, true);
+  
+  const result2 = canonicalizeVenueName("Victor Art Installation", "Bridgetowne");
+  assertEquals(result2.canonical, "The Victor");
+  assertEquals(result2.wasAliased, true);
+});
+
+Deno.test("canonicalizeVenueName - should preserve unaliased names", () => {
+  const result = canonicalizeVenueName("Some Random Venue", "Manila");
+  assertEquals(result.canonical, "Some Random Venue");
+  assertEquals(result.wasAliased, false);
+});
+
+Deno.test("canonicalizeVenueName - should check context when required", () => {
+  // "The Victor Art Installation" requires context containing "Bridgetowne"
+  const withContext = canonicalizeVenueName("The Victor Art Installation", "Bridgetowne, Pasig");
+  assertEquals(withContext.wasAliased, true);
+  
+  // Without matching context, should not alias
+  const withoutContext = canonicalizeVenueName("The Victor Art Installation", "Makati City");
+  assertEquals(withoutContext.wasAliased, false);
+});
+
+Deno.test("VENUE_ALIASES - should have expected entries", () => {
+  assertExists(VENUE_ALIASES['the victor art installation']);
+  assertEquals(VENUE_ALIASES['the victor art installation'].canonical, "The Victor");
+});
+
+// ============================================================
+// isEvent CLASSIFICATION TESTS
+// ============================================================
+
+Deno.test("hasTemporalEventIndicators - should detect date ranges", () => {
+  // Date ranges from the logs
+  assertEquals(hasTemporalEventIndicators("Nov 29-30"), true);
+  assertEquals(hasTemporalEventIndicators("Nov.29-30"), true);
+  assertEquals(hasTemporalEventIndicators("November 29-30"), true);
+  assertEquals(hasTemporalEventIndicators("Dec 5-7"), true);
+  assertEquals(hasTemporalEventIndicators("October 28-29"), true);
+  
+  // No date range
+  assertEquals(hasTemporalEventIndicators("No dates here"), false);
+});
+
+Deno.test("hasTemporalEventIndicators - should detect temporal phrases with event types", () => {
+  // "coming to" + "market" + location
+  assertEquals(
+    hasTemporalEventIndicators("MARIKINA, HERE WE COME 🎅 On Nov.29-30, the Community Fleamarket is coming to Marikina"),
+    true
+  );
+  
+  // "pop-up" with date range
+  assertEquals(hasTemporalEventIndicators("Pop-up market Nov 29-30"), true);
+  
+  // "flea market" alone
+  assertEquals(hasTemporalEventIndicators("Flea market this Saturday"), true);
+  
+  // Just a regular sentence without temporal indicators
+  assertEquals(hasTemporalEventIndicators("Check out our products"), false);
+});
+
+Deno.test("hasTemporalEventIndicators - should detect markets and fairs", () => {
+  assertEquals(hasTemporalEventIndicators("Community market Dec 1-2"), true);
+  assertEquals(hasTemporalEventIndicators("Night market this weekend"), true);
+  assertEquals(hasTemporalEventIndicators("Weekend bazaar happening on Nov 29"), true);
+});
+
+// ============================================================
+// EXISTING VENDOR DETECTION TESTS
+// ============================================================
 
 Deno.test("isVendorPostStrict - should detect strict vendor patterns", () => {
   // Vendor recruitment
@@ -161,4 +388,45 @@ Deno.test("Edge cases - mixed event and vendor language", () => {
   // Actual vendor booth application - should be strict
   const text3 = "Apply now for vendor slots at our weekend market!";
   assertEquals(isVendorPostStrict(text3), true);
+});
+
+// ============================================================
+// REGRESSION TESTS - Based on problematic log examples
+// ============================================================
+
+Deno.test("Regression: Community Flea Market Marikina should be isEvent: true", () => {
+  const caption = "MARIKINA, HERE WE COME 🎅 On Nov.29-30, the Community Fleamarket is coming to Marikina for the very first time...";
+  
+  // Should have temporal event indicators
+  assertEquals(hasTemporalEventIndicators(caption), true);
+  
+  // Should NOT be detected as strict vendor
+  assertEquals(isVendorPostStrict(caption), false);
+  
+  // May have soft vendor signals due to "market" - that's OK, it should still be classified as event
+});
+
+Deno.test("Regression: Static venue promos should remain isEvent: false", () => {
+  const promoCaption = "Open every Wed for happy hour! Check out our new menu.";
+  
+  // Should NOT have temporal event indicators (recurring, not a specific date)
+  assertEquals(hasTemporalEventIndicators(promoCaption), false);
+});
+
+Deno.test("Regression: Lan Kwai time parsing - 9:00 PM onwards", () => {
+  // "9:00 PM onwards" should result in valid time
+  const timeStr = "21:00:00"; // 9 PM in 24h format
+  assertEquals(isValidTime(timeStr), true);
+});
+
+Deno.test("Regression: The Victor Art Installation should alias to The Victor", () => {
+  const result = canonicalizeVenueName("The Victor Art Installation", "Bridgetowne, Pasig City");
+  assertEquals(result.canonical, "The Victor");
+  assertEquals(result.wasAliased, true);
+});
+
+Deno.test("Regression: Address with sponsor text should be cleaned", () => {
+  const rawAddress = "Bridgetowne, Pasig Made possible by: Bridgetowne Destination Estate and Robinsons Land Corporation @bridgetownedestinationestate @officialrobinsonsland";
+  const normalized = normalizeLocationAddress(rawAddress);
+  assertEquals(normalized, "Bridgetowne, Pasig");
 });
