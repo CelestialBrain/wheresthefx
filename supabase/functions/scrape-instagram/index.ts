@@ -11,6 +11,7 @@ import {
   extractSignupUrl,
   autoTagPost,
   isValidAddress,
+  isValidTime,
   hasTemporalEventIndicators,
   normalizeLocationAddress,
   canonicalizeVenueName,
@@ -191,18 +192,6 @@ function parseRelativeDate(text: string): string | null {
   }
   
   return null;
-}
-
-// Validate time format (must be HH:MM with valid hours 0-23, minutes 0-59)
-function isValidTime(timeStr: string): boolean {
-  if (!timeStr) return false;
-  const parts = timeStr.split(':');
-  if (parts.length !== 2) return false;
-  
-  const hour = parseInt(parts[0]);
-  const minute = parseInt(parts[1]);
-  
-  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
 }
 
 // Enhanced event parser with learned patterns integration
@@ -1159,6 +1148,13 @@ Deno.serve(async (req) => {
             } catch (parseError) {
               const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
               totalSkipped++;
+              // Log as rejected post for parse failure
+              await logger.logRejectedPost({
+                postId,
+                reason: 'PARSE_FAILED',
+                reasonMessage: `Caption parsing error: ${errorMessage}`,
+                captionPreview: post.caption?.substring(0, 200) || null,
+              });
               console.log(`Skipping post ${postId} - parse failed: ${errorMessage}`);
               continue;
             }
