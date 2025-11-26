@@ -584,14 +584,20 @@ export async function extractTime(
   }
   
   // Standard time pattern with optional range
-  const timePattern = /\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)?\s*(?:[-–]|to|hanggang)?\s*(\d{1,2})?(?::([0-5]\d))?\s*(am|pm)?\b/gi;
+  // Enhanced: Requires colon OR am/pm, and negative lookbehind for currency
+  const timePattern = /(?<!₱|PHP|P\s?)(\d{1,2}):([0-5]\d)\s*(am|pm)?|(?<!\d)(\d{1,2})\s*(am|pm)\b/gi;
   const matches = [...text.matchAll(timePattern)];
   
   if (matches.length === 0) {
     return { startTime: null, endTime: null, timeValidationFailed: false };
   }
   
-  const convertTo24h = (hour: number, minute: string, meridiem?: string): string => {
+  const convertTo24h = (hour: number, minute: string, meridiem?: string): string | null => {
+    // PRE-VALIDATION: Reject invalid hours immediately
+    if (hour < 0 || hour > 23) {
+      return null;
+    }
+    
     let h = hour;
     // Only convert if hour is in valid 12-hour range
     if (meridiem === 'pm' && h < 12) h += 12;
@@ -600,13 +606,23 @@ export async function extractTime(
   };
   
   const firstMatch = matches[0];
-  const startHour = parseInt(firstMatch[1]);
+  // Handle two match groups: (hour:minute am/pm) OR (hour am/pm)
+  const startHour = parseInt(firstMatch[1] || firstMatch[4]);
   const startMin = firstMatch[2] || '00';
-  let startMeridiem = firstMatch[3]?.toLowerCase();
+  let startMeridiem = (firstMatch[3] || firstMatch[5])?.toLowerCase();
   
-  const endHour = firstMatch[4] ? parseInt(firstMatch[4]) : null;
-  const endMin = firstMatch[5] || '00';
-  let endMeridiem = firstMatch[6]?.toLowerCase();
+  // Check if we need to look for a range (second time in remaining matches)
+  let endHour: number | null = null;
+  let endMin = '00';
+  let endMeridiem: string | undefined;
+  
+  // Look for time range pattern "7pm-9pm" or "7-9pm"
+  if (matches.length > 1) {
+    const secondMatch = matches[1];
+    endHour = parseInt(secondMatch[1] || secondMatch[4]);
+    endMin = secondMatch[2] || '00';
+    endMeridiem = (secondMatch[3] || secondMatch[5])?.toLowerCase();
+  }
   
   // Propagate meridiem if only end has it
   if (!startMeridiem && endMeridiem) {
@@ -624,8 +640,19 @@ export async function extractTime(
     if (inferred) endMeridiem = inferred.toLowerCase();
   }
   
+  // Convert with pre-validation
   const startTime = convertTo24h(startHour, startMin, startMeridiem);
   const endTime = endHour ? convertTo24h(endHour, endMin, endMeridiem) : null;
+  
+  // If conversion failed (returned null), mark as validation failure
+  if (startTime === null && startHour !== null) {
+    return { 
+      startTime: null, 
+      endTime: null, 
+      timeValidationFailed: true,
+      rawStartTime: `${startHour}:${startMin}:00`
+    };
+  }
   
   // Validate and return cleaned times
   return validateAndCleanTimes(startTime, endTime);

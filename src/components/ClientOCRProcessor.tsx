@@ -359,6 +359,21 @@ export function ClientOCRProcessor() {
 
         // Extract entities using regex (keep original sync version)
         const entities = extractEntities(ocrText, post.caption);
+        
+        // Log OCR processing to scraper_logs
+        await supabase.from('scraper_logs').insert({
+          log_level: 'info',
+          stage: 'ocr',
+          message: `Client OCR processed: ${(confidence * 100).toFixed(0)}% confidence`,
+          instagram_post_id: post.id,
+          data: {
+            confidence,
+            textLength: ocrText.length,
+            extractedEntities: entities,
+            imageDimensions: `${img.width}x${img.height}`,
+            imageSource: post.stored_image_url ? 'stored' : 'cdn'
+          }
+        });
 
         // Update post
         await updatePostMutation.mutateAsync({
@@ -376,6 +391,20 @@ export function ClientOCRProcessor() {
         const errorMessage = isCorsError 
           ? `Image blocked by CORS - needs re-scraping: ${error.message}`
           : error.message || 'Unknown error';
+        
+        // Log OCR error to scraper_logs
+        await supabase.from('scraper_logs').insert({
+          log_level: 'error',
+          stage: 'ocr',
+          message: `Client OCR failed: ${errorMessage}`,
+          instagram_post_id: post.id,
+          error_details: {
+            errorType: isCorsError ? 'CORS' : 'OCR',
+            message: error.message,
+            stack: error.stack,
+            imageUrl: post.stored_image_url || post.image_url
+          }
+        });
         
         // Log error to database for tracking (use direct query to avoid mutation conflicts)
         try {
