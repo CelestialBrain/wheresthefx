@@ -323,6 +323,60 @@ export type Database = {
           },
         ]
       }
+      extraction_feedback: {
+        Row: {
+          confidence_score: number | null
+          corrected_value: string
+          created_at: string | null
+          created_by: string | null
+          feedback_type: string
+          field_name: string
+          id: string
+          original_value: string | null
+          pattern_id: string | null
+          post_id: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          corrected_value: string
+          created_at?: string | null
+          created_by?: string | null
+          feedback_type: string
+          field_name: string
+          id?: string
+          original_value?: string | null
+          pattern_id?: string | null
+          post_id?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          corrected_value?: string
+          created_at?: string | null
+          created_by?: string | null
+          feedback_type?: string
+          field_name?: string
+          id?: string
+          original_value?: string | null
+          pattern_id?: string | null
+          post_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extraction_feedback_pattern_id_fkey"
+            columns: ["pattern_id"]
+            isOneToOne: false
+            referencedRelation: "extraction_patterns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extraction_feedback_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       extraction_patterns: {
         Row: {
           confidence_score: number | null
@@ -334,6 +388,7 @@ export type Database = {
           pattern_description: string | null
           pattern_regex: string
           pattern_type: string
+          priority: number | null
           source: string | null
           success_count: number | null
         }
@@ -347,6 +402,7 @@ export type Database = {
           pattern_description?: string | null
           pattern_regex: string
           pattern_type: string
+          priority?: number | null
           source?: string | null
           success_count?: number | null
         }
@@ -360,6 +416,7 @@ export type Database = {
           pattern_description?: string | null
           pattern_regex?: string
           pattern_type?: string
+          priority?: number | null
           source?: string | null
           success_count?: number | null
         }
