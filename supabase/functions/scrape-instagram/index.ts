@@ -989,36 +989,63 @@ Deno.serve(async (req) => {
           // FALLBACK: Check known_venues database table
           if (!cacheHit) {
             try {
-              const searchName = cleanedVenueName.toLowerCase().replace(/[%_]/g, '');
+              const searchName = cleanedVenueName.toLowerCase().replace(/[%_]/g, '').trim();
+              console.log(`[GEOCODE DEBUG] Attempting known_venues DB lookup for: "${searchName}" (original: "${eventInfo.locationName}")`);
               
-              // Query known_venues with name match or alias match
-              const { data: knownVenue } = await supabase
+              // First, fetch all known venues (they're a small set) for flexible matching
+              const { data: allVenues, error: dbError } = await supabase
                 .from('known_venues')
-                .select('name, lat, lng, city, aliases')
-                .or(`name.ilike.%${searchName}%`)
-                .limit(5);
+                .select('name, lat, lng, city, aliases');
               
-              // Check results for exact or alias match
+              if (dbError) {
+                console.log(`[GEOCODE DEBUG] DB query error: ${dbError.message}`);
+                throw dbError;
+              }
+              
+              console.log(`[GEOCODE DEBUG] Fetched ${allVenues?.length || 0} known venues from DB`);
+              
+              // Check results for exact or alias match with flexible matching
               let matchedVenue = null;
-              if (knownVenue && knownVenue.length > 0) {
-                for (const venue of knownVenue) {
+              if (allVenues && allVenues.length > 0) {
+                // Extract words from search name for partial matching
+                const searchWords = searchName.split(/\s+/).filter(w => w.length > 2);
+                
+                for (const venue of allVenues) {
                   const venueLower = venue.name.toLowerCase();
+                  
+                  // Direct name matching (either direction)
                   if (venueLower.includes(searchName) || searchName.includes(venueLower)) {
                     matchedVenue = venue;
+                    console.log(`[GEOCODE DEBUG] Matched by name: "${venue.name}"`);
                     break;
                   }
-                  // Check aliases
+                  
+                  // Check aliases (either direction)
                   if (venue.aliases && Array.isArray(venue.aliases)) {
                     for (const alias of venue.aliases) {
                       const aliasLower = alias.toLowerCase();
                       if (aliasLower.includes(searchName) || searchName.includes(aliasLower)) {
                         matchedVenue = venue;
+                        console.log(`[GEOCODE DEBUG] Matched by alias "${alias}" → "${venue.name}"`);
                         break;
                       }
                     }
                   }
                   if (matchedVenue) break;
+                  
+                  // Partial word matching - if venue name words appear in search
+                  const venueWords = venueLower.split(/\s+/).filter((w: string) => w.length > 2);
+                  const matchingWords = venueWords.filter((vw: string) => searchWords.some((sw: string) => sw.includes(vw) || vw.includes(sw)));
+                  if (matchingWords.length >= 2 || (matchingWords.length === 1 && venueWords.length === 1)) {
+                    matchedVenue = venue;
+                    console.log(`[GEOCODE DEBUG] Matched by words [${matchingWords.join(', ')}] → "${venue.name}"`);
+                    break;
+                  }
                 }
+              }
+              
+              if (!matchedVenue) {
+                console.log(`[GEOCODE DEBUG] No match found for "${searchName}"`);
               }
               
               if (matchedVenue?.lat && matchedVenue?.lng) {
