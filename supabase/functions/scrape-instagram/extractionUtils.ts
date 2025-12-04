@@ -573,17 +573,22 @@ export async function extractPrice(
     }
   }
   
-  // Filipino slang: "5 hundo" = 500, "isang libo" = 1000
+  // Filipino slang multipliers
+  const HUNDO_MULTIPLIER = 100;  // "5 hundo" = 500
+  const LIBO_AMOUNT = 1000;      // "isang libo" = 1000
+  
+  // Filipino slang: "5 hundo" = 500
   const hundoMatch = text.match(/\b(\d+)\s*hundo\b/i);
   if (hundoMatch) {
-    const amount = parseInt(hundoMatch[1]) * 100;
+    const amount = parseInt(hundoMatch[1]) * HUNDO_MULTIPLIER;
     if (amount >= 0 && amount <= 1000000) {
       return { amount, currency: 'PHP', isFree: false };
     }
   }
   
+  // Filipino slang: "isang libo" = 1000
   if (/\bisang\s*libo\b/i.test(text)) {
-    return { amount: 1000, currency: 'PHP', isFree: false };
+    return { amount: LIBO_AMOUNT, currency: 'PHP', isFree: false };
   }
   
   // Price range pattern (₱299–₱349, PHP 299 to 349, P299-349)
