@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square } from "lucide-react";
 import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
@@ -33,7 +33,7 @@ interface ScrapeRun {
   posts_added: number;
   posts_updated: number;
   accounts_found: number;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
   error_message: string | null;
   started_at: string;
   completed_at: string | null;
@@ -50,6 +50,7 @@ const Admin = () => {
   const [isScraping, setIsScraping] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -301,6 +302,40 @@ const Admin = () => {
     }
   };
 
+  const stopCurrentScrape = async () => {
+    if (!lastRun) return;
+    
+    try {
+      setIsStopping(true);
+      
+      const { error } = await supabase
+        .from("scrape_runs")
+        .update({ 
+          status: 'cancelled' as any,
+          completed_at: new Date().toISOString(),
+          error_message: 'Manually stopped by admin'
+        })
+        .eq("id", lastRun.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Scrape Stopped",
+        description: "The scrape run has been marked as cancelled",
+      });
+      
+      fetchScrapeRuns();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to stop scrape",
+        variant: "destructive",
+      });
+    } finally {
+      setIsStopping(false);
+    }
+  };
+
   const backfillImages = async () => {
     try {
       setIsLoading(true);
@@ -406,8 +441,16 @@ const Admin = () => {
                       {formatTimestamp(lastRun.started_at)} ({getTimeSince(lastRun.started_at)})
                     </p>
                     <div className="flex flex-wrap gap-2 md:gap-4 mt-2 text-xs md:text-sm">
-                      <span className={lastRun.status === 'completed' ? 'text-green-600' : lastRun.status === 'failed' ? 'text-red-600' : 'text-yellow-600'}>
-                        {lastRun.status === 'completed' ? '✓ Success' : lastRun.status === 'failed' ? '✗ Failed' : '⏳ Running'}
+                      <span className={
+                        lastRun.status === 'completed' ? 'text-green-600' : 
+                        lastRun.status === 'failed' ? 'text-red-600' : 
+                        lastRun.status === 'cancelled' ? 'text-orange-600' : 
+                        'text-yellow-600'
+                      }>
+                        {lastRun.status === 'completed' ? '✓ Success' : 
+                         lastRun.status === 'failed' ? '✗ Failed' : 
+                         lastRun.status === 'cancelled' ? '⊘ Cancelled' : 
+                         '⏳ Running'}
                       </span>
                       {lastRun.status === 'completed' && (
                         <>
@@ -421,9 +464,23 @@ const Admin = () => {
                       <p className="text-xs text-red-600 mt-2">{lastRun.error_message}</p>
                     )}
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setShowHistory(!showHistory)} className="w-full md:w-auto">
-                    {showHistory ? 'Hide' : 'View'} History
-                  </Button>
+                  <div className="flex gap-2 w-full md:w-auto">
+                    {lastRun.status === 'running' && (
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        onClick={stopCurrentScrape}
+                        disabled={isStopping}
+                        className="w-full md:w-auto"
+                      >
+                        <Square className="h-4 w-4 mr-2" />
+                        {isStopping ? "Stopping..." : "Stop Scrape"}
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => setShowHistory(!showHistory)} className="w-full md:w-auto">
+                      {showHistory ? 'Hide' : 'View'} History
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
             </Card>
@@ -442,7 +499,12 @@ const Admin = () => {
                       {run.dataset_id && <span className="text-xs text-muted-foreground ml-2">({run.dataset_id})</span>}
                     </div>
                     <div className="flex gap-3 text-xs">
-                      <span className={run.status === 'completed' ? 'text-green-600' : run.status === 'failed' ? 'text-red-600' : 'text-yellow-600'}>
+                      <span className={
+                        run.status === 'completed' ? 'text-green-600' : 
+                        run.status === 'failed' ? 'text-red-600' : 
+                        run.status === 'cancelled' ? 'text-orange-600' : 
+                        'text-yellow-600'
+                      }>
                         {run.status}
                       </span>
                       {run.status === 'completed' && (
