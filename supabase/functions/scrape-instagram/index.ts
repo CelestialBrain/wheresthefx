@@ -175,35 +175,50 @@ function needsAIExtraction(eventInfo: {
 
 /**
  * Call the AI extraction edge function
+/**
+ * Raw data input for AI extraction with full context
+ */
+interface AIExtractionInput {
+  caption: string;
+  locationHint: string | null;
+  postId: string;
+  postedAt?: string | null;
+  ownerUsername?: string | null;
+  instagramAccountId?: string | null;
+}
+
+/**
+ * Call the AI extraction edge function with full context
  */
 async function parseEventWithAI(
-  caption: string,
-  locationName: string | null,
-  postId: string,
+  input: AIExtractionInput,
   supabase: ReturnType<typeof createClient>
 ): Promise<AIExtractionResult | null> {
   try {
     const { data, error } = await supabase.functions.invoke('ai-extract-event', {
       body: {
-        caption,
-        locationHint: locationName,
-        postId,
+        caption: input.caption,
+        locationHint: input.locationHint,
+        postId: input.postId,
+        postedAt: input.postedAt,
+        ownerUsername: input.ownerUsername,
+        instagramAccountId: input.instagramAccountId,
       },
     });
 
     if (error) {
-      console.error(`AI extraction failed for ${postId}:`, error.message);
+      console.error(`AI extraction failed for ${input.postId}:`, error.message);
       return null;
     }
 
     if (!data || !data.success || !data.extraction) {
-      console.log(`AI extraction returned no results for ${postId}`);
+      console.log(`AI extraction returned no results for ${input.postId}`);
       return null;
     }
 
     return data.extraction as AIExtractionResult;
   } catch (err) {
-    console.error(`AI extraction error for ${postId}:`, err);
+    console.error(`AI extraction error for ${input.postId}:`, err);
     return null;
   }
 }
@@ -322,7 +337,12 @@ async function parseEventFromCaption(
   caption: string,
   locationName?: string | null,
   supabase?: ReturnType<typeof createClient>,
-  postId?: string
+  postId?: string,
+  additionalContext?: {
+    postedAt?: string | null;
+    ownerUsername?: string | null;
+    instagramAccountId?: string | null;
+  }
 ): Promise<{
   eventTitle?: string;
   eventDate?: string;
@@ -507,7 +527,15 @@ async function parseEventFromCaption(
   if (supabase && postId && needsAIExtraction(regexResult)) {
     console.log(`Attempting AI extraction for post ${postId} (regex incomplete/messy)`);
     
-    const aiResult = await parseEventWithAI(caption, locationName || null, postId, supabase);
+    // Pass full context to AI extraction for smart learning
+    const aiResult = await parseEventWithAI({
+      caption,
+      locationHint: locationName || null,
+      postId,
+      postedAt: additionalContext?.postedAt,
+      ownerUsername: additionalContext?.ownerUsername,
+      instagramAccountId: additionalContext?.instagramAccountId,
+    }, supabase);
     
     if (aiResult && aiResult.confidence >= 0.6) {
       console.log(`AI extraction succeeded for ${postId} with confidence ${aiResult.confidence}`);
@@ -792,7 +820,17 @@ Deno.serve(async (req) => {
         const parseStart = Date.now();
         let eventInfo;
         try {
-          eventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase, postId);
+          eventInfo = await parseEventFromCaption(
+            item.caption || '', 
+            item.locationName, 
+            supabase, 
+            postId,
+            {
+              postedAt: postedAt,
+              ownerUsername: username,
+              // instagramAccountId not yet available - will be looked up later
+            }
+          );
         } catch (parseError) {
           const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
           totalSkipped++;
@@ -1078,7 +1116,17 @@ Deno.serve(async (req) => {
           
           // Check if caption changed (indicating potential update)
           if (existingPost.caption !== item.caption) {
-            const newEventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase, postId);
+            const newEventInfo = await parseEventFromCaption(
+              item.caption || '', 
+              item.locationName, 
+              supabase, 
+              postId,
+              {
+                postedAt: postedAt,
+                ownerUsername: username,
+                instagramAccountId: account.id,
+              }
+            );
             
             // Only update if new event info is valid
             if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
@@ -1447,7 +1495,17 @@ Deno.serve(async (req) => {
             // Parse event information
             let eventInfo;
             try {
-              eventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase, postId);
+              eventInfo = await parseEventFromCaption(
+                post.caption || '', 
+                post.locationName, 
+                supabase, 
+                postId,
+                {
+                  postedAt: post.timestamp,
+                  ownerUsername: account.username,
+                  instagramAccountId: account.id,
+                }
+              );
             } catch (parseError) {
               const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
               totalSkipped++;
@@ -1523,7 +1581,17 @@ Deno.serve(async (req) => {
             if (existingPost) {
               // Check for caption changes
               if (existingPost.caption !== post.caption) {
-                const newEventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase, postId);
+                const newEventInfo = await parseEventFromCaption(
+                  post.caption || '', 
+                  post.locationName, 
+                  supabase, 
+                  postId,
+                  {
+                    postedAt: post.timestamp,
+                    ownerUsername: account.username,
+                    instagramAccountId: account.id,
+                  }
+                );
                 
                 if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
                   await supabase
