@@ -73,9 +73,12 @@ interface ApifyDatasetItem {
   }>;
 }
 
+// Maximum number of additional carousel images to extract (excludes primary image)
+const MAX_ADDITIONAL_CAROUSEL_IMAGES = 3;
+
 /**
  * Extract additional images from carousel posts (Sidecar type)
- * Returns array of up to 3 additional image URLs
+ * Returns array of up to MAX_ADDITIONAL_CAROUSEL_IMAGES image URLs
  */
 function extractCarouselImages(item: ApifyDatasetItem): string[] {
   if (item.type !== 'Sidecar' || !item.childPosts || item.childPosts.length === 0) {
@@ -85,8 +88,9 @@ function extractCarouselImages(item: ApifyDatasetItem): string[] {
   const additionalImages: string[] = [];
   
   // Skip first child (it's usually the primary image already in displayUrl)
-  // Extract up to 3 additional images
-  for (let i = 1; i < Math.min(item.childPosts.length, 4); i++) {
+  // Extract up to MAX_ADDITIONAL_CAROUSEL_IMAGES additional images
+  const maxIndex = Math.min(item.childPosts.length, MAX_ADDITIONAL_CAROUSEL_IMAGES + 1);
+  for (let i = 1; i < maxIndex; i++) {
     const child = item.childPosts[i];
     const imageUrl = child.displayUrl || child.imageUrl;
     
