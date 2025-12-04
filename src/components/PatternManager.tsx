@@ -7,14 +7,25 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Search, CheckCircle2, XCircle, TrendingUp, AlertCircle } from "lucide-react";
+import { Search, CheckCircle2, XCircle, AlertCircle, Eye, EyeOff, AlertTriangle } from "lucide-react";
 import { PatternLearner } from "./PatternLearner";
+
+interface PatternTestResult {
+  patternId: string;
+  patternType: string;
+  description: string | null;
+  regex: string;
+  matches: string[];
+  error: string | null;
+}
 
 export const PatternManager = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [testText, setTestText] = useState("");
+  const [showAllPatterns, setShowAllPatterns] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: patterns, isLoading } = useQuery({
@@ -65,28 +76,59 @@ export const PatternManager = () => {
     },
   });
 
-  const testPattern = (pattern: string, text: string): string[] => {
+  const testPattern = (pattern: string): { matches: string[]; error: string | null } => {
     try {
       const regex = new RegExp(pattern, "gi");
-      const matches = text.match(regex);
-      return matches || [];
-    } catch (error) {
-      console.error("Invalid regex pattern:", error);
-      return [];
+      const matches = testText.match(regex);
+      return { matches: matches || [], error: null };
+    } catch (error: any) {
+      return { matches: [], error: error.message || "Invalid regex" };
     }
   };
+
+  const getTestResults = (): PatternTestResult[] => {
+    if (!patterns || !testText.trim()) return [];
+    
+    return patterns
+      .filter(p => p.is_active)
+      .map(pattern => {
+        const { matches, error } = testPattern(pattern.pattern_regex);
+        return {
+          patternId: pattern.id,
+          patternType: pattern.pattern_type,
+          description: pattern.pattern_description,
+          regex: pattern.pattern_regex,
+          matches,
+          error,
+        };
+      });
+  };
+
+  const testResults = getTestResults();
+  const matchedResults = testResults.filter(r => r.matches.length > 0);
+  const errorResults = testResults.filter(r => r.error !== null);
+  const noMatchResults = testResults.filter(r => r.matches.length === 0 && !r.error);
 
   const filteredPatterns = patterns?.filter(p =>
     p.pattern_description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.pattern_regex.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const patternTypes = ["all", "time", "date", "venue", "price", "address", "signup_url"];
+  const patternTypes = ["all", "time", "date", "venue", "price", "address", "signup_url", "free"];
 
   const getConfidenceColor = (score: number) => {
     if (score >= 0.8) return "text-green-600";
     if (score >= 0.6) return "text-yellow-600";
     return "text-orange-600";
+  };
+
+  const checkRegexValidity = (regex: string): { valid: boolean; error?: string } => {
+    try {
+      new RegExp(regex, "gi");
+      return { valid: true };
+    } catch (e: any) {
+      return { valid: false, error: e.message };
+    }
   };
 
   if (isLoading) {
@@ -116,7 +158,7 @@ export const PatternManager = () => {
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="px-3 py-2 border rounded-md text-sm w-full md:w-auto"
+              className="px-3 py-2 border rounded-md text-sm w-full md:w-auto bg-background"
             >
               {patternTypes.map(type => (
                 <option key={type} value={type}>
@@ -127,76 +169,95 @@ export const PatternManager = () => {
           </div>
 
           <div className="grid gap-3">
-            {filteredPatterns?.map((pattern) => (
-              <Card key={pattern.id}>
-                <CardContent className="p-4 md:p-6">
-                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="outline" className="text-xs">{pattern.pattern_type}</Badge>
-                        <Badge
-                          variant={pattern.source === "default" ? "secondary" : "default"}
-                          className="text-xs"
-                        >
-                          {pattern.source}
-                        </Badge>
-                        <span className={`text-xs md:text-sm font-semibold ${getConfidenceColor(Number(pattern.confidence_score))}`}>
-                          {(Number(pattern.confidence_score) * 100).toFixed(0)}% confidence
-                        </span>
-                      </div>
-                      
-                      <code className="block p-2 bg-muted rounded text-xs md:text-sm break-all">
-                        {pattern.pattern_regex}
-                      </code>
-                      
-                      {pattern.pattern_description && (
-                        <p className="text-xs md:text-sm text-muted-foreground">
-                          {pattern.pattern_description}
-                        </p>
-                      )}
-                      
-                      <div className="flex flex-wrap gap-2 md:gap-4 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3 text-green-600" />
-                          {pattern.success_count} successes
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <XCircle className="h-3 w-3 text-red-600" />
-                          {pattern.failure_count} failures
-                        </span>
-                        {pattern.last_used_at && (
-                          <span>
-                            Last used: {new Date(pattern.last_used_at).toLocaleDateString()}
+            {filteredPatterns?.map((pattern) => {
+              const regexCheck = checkRegexValidity(pattern.pattern_regex);
+              
+              return (
+                <Card key={pattern.id} className={!regexCheck.valid ? "border-destructive" : ""}>
+                  <CardContent className="p-4 md:p-6">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className="text-xs">{pattern.pattern_type}</Badge>
+                          <Badge
+                            variant={pattern.source === "default" ? "secondary" : "default"}
+                            className="text-xs"
+                          >
+                            {pattern.source}
+                          </Badge>
+                          <span className={`text-xs md:text-sm font-semibold ${getConfidenceColor(Number(pattern.confidence_score))}`}>
+                            {(Number(pattern.confidence_score) * 100).toFixed(0)}% confidence
                           </span>
+                          {!regexCheck.valid && (
+                            <Badge variant="destructive" className="text-xs">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Invalid Regex
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        <code className="block p-2 bg-muted rounded text-xs md:text-sm break-all">
+                          {pattern.pattern_regex}
+                        </code>
+                        
+                        {!regexCheck.valid && (
+                          <p className="text-xs text-destructive">
+                            Error: {regexCheck.error}
+                          </p>
+                        )}
+                        
+                        {pattern.pattern_description && (
+                          <p className="text-xs md:text-sm text-muted-foreground">
+                            {pattern.pattern_description}
+                          </p>
+                        )}
+                        
+                        <div className="flex flex-wrap gap-2 md:gap-4 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-green-600" />
+                            {pattern.success_count} successes
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <XCircle className="h-3 w-3 text-red-600" />
+                            {pattern.failure_count} failures
+                          </span>
+                          {pattern.priority && (
+                            <span>Priority: {pattern.priority}</span>
+                          )}
+                          {pattern.last_used_at && (
+                            <span>
+                              Last used: {new Date(pattern.last_used_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 md:flex-col md:items-end">
+                        <Switch
+                          checked={pattern.is_active}
+                          onCheckedChange={() =>
+                            togglePatternMutation.mutate({
+                              id: pattern.id,
+                              isActive: pattern.is_active,
+                            })
+                          }
+                        />
+                        {pattern.source === "learned" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deletePatternMutation.mutate(pattern.id)}
+                            className="text-xs"
+                          >
+                            Delete
+                          </Button>
                         )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 md:flex-col md:items-end">
-                      <Switch
-                        checked={pattern.is_active}
-                        onCheckedChange={() =>
-                          togglePatternMutation.mutate({
-                            id: pattern.id,
-                            isActive: pattern.is_active,
-                          })
-                        }
-                      />
-                      {pattern.source === "learned" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deletePatternMutation.mutate(pattern.id)}
-                          className="text-xs"
-                        >
-                          Delete
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
 
             {filteredPatterns?.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
@@ -215,46 +276,145 @@ export const PatternManager = () => {
             <CardHeader className="p-4 md:p-6">
               <CardTitle className="text-base md:text-lg">Pattern Testing</CardTitle>
               <CardDescription className="text-xs md:text-sm">
-                Test your extraction patterns against sample text
+                Test your extraction patterns against sample text (e.g., paste an event caption)
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 md:p-6 pt-0 space-y-4">
               <div>
                 <label className="text-sm font-medium">Test Text</label>
-                <Input
-                  placeholder="Enter text to test patterns against..."
+                <Textarea
+                  placeholder="Paste event caption or OCR text here to test patterns..."
                   value={testText}
                   onChange={(e) => setTestText(e.target.value)}
-                  className="mt-1"
+                  className="mt-1 min-h-[100px]"
                 />
               </div>
 
-              {testText && (
-                <div className="space-y-3">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" />
-                    Matching Patterns
-                  </h3>
-                  {patterns
-                    ?.filter(p => p.is_active)
-                    .map((pattern) => {
-                      const matches = testPattern(pattern.pattern_regex, testText);
-                      if (matches.length === 0) return null;
+              {testText.trim() && (
+                <div className="space-y-4">
+                  {/* Summary Stats */}
+                  <div className="flex flex-wrap gap-4 p-3 bg-muted rounded-md">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium">{matchedResults.length} matched</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">{noMatchResults.length} no match</span>
+                    </div>
+                    {errorResults.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                        <span className="text-sm text-destructive">{errorResults.length} errors</span>
+                      </div>
+                    )}
+                    <div className="ml-auto">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAllPatterns(!showAllPatterns)}
+                        className="text-xs"
+                      >
+                        {showAllPatterns ? (
+                          <>
+                            <EyeOff className="h-3 w-3 mr-1" />
+                            Hide unmatched
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-3 w-3 mr-1" />
+                            Show all patterns
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
 
-                      return (
-                        <div key={pattern.id} className="p-3 border rounded-md">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="outline">{pattern.pattern_type}</Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {pattern.pattern_description}
-                            </span>
+                  {/* Error Patterns */}
+                  {errorResults.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="font-medium text-sm flex items-center gap-2 text-destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        Failed to Compile ({errorResults.length})
+                      </h3>
+                      {errorResults.map((result) => (
+                        <div key={result.patternId} className="p-3 border border-destructive rounded-md bg-destructive/5">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline">{result.patternType}</Badge>
+                            <span className="text-xs text-muted-foreground">{result.description}</span>
+                          </div>
+                          <code className="block text-xs p-1 bg-muted rounded mb-1 break-all">
+                            {result.regex}
+                          </code>
+                          <p className="text-xs text-destructive">Error: {result.error}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Matched Patterns */}
+                  {matchedResults.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="font-medium text-sm flex items-center gap-2 text-green-600">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Matching Patterns ({matchedResults.length})
+                      </h3>
+                      {matchedResults.map((result) => (
+                        <div key={result.patternId} className="p-3 border border-green-600/30 rounded-md bg-green-600/5">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline">{result.patternType}</Badge>
+                            <span className="text-xs text-muted-foreground">{result.description}</span>
                           </div>
                           <div className="text-sm">
-                            <strong>Matches:</strong> {matches.join(", ")}
+                            <strong>Matches:</strong>{" "}
+                            <span className="text-green-600 font-mono">
+                              {result.matches.join(", ")}
+                            </span>
                           </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
+                  )}
+
+                  {/* No Match Patterns (togglable) */}
+                  {showAllPatterns && noMatchResults.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="font-medium text-sm flex items-center gap-2 text-muted-foreground">
+                        <XCircle className="h-4 w-4" />
+                        No Matches ({noMatchResults.length})
+                      </h3>
+                      <div className="grid gap-2 max-h-[300px] overflow-y-auto">
+                        {noMatchResults.map((result) => (
+                          <div key={result.patternId} className="p-2 border rounded-md bg-muted/30">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">{result.patternType}</Badge>
+                              <span className="text-xs text-muted-foreground truncate flex-1">
+                                {result.description || result.regex.substring(0, 40) + "..."}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {matchedResults.length === 0 && errorResults.length === 0 && (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No patterns matched the test text</p>
+                      <p className="text-xs mt-1">Try pasting a different event caption or check your patterns</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!testText.trim() && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Enter some text above to test patterns</p>
+                  <p className="text-xs mt-1">
+                    Tip: Copy an event caption from Instagram to see which patterns match
+                  </p>
                 </div>
               )}
             </CardContent>
