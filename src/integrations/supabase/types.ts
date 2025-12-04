@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_venue_stats: {
+        Row: {
+          created_at: string | null
+          id: string
+          instagram_account_id: string | null
+          last_used_at: string | null
+          post_count: number | null
+          venue_name: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          instagram_account_id?: string | null
+          last_used_at?: string | null
+          post_count?: number | null
+          venue_name: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          instagram_account_id?: string | null
+          last_used_at?: string | null
+          post_count?: number | null
+          venue_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_venue_stats_instagram_account_id_fkey"
+            columns: ["instagram_account_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_venue_stats_instagram_account_id_fkey"
+            columns: ["instagram_account_id"]
+            isOneToOne: false
+            referencedRelation: "popular_instagram_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_attendees: {
         Row: {
           created_at: string
@@ -469,6 +511,9 @@ export type Database = {
       }
       instagram_posts: {
         Row: {
+          ai_confidence: number | null
+          ai_extraction: Json | null
+          ai_reasoning: string | null
           caption: string | null
           comments_count: number | null
           created_at: string
@@ -478,6 +523,7 @@ export type Database = {
           event_end_date: string | null
           event_time: string | null
           event_title: string | null
+          extraction_method: string | null
           hashtags: string[] | null
           id: string
           image_storage_path: string | null
@@ -511,6 +557,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_confidence?: number | null
+          ai_extraction?: Json | null
+          ai_reasoning?: string | null
           caption?: string | null
           comments_count?: number | null
           created_at?: string
@@ -520,6 +569,7 @@ export type Database = {
           event_end_date?: string | null
           event_time?: string | null
           event_title?: string | null
+          extraction_method?: string | null
           hashtags?: string[] | null
           id?: string
           image_storage_path?: string | null
@@ -553,6 +603,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_confidence?: number | null
+          ai_extraction?: Json | null
+          ai_reasoning?: string | null
           caption?: string | null
           comments_count?: number | null
           created_at?: string
@@ -562,6 +615,7 @@ export type Database = {
           event_end_date?: string | null
           event_time?: string | null
           event_title?: string | null
+          extraction_method?: string | null
           hashtags?: string[] | null
           id?: string
           image_storage_path?: string | null
@@ -629,6 +683,51 @@ export type Database = {
           created_at?: string | null
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      known_venues: {
+        Row: {
+          address: string | null
+          aliases: string[] | null
+          city: string | null
+          correction_count: number | null
+          created_at: string | null
+          id: string
+          instagram_handle: string | null
+          lat: number | null
+          learned_from_corrections: boolean | null
+          lng: number | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          aliases?: string[] | null
+          city?: string | null
+          correction_count?: number | null
+          created_at?: string | null
+          id?: string
+          instagram_handle?: string | null
+          lat?: number | null
+          learned_from_corrections?: boolean | null
+          lng?: number | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          aliases?: string[] | null
+          city?: string | null
+          correction_count?: number | null
+          created_at?: string | null
+          id?: string
+          instagram_handle?: string | null
+          lat?: number | null
+          learned_from_corrections?: boolean | null
+          lng?: number | null
+          name?: string
+          updated_at?: string | null
         }
         Relationships: []
       }
