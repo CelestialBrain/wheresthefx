@@ -15,6 +15,7 @@ import {
   hasTemporalEventIndicators,
   normalizeLocationAddress,
   canonicalizeVenueName,
+  cleanLocationName,
 } from './extractionUtils.ts';
 import { ScraperLogger, RejectedPostLogData } from './logger.ts';
 import { lookupNCRVenue, fuzzyMatchVenue } from './ncrGeoCache.ts';
@@ -121,6 +122,90 @@ function extractUsernameFromUrl(url: string): string | undefined {
   let username = decodeURIComponent(match[1]).trim().toLowerCase();
   if (username.startsWith('@')) username = username.slice(1);
   return username || undefined;
+}
+
+// ============================================================
+// AI EXTRACTION TYPES AND HELPER
+// ============================================================
+
+/**
+ * AI extraction result structure
+ */
+interface AIExtractionResult {
+  eventTitle: string | null;
+  eventDate: string | null;
+  eventEndDate: string | null;
+  eventTime: string | null;
+  endTime: string | null;
+  locationName: string | null;
+  locationAddress: string | null;
+  isEvent: boolean;
+  confidence: number;
+  reasoning: string;
+  additionalDates?: Array<{ date: string; venue: string; time?: string }>;
+  isFree?: boolean;
+  price?: number;
+  signupUrl?: string;
+}
+
+/**
+ * Determines if regex extraction results need AI correction.
+ * Returns true if:
+ * - Missing critical info (date, time, or location)
+ * - Location name is too long (>100 chars) indicating messy extraction
+ * - Event title is too long (>100 chars)
+ */
+function needsAIExtraction(eventInfo: {
+  eventDate?: string;
+  eventTime?: string;
+  locationName?: string;
+  eventTitle?: string;
+}): boolean {
+  // Missing critical info
+  const missingDate = !eventInfo.eventDate;
+  const missingTime = !eventInfo.eventTime;
+  const missingLocation = !eventInfo.locationName;
+  
+  // Messy extraction (too long)
+  const messyLocation = eventInfo.locationName && eventInfo.locationName.length > 100;
+  const messyTitle = eventInfo.eventTitle && eventInfo.eventTitle.length > 100;
+  
+  return missingDate || missingTime || missingLocation || messyLocation || messyTitle;
+}
+
+/**
+ * Call the AI extraction edge function
+ */
+async function parseEventWithAI(
+  caption: string,
+  locationName: string | null,
+  postId: string,
+  supabase: ReturnType<typeof createClient>
+): Promise<AIExtractionResult | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('ai-extract-event', {
+      body: {
+        caption,
+        locationHint: locationName,
+        postId,
+      },
+    });
+
+    if (error) {
+      console.error(`AI extraction failed for ${postId}:`, error.message);
+      return null;
+    }
+
+    if (!data || !data.success || !data.extraction) {
+      console.log(`AI extraction returned no results for ${postId}`);
+      return null;
+    }
+
+    return data.extraction as AIExtractionResult;
+  } catch (err) {
+    console.error(`AI extraction error for ${postId}:`, err);
+    return null;
+  }
 }
 
 // Parse and normalize date to YYYY-MM-DD format
@@ -236,7 +321,8 @@ function parseRelativeDate(text: string): string | null {
 async function parseEventFromCaption(
   caption: string,
   locationName?: string | null,
-  supabase?: any
+  supabase?: ReturnType<typeof createClient>,
+  postId?: string
 ): Promise<{
   eventTitle?: string;
   eventDate?: string;
@@ -260,6 +346,11 @@ async function parseEventFromCaption(
   timePatternId?: string | null;
   venuePatternId?: string | null;
   vendorPatternId?: string | null;
+  // AI extraction fields
+  extractionMethod?: 'regex' | 'ai' | 'ai_corrected';
+  aiExtraction?: AIExtractionResult;
+  aiConfidence?: number;
+  aiReasoning?: string;
 }> {
   if (!caption) {
     return { isEvent: false, isFree: true, needsReview: false };
@@ -334,8 +425,16 @@ async function parseEventFromCaption(
   const priceInfo = await extractPrice(normalized, supabase);
   const timeInfo = await extractTime(normalized, supabase);
   const dateInfo = await extractDate(normalized, supabase);
-  const venueInfo = await extractVenue(normalized, locationName, supabase);
+  let venueInfo = await extractVenue(normalized, locationName, supabase);
   const signupUrl = extractSignupUrl(normalized);
+  
+  // Clean location name if it's messy (>100 chars)
+  if (venueInfo.venueName && venueInfo.venueName.length > 100) {
+    const cleanedLocation = cleanLocationName(venueInfo.venueName);
+    if (cleanedLocation) {
+      venueInfo = { ...venueInfo, venueName: cleanedLocation };
+    }
+  }
 
   // Consider it an event if we have event keywords + (date OR location)
   // OR if we have temporal indicators (date range with market/pop-up keywords)
@@ -373,11 +472,11 @@ async function parseEventFromCaption(
     needsReview = false;
   }
   
-  return {
+  // Build regex result
+  let regexResult = {
     eventTitle,
     eventDate: dateInfo.eventDate || undefined,
     eventEndDate: dateInfo.eventEndDate || undefined,
-    // Only include time if validation passed
     eventTime: timeInfo.startTime || undefined,
     endTime: timeInfo.endTime || undefined,
     locationName: venueInfo.venueName || undefined,
@@ -389,17 +488,73 @@ async function parseEventFromCaption(
     isFree: priceInfo?.isFree ?? true,
     isEvent,
     needsReview,
-    // Time validation info
     timeValidationFailed: timeInfo.timeValidationFailed,
     rawEventTime: timeInfo.rawStartTime || undefined,
     rawEndTime: timeInfo.rawEndTime || undefined,
-    // Pattern IDs for logging and analytics
     pricePatternId: priceInfo?.patternId,
     datePatternId: dateInfo.patternId,
     timePatternId: timeInfo.patternId,
     venuePatternId: venueInfo.patternId,
-    vendorPatternId: null, // Not a vendor post if we got here
+    vendorPatternId: null as string | null,
+    extractionMethod: 'regex' as 'regex' | 'ai' | 'ai_corrected',
+    aiExtraction: undefined as AIExtractionResult | undefined,
+    aiConfidence: undefined as number | undefined,
+    aiReasoning: undefined as string | undefined,
   };
+  
+  // STEP 7: AI extraction fallback
+  // Call AI extraction if regex extraction is incomplete or messy
+  if (supabase && postId && needsAIExtraction(regexResult)) {
+    console.log(`Attempting AI extraction for post ${postId} (regex incomplete/messy)`);
+    
+    const aiResult = await parseEventWithAI(caption, locationName || null, postId, supabase);
+    
+    if (aiResult && aiResult.confidence >= 0.6) {
+      console.log(`AI extraction succeeded for ${postId} with confidence ${aiResult.confidence}`);
+      
+      // Determine extraction method
+      const hadRegexResults = regexResult.eventDate || regexResult.eventTime || regexResult.locationName;
+      const extractionMethod = hadRegexResults ? 'ai_corrected' : 'ai';
+      
+      // Use AI results if they provide better data
+      return {
+        eventTitle: aiResult.eventTitle || regexResult.eventTitle,
+        eventDate: aiResult.eventDate || regexResult.eventDate,
+        eventEndDate: aiResult.eventEndDate || regexResult.eventEndDate,
+        eventTime: aiResult.eventTime || regexResult.eventTime,
+        endTime: aiResult.endTime || regexResult.endTime,
+        locationName: aiResult.locationName || regexResult.locationName,
+        locationAddress: aiResult.locationAddress || regexResult.locationAddress,
+        rawLocationName: regexResult.rawLocationName,
+        canonicalVenueName: regexResult.canonicalVenueName,
+        signupUrl: aiResult.signupUrl || regexResult.signupUrl,
+        price: aiResult.price ?? regexResult.price,
+        isFree: aiResult.isFree ?? regexResult.isFree,
+        isEvent: aiResult.isEvent,
+        needsReview: aiResult.confidence < 0.8, // Flag low-confidence AI results for review
+        timeValidationFailed: regexResult.timeValidationFailed,
+        rawEventTime: regexResult.rawEventTime,
+        rawEndTime: regexResult.rawEndTime,
+        pricePatternId: regexResult.pricePatternId,
+        datePatternId: regexResult.datePatternId,
+        timePatternId: regexResult.timePatternId,
+        venuePatternId: regexResult.venuePatternId,
+        vendorPatternId: regexResult.vendorPatternId,
+        extractionMethod,
+        aiExtraction: aiResult,
+        aiConfidence: aiResult.confidence,
+        aiReasoning: aiResult.reasoning,
+      };
+    } else if (aiResult) {
+      console.log(`AI extraction for ${postId} has low confidence (${aiResult.confidence}), using regex results`);
+      // Store AI results anyway for reference, but use regex results
+      regexResult.aiExtraction = aiResult;
+      regexResult.aiConfidence = aiResult.confidence;
+      regexResult.aiReasoning = aiResult.reasoning;
+    }
+  }
+  
+  return regexResult;
 }
 
 // Check if event has ended (considering both start and end dates)
@@ -637,7 +792,7 @@ Deno.serve(async (req) => {
         const parseStart = Date.now();
         let eventInfo;
         try {
-          eventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase);
+          eventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase, postId);
         } catch (parseError) {
           const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
           totalSkipped++;
@@ -923,7 +1078,7 @@ Deno.serve(async (req) => {
           
           // Check if caption changed (indicating potential update)
           if (existingPost.caption !== item.caption) {
-            const newEventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase);
+            const newEventInfo = await parseEventFromCaption(item.caption || '', item.locationName, supabase, postId);
             
             // Only update if new event info is valid
             if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
@@ -1118,7 +1273,7 @@ Deno.serve(async (req) => {
         }
 
         // Prepare insert data - allow NULL for missing data
-        const insertData: any = {
+        const insertData: Record<string, unknown> = {
           post_id: postId,
           instagram_account_id: account.id,
           caption: item.caption,
@@ -1140,6 +1295,11 @@ Deno.serve(async (req) => {
           signup_url: eventInfo.signupUrl,
           needs_review: needsReview,
           tags: tags, // PHASE 1: Add auto-generated tags
+          // AI extraction fields
+          extraction_method: eventInfo.extractionMethod || 'regex',
+          ai_extraction: eventInfo.aiExtraction || null,
+          ai_confidence: eventInfo.aiConfidence || null,
+          ai_reasoning: eventInfo.aiReasoning || null,
         };
         
         // Add additional images from carousel if available
@@ -1287,7 +1447,7 @@ Deno.serve(async (req) => {
             // Parse event information
             let eventInfo;
             try {
-              eventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase);
+              eventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase, postId);
             } catch (parseError) {
               const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
               totalSkipped++;
@@ -1363,7 +1523,7 @@ Deno.serve(async (req) => {
             if (existingPost) {
               // Check for caption changes
               if (existingPost.caption !== post.caption) {
-                const newEventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase);
+                const newEventInfo = await parseEventFromCaption(post.caption || '', post.locationName, supabase, postId);
                 
                 if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
                   await supabase

@@ -17,6 +17,7 @@ import {
   stripEmojis,
   normalizeLocationName,
   normalizeLocationAddress,
+  cleanLocationName,
   // Venue aliasing
   canonicalizeVenueName,
   VENUE_ALIASES,
@@ -497,4 +498,119 @@ Deno.test("normalizeLocationAddress - should handle null and empty strings", () 
   assertEquals(normalizeLocationAddress(undefined), null);
   assertEquals(normalizeLocationAddress(""), null);
   assertEquals(normalizeLocationAddress("ab"), null); // Too short
+});
+
+// ============================================================
+// cleanLocationName TESTS (Comprehensive location cleaning)
+// ============================================================
+
+Deno.test("cleanLocationName - should remove date patterns", () => {
+  // Month + Day + Year
+  assertEquals(
+    cleanLocationName("The Victor Art Installation, Bridgetowne, Pasig City December 6-7, 2025"),
+    "The Victor Art Installation, Bridgetowne, Pasig City"
+  );
+  
+  // Month + Day range
+  assertEquals(
+    cleanLocationName("MOA Arena November 29-30"),
+    "MOA Arena"
+  );
+  
+  // Short month format
+  assertEquals(
+    cleanLocationName("Eastwood City Dec 25"),
+    "Eastwood City"
+  );
+});
+
+Deno.test("cleanLocationName - should remove time patterns", () => {
+  // Time with AM/PM
+  assertEquals(
+    cleanLocationName("The Victor 11 am - 8 pm Mall of Asia"),
+    "The Victor Mall of Asia"
+  );
+  
+  // 24-hour format
+  assertEquals(
+    cleanLocationName("BGC Event Space 15:00"),
+    "BGC Event Space"
+  );
+  
+  // Time range
+  assertEquals(
+    cleanLocationName("Ayala Triangle 10am-6pm"),
+    "Ayala Triangle"
+  );
+});
+
+Deno.test("cleanLocationName - should remove hashtags", () => {
+  assertEquals(
+    cleanLocationName("Radius Katipunan #event #party #weekend"),
+    "Radius Katipunan"
+  );
+  
+  assertEquals(
+    cleanLocationName("#SolanaHoliday The Victor Art Installation"),
+    "The Victor Art Installation"
+  );
+});
+
+Deno.test("cleanLocationName - should remove sponsor text", () => {
+  assertEquals(
+    cleanLocationName("Bridgetowne, Pasig Made possible by: Robinsons Land"),
+    "Bridgetowne, Pasig"
+  );
+  
+  assertEquals(
+    cleanLocationName("BGC Event Powered by: Globe Telecom"),
+    "BGC Event"
+  );
+  
+  assertEquals(
+    cleanLocationName("Greenbelt 3 Sponsored by: Ayala Malls"),
+    "Greenbelt 3"
+  );
+});
+
+Deno.test("cleanLocationName - should remove @mentions", () => {
+  assertEquals(
+    cleanLocationName("The Venue @thevenue_official @robinsonsland"),
+    "The Venue"
+  );
+});
+
+Deno.test("cleanLocationName - should truncate overly long locations", () => {
+  const longLocation = "This is a very long location name that goes on and on and on and on and on and on and on and on and on and on and on and on and on";
+  const cleaned = cleanLocationName(longLocation);
+  assertEquals(cleaned !== null && cleaned.length <= 100, true);
+});
+
+Deno.test("cleanLocationName - should handle null and empty strings", () => {
+  assertEquals(cleanLocationName(null), null);
+  assertEquals(cleanLocationName(undefined), null);
+  assertEquals(cleanLocationName(""), null);
+  assertEquals(cleanLocationName("  "), null);
+  assertEquals(cleanLocationName("ab"), null); // Too short
+});
+
+Deno.test("cleanLocationName - regression test for Solana Holiday Tour location", () => {
+  const messyLocation = "The Victor Art Installation, Bridgetowne, Pasig City December 6-7, 2025 11 am - 8 pm Mall of Asia, Pasay City December 12, 2025 10 am - 6 pm #SolanaHoliday #PopUpTour Made possible by: Bridgetowne Destination Estate @bridgetownedestinationestate";
+  const cleaned = cleanLocationName(messyLocation);
+  
+  // Should extract just "The Victor Art Installation, Bridgetowne, Pasig City" or similar
+  assertEquals(cleaned !== null, true);
+  assertEquals(cleaned!.length <= 100, true);
+  assertEquals(cleaned!.includes("December"), false);
+  assertEquals(cleaned!.includes("am"), false);
+  assertEquals(cleaned!.includes("#"), false);
+  assertEquals(cleaned!.includes("Made possible by"), false);
+  assertEquals(cleaned!.includes("@"), false);
+});
+
+Deno.test("cleanLocationName - should preserve valid location names", () => {
+  assertEquals(cleanLocationName("Mall of Asia Arena"), "Mall of Asia Arena");
+  assertEquals(cleanLocationName("Jess & Pat's"), "Jess & Pat's");
+  assertEquals(cleanLocationName("The Victor"), "The Victor");
+  assertEquals(cleanLocationName("BGC, Taguig"), "BGC, Taguig");
 });

@@ -201,6 +201,96 @@ export function normalizeLocationAddress(address: string | null | undefined): st
   return cleaned;
 }
 
+/**
+ * Comprehensive location name cleaner that removes:
+ * - Date patterns (December 6-7, Nov 29, etc.)
+ * - Time patterns (11 am, 10:00, etc.)
+ * - Hashtags (#event, etc.)
+ * - Sponsor text ("Made possible by:", etc.)
+ * - Trailing @mentions
+ * - Collapses whitespace
+ * 
+ * Use this when regex extraction produces overly long/messy location names.
+ */
+export function cleanLocationName(name: string | null | undefined): string | null {
+  if (!name || typeof name !== 'string') return null;
+  
+  let cleaned = name.trim();
+  
+  // Strip emojis first
+  cleaned = stripEmojis(cleaned);
+  
+  // Remove date patterns (various formats)
+  // Full month names: "December 6-7, 2025", "November 29", "Dec 6"
+  cleaned = cleaned.replace(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s*\d{1,2}(?:\s*[-–]\s*\d{1,2})?,?\s*\d{0,4}/gi,
+    ''
+  );
+  
+  // Numeric date formats: "12/25", "12-25-2025"
+  cleaned = cleaned.replace(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/g, '');
+  
+  // Remove time patterns
+  // 12-hour format: "11 am", "8:00 pm", "9PM"
+  cleaned = cleaned.replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\b/gi, '');
+  // 24-hour format: "15:00", "21:30"
+  cleaned = cleaned.replace(/\b(?:[01]?\d|2[0-3]):\d{2}(?::\d{2})?\b/g, '');
+  // Time ranges: "10am-6pm", "11 am - 8 pm"
+  cleaned = cleaned.replace(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/gi, '');
+  
+  // Remove hashtags
+  cleaned = cleaned.replace(/#[\w]+/g, '');
+  
+  // Remove sponsor text and everything after it
+  const sponsorPatterns = [
+    /\s*Made possible by:?.*$/i,
+    /\s*Powered by:?.*$/i,
+    /\s*Sponsored by:?.*$/i,
+    /\s*Presented by:?.*$/i,
+    /\s*In partnership with:?.*$/i,
+    /\s*Brought to you by:?.*$/i,
+  ];
+  
+  for (const pattern of sponsorPatterns) {
+    cleaned = cleaned.replace(pattern, '').trim();
+  }
+  
+  // Remove @mentions
+  cleaned = cleaned.replace(/@[\w.]+/g, '');
+  
+  // Remove standalone days of week
+  cleaned = cleaned.replace(/\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/gi, '');
+  
+  // Collapse multiple spaces
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  // Remove trailing punctuation
+  cleaned = cleaned.replace(/[.,!?;:\-–]+$/, '').trim();
+  
+  // Remove leading punctuation
+  cleaned = cleaned.replace(/^[.,!?;:\-–]+/, '').trim();
+  
+  // If result is too short or just punctuation, return null
+  if (cleaned.length < 3 || !/[a-zA-Z]/.test(cleaned)) {
+    return null;
+  }
+  
+  // Truncate if still too long (>100 chars), stopping at a reasonable word boundary
+  if (cleaned.length > 100) {
+    const truncated = cleaned.substring(0, 100);
+    const lastSpace = truncated.lastIndexOf(' ');
+    if (lastSpace > 50) {
+      cleaned = truncated.substring(0, lastSpace).trim();
+    } else {
+      cleaned = truncated.trim();
+    }
+    // Remove trailing punctuation again after truncation
+    cleaned = cleaned.replace(/[.,!?;:\-–]+$/, '').trim();
+  }
+  
+  return cleaned;
+}
+
 // ============================================================
 // VENUE ALIASING SYSTEM
 // ============================================================

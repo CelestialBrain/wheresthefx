@@ -60,6 +60,42 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Supabase Edge Functions
+
+This project uses Supabase Edge Functions for backend processing.
+
+### AI-Powered Event Extraction
+
+The `ai-extract-event` function uses Google's Gemini API to intelligently extract event information from Instagram captions. This helps handle:
+
+- Filipino/English mixed content
+- Complex date formats (e.g., "ika-5 ng Mayo")
+- Multi-venue events
+- Messy regex extraction results
+
+#### Setting up the Gemini API Key
+
+To enable AI extraction, you need to add your Gemini API key to Supabase secrets:
+
+```bash
+# Using Supabase CLI
+supabase secrets set GEMINI_API_KEY=your_api_key_here
+
+# Or via the Supabase Dashboard:
+# 1. Go to your project settings
+# 2. Navigate to Edge Functions > Secrets
+# 3. Add a new secret with name: GEMINI_API_KEY
+```
+
+Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+### Other Edge Functions
+
+- `scrape-instagram` - Scrapes Instagram posts and extracts event information
+- `validate-venue` - Validates and geocodes venue locations
+- `geocode-location` - Converts addresses to coordinates
+- `cleanup-old-events` - Removes expired events
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/d19135a6-8621-42d6-bb8f-78a8da7b154a) and click on Share -> Publish.
