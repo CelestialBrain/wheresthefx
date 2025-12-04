@@ -1257,13 +1257,28 @@ export function autoTagPost(
   return [...new Set(tags)]; // Remove duplicates
 }
 
-// Extract signup URL
-export function extractSignupUrl(text: string): string | null {
+// Extract signup URL with learned patterns
+export async function extractSignupUrl(
+  text: string,
+  supabase?: SupabaseClient
+): Promise<{ url: string | null; patternId?: string | null }> {
+  // Try learned patterns first if supabase client provided
+  if (supabase) {
+    const learned = await extractWithLearnedPatterns(supabase, text, 'signup_url');
+    if (learned.value) {
+      return {
+        url: learned.value.replace(/[.,!?;]+$/, ''), // Clean trailing punctuation
+        patternId: learned.patternId
+      };
+    }
+  }
+  
+  // Fall back to hardcoded patterns
   // Generic http(s) URLs
   const urlPattern = /https?:\/\/[^\s"'<>)\]]+/g;
   const urls = text.match(urlPattern);
   
-  if (!urls) return null;
+  if (!urls) return { url: null, patternId: null };
   
   // Domain allow-list for signup/ticketing services
   const signupDomains = [
@@ -1280,7 +1295,7 @@ export function extractSignupUrl(text: string): string | null {
     
     for (const domain of signupDomains) {
       if (cleanUrl.includes(domain)) {
-        return cleanUrl;
+        return { url: cleanUrl, patternId: null };
       }
     }
   }
@@ -1290,8 +1305,8 @@ export function extractSignupUrl(text: string): string | null {
   const keywordMatch = text.match(signupKeywordPattern);
   
   if (keywordMatch) {
-    return keywordMatch[2].replace(/[.,!?;]+$/, '');
+    return { url: keywordMatch[2].replace(/[.,!?;]+$/, ''), patternId: null };
   }
   
-  return urls[0].replace(/[.,!?;]+$/, ''); // Return first URL as fallback
+  return { url: urls[0].replace(/[.,!?;]+$/, ''), patternId: null }; // Return first URL as fallback
 }

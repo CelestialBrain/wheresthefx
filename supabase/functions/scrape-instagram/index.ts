@@ -506,7 +506,8 @@ async function parseEventFromCaption(
   const timeInfo = await extractTime(normalized, supabase);
   const dateInfo = await extractDate(normalized, supabase);
   let venueInfo = await extractVenue(normalized, locationName, supabase);
-  const signupUrl = extractSignupUrl(normalized);
+  const signupUrlInfo = await extractSignupUrl(normalized, supabase);
+  const signupUrl = signupUrlInfo.url;
   
   // Clean location name if it's messy (>100 chars)
   if (venueInfo.venueName && venueInfo.venueName.length > 100) {
