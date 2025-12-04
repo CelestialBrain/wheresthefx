@@ -3,7 +3,12 @@
  * 
  * This function intelligently extracts event information from Instagram captions,
  * handling Filipino/English mixed content, multi-venue events, and complex date formats.
+ * 
+ * Enhanced with Smart Context System to learn from past corrections and known venue data.
  */
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
+import { buildAIContext, AIContext } from './contextBuilder.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,17 +60,58 @@ function cleanCaptionForExtraction(caption: string): string {
 }
 
 /**
- * Build the extraction prompt for Gemini
+ * Build the extraction prompt for Gemini with smart context
  */
 function buildExtractionPrompt(
-  caption: string,
-  locationHint: string | null
+  context: AIContext
 ): string {
-  const cleanedCaption = cleanCaptionForExtraction(caption);
+  const cleanedCaption = cleanCaptionForExtraction(context.caption);
   const currentYear = new Date().getFullYear();
+  const today = new Date().toISOString().split('T')[0];
   
-  return `You are an expert at extracting event information from Filipino Instagram posts.
+  let prompt = `You are an expert at extracting event information from Filipino Instagram posts.
 
+TODAY'S DATE: ${today}
+
+CAPTION TO ANALYZE:
+"""
+${cleanedCaption}
+"""
+
+INSTAGRAM LOCATION TAG: ${context.locationHint || 'None provided'}
+${context.ownerUsername ? `POSTED BY: @${context.ownerUsername}` : ''}
+`;
+
+  // Add corrections context if available
+  if (context.similarCorrections.length > 0) {
+    prompt += `\nPAST CORRECTIONS (learn from these):`;
+    for (const c of context.similarCorrections) {
+      prompt += `\n- "${c.original}" → "${c.corrected}" (${c.field})`;
+    }
+    prompt += '\n';
+  }
+
+  // Add known venues if available
+  if (context.knownVenues.length > 0) {
+    prompt += `\nKNOWN VENUES (use exact names when matching):`;
+    for (const v of context.knownVenues) {
+      prompt += `\n- "${v.name}"`;
+      if (v.aliases.length > 0) prompt += ` (also known as: ${v.aliases.join(', ')})`;
+      if (v.address) prompt += ` - ${v.address}`;
+    }
+    prompt += '\n';
+  }
+
+  // Add account context if available
+  if (context.accountUsualVenues.length > 0) {
+    prompt += `\nTHIS ACCOUNT'S USUAL VENUES:`;
+    for (const v of context.accountUsualVenues) {
+      prompt += `\n- ${v.venue} (${v.frequency} posts)`;
+    }
+    prompt += '\n';
+  }
+
+  prompt += `
 RULES:
 1. event_title: Extract the actual event NAME, not the first line of caption. Look for event names like "Solana Holiday Pop-Up Tour", "Community Fleamarket", "Open Siomaic", etc.
 2. event_date: Convert to YYYY-MM-DD format. Handle Filipino dates like "ika-5 ng Mayo", "Disyembre 6-7". For date ranges, use the start date. Assume current year (${currentYear}) if not specified.
@@ -74,7 +120,7 @@ RULES:
    - "gabi" = PM (evening), "umaga" = AM (morning)
    - Events at bars/clubs default to PM
    - Markets/fairs typically start in AM
-5. location_name: ONLY the venue name. STOP extraction at:
+5. location_name: ONLY the venue name. If a known venue matches, use its exact name. STOP extraction at:
    - Dates (December 6, Nov 29-30)
    - Times (11 am, 10:00)
    - Hashtags (#event)
@@ -85,11 +131,6 @@ RULES:
 8. is_event: true if this describes an upcoming event with date/time/location
 9. confidence: 0.0-1.0 based on how certain you are about the extraction
 10. reasoning: Brief explanation of your extraction logic
-
-CAPTION TO ANALYZE:
-${cleanedCaption}
-
-${locationHint ? `LOCATION HINT FROM INSTAGRAM: ${locationHint}` : ''}
 
 Return a valid JSON object with these exact fields:
 {
@@ -108,6 +149,8 @@ Return a valid JSON object with these exact fields:
   "price": number or null (in PHP),
   "signupUrl": string or null
 }`;
+
+  return prompt;
 }
 
 /**
@@ -306,7 +349,14 @@ Deno.serve(async (req) => {
     const body = await req.json();
     // Note: imageUrl is accepted for future multimodal extraction support
     // Currently only caption text is processed
-    const { caption, locationHint, postId } = body;
+    const { 
+      caption, 
+      locationHint, 
+      postId, 
+      postedAt, 
+      ownerUsername, 
+      instagramAccountId 
+    } = body;
 
     if (!caption) {
       return new Response(
@@ -320,8 +370,40 @@ Deno.serve(async (req) => {
 
     console.log(`AI extraction for post: ${postId || 'unknown'}`);
 
-    // Build prompt and call Gemini
-    const prompt = buildExtractionPrompt(caption, locationHint);
+    // Initialize Supabase client for context building
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    let context: AIContext;
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      // Build smart context from database
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      context = await buildAIContext({
+        caption,
+        locationHint,
+        postedAt,
+        ownerUsername,
+        instagramAccountId,
+      }, supabase);
+      
+      console.log(`Context built: ${context.similarCorrections.length} corrections, ${context.knownVenues.length} venues, ${context.accountUsualVenues.length} account venues`);
+    } else {
+      // Fallback: no smart context, just raw data
+      console.log('Supabase not configured, using raw data only');
+      context = {
+        caption,
+        locationHint: locationHint || null,
+        postedAt: postedAt || null,
+        ownerUsername: ownerUsername || null,
+        similarCorrections: [],
+        knownVenues: [],
+        accountUsualVenues: [],
+      };
+    }
+
+    // Build prompt with context and call Gemini
+    const prompt = buildExtractionPrompt(context);
     const rawResult = await callGeminiAPI(prompt, geminiApiKey);
     
     // Validate and clean the result
@@ -334,6 +416,11 @@ Deno.serve(async (req) => {
         success: true,
         postId,
         extraction: result,
+        contextUsed: {
+          corrections: context.similarCorrections.length,
+          knownVenues: context.knownVenues.length,
+          accountVenues: context.accountUsualVenues.length,
+        },
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
