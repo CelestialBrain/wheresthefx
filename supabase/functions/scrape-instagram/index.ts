@@ -146,6 +146,51 @@ interface AIExtractionResult {
   isFree?: boolean;
   price?: number;
   signupUrl?: string;
+  // OCR metadata
+  ocrTextExtracted?: string[];
+  ocrConfidence?: number;
+  extractionMethod?: 'ai' | 'ocr_ai';
+}
+
+/**
+ * Determines if image extraction should be attempted.
+ * Returns true if:
+ * - Caption is short (details probably in image)
+ * - Missing multiple critical fields AND has event indicators
+ * - Caption is mostly emojis/hashtags
+ */
+function shouldExtractFromImage(
+  caption: string | null, 
+  eventInfo: {
+    eventDate?: string;
+    eventTime?: string;
+    locationName?: string;
+  }
+): boolean {
+  const captionLength = caption?.length || 0;
+  
+  // Caption is very short (details probably in image)
+  const shortCaption = captionLength < 100;
+  
+  // Missing critical fields
+  const missingDate = !eventInfo.eventDate;
+  const missingTime = !eventInfo.eventTime;
+  const missingVenue = !eventInfo.locationName;
+  const missingMultiple = [missingDate, missingTime, missingVenue].filter(Boolean).length >= 2;
+  
+  // Has event indicators but no details
+  const hasEventKeywords = /join us|see you|save the date|mark your calendar|party|event|concert|gig|market|pop.?up/i.test(caption || '');
+  
+  // Caption is mostly emojis/hashtags
+  const textWithoutEmojisHashtags = (caption || '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/#\w+/g, '')
+    .trim();
+  const mostlyEmojis = textWithoutEmojisHashtags.length < 50;
+  
+  return (shortCaption && hasEventKeywords) || 
+         (missingMultiple && hasEventKeywords) || 
+         (mostlyEmojis && captionLength > 0);
 }
 
 /**
@@ -175,6 +220,8 @@ function needsAIExtraction(eventInfo: {
 
 /**
  * Call the AI extraction edge function
+ */
+
 /**
  * Raw data input for AI extraction with full context
  */
@@ -185,6 +232,8 @@ interface AIExtractionInput {
   postedAt?: string | null;
   ownerUsername?: string | null;
   instagramAccountId?: string | null;
+  imageUrl?: string | null;
+  useOCR?: boolean;
 }
 
 /**
@@ -192,17 +241,19 @@ interface AIExtractionInput {
  */
 async function parseEventWithAI(
   input: AIExtractionInput,
-  supabase: any
+  supabase: ReturnType<typeof createClient>
 ): Promise<AIExtractionResult | null> {
   try {
     const { data, error } = await supabase.functions.invoke('ai-extract-event', {
       body: {
         caption: input.caption,
+        imageUrl: input.imageUrl,
         locationHint: input.locationHint,
         postId: input.postId,
         postedAt: input.postedAt,
         ownerUsername: input.ownerUsername,
         instagramAccountId: input.instagramAccountId,
+        useOCR: input.useOCR,
       },
     });
 
@@ -336,12 +387,13 @@ function parseRelativeDate(text: string): string | null {
 async function parseEventFromCaption(
   caption: string,
   locationName?: string | null,
-  supabase?: any,
+  supabase?: ReturnType<typeof createClient>,
   postId?: string,
   additionalContext?: {
     postedAt?: string | null;
     ownerUsername?: string | null;
     instagramAccountId?: string | null;
+    imageUrl?: string | null;
   }
 ): Promise<{
   eventTitle?: string;
@@ -367,10 +419,13 @@ async function parseEventFromCaption(
   venuePatternId?: string | null;
   vendorPatternId?: string | null;
   // AI extraction fields
-  extractionMethod?: 'regex' | 'ai' | 'ai_corrected';
+  extractionMethod?: 'regex' | 'ai' | 'ai_corrected' | 'ocr_ai';
   aiExtraction?: AIExtractionResult;
   aiConfidence?: number;
   aiReasoning?: string;
+  // OCR extraction fields
+  ocrTextExtracted?: string[];
+  ocrConfidence?: number;
 }> {
   if (!caption) {
     return { isEvent: false, isFree: true, needsReview: false };
@@ -520,12 +575,18 @@ async function parseEventFromCaption(
     aiExtraction: undefined as AIExtractionResult | undefined,
     aiConfidence: undefined as number | undefined,
     aiReasoning: undefined as string | undefined,
+    ocrTextExtracted: undefined as string[] | undefined,
+    ocrConfidence: undefined as number | undefined,
   };
   
-  // STEP 7: AI extraction fallback
+  // STEP 7: AI extraction fallback (with OCR when image is available)
   // Call AI extraction if regex extraction is incomplete or messy
+  // Use OCR+AI if image is available AND details are likely in the image
   if (supabase && postId && needsAIExtraction(regexResult)) {
-    console.log(`Attempting AI extraction for post ${postId} (regex incomplete/messy)`);
+    const imageUrl = additionalContext?.imageUrl;
+    const useOCR = imageUrl && shouldExtractFromImage(caption, regexResult);
+    
+    console.log(`Attempting AI extraction for post ${postId} (regex incomplete/messy)${useOCR ? ' with OCR' : ''}`);
     
     // Pass full context to AI extraction for smart learning
     const aiResult = await parseEventWithAI({
@@ -535,14 +596,19 @@ async function parseEventFromCaption(
       postedAt: additionalContext?.postedAt,
       ownerUsername: additionalContext?.ownerUsername,
       instagramAccountId: additionalContext?.instagramAccountId,
+      imageUrl: useOCR ? imageUrl : undefined,
+      useOCR: useOCR,
     }, supabase);
     
     if (aiResult && aiResult.confidence >= 0.6) {
-      console.log(`AI extraction succeeded for ${postId} with confidence ${aiResult.confidence}`);
+      console.log(`AI extraction succeeded for ${postId} with confidence ${aiResult.confidence}, method=${aiResult.extractionMethod || 'ai'}`);
       
       // Determine extraction method
       const hadRegexResults = regexResult.eventDate || regexResult.eventTime || regexResult.locationName;
-      const extractionMethod = hadRegexResults ? 'ai_corrected' : 'ai';
+      let extractionMethod: 'ai' | 'ai_corrected' | 'ocr_ai' = hadRegexResults ? 'ai_corrected' : 'ai';
+      if (aiResult.extractionMethod === 'ocr_ai') {
+        extractionMethod = 'ocr_ai';
+      }
       
       // Use AI results if they provide better data
       return {
@@ -572,6 +638,8 @@ async function parseEventFromCaption(
         aiExtraction: aiResult,
         aiConfidence: aiResult.confidence,
         aiReasoning: aiResult.reasoning,
+        ocrTextExtracted: aiResult.ocrTextExtracted,
+        ocrConfidence: aiResult.ocrConfidence,
       };
     } else if (aiResult) {
       console.log(`AI extraction for ${postId} has low confidence (${aiResult.confidence}), using regex results`);
@@ -579,6 +647,8 @@ async function parseEventFromCaption(
       regexResult.aiExtraction = aiResult;
       regexResult.aiConfidence = aiResult.confidence;
       regexResult.aiReasoning = aiResult.reasoning;
+      regexResult.ocrTextExtracted = aiResult.ocrTextExtracted;
+      regexResult.ocrConfidence = aiResult.ocrConfidence;
     }
   }
   
@@ -815,6 +885,9 @@ Deno.serve(async (req) => {
         const hashtags = item.hashtags || [];
         const mentions = item.mentions || [];
         const postUrl = item.url || `https://www.instagram.com/p/${item.shortCode}/`;
+        
+        // Extract image URL early for OCR extraction during parsing
+        const imageUrl = item.displayUrl || item.imageUrl;
 
         // Parse event information
         const parseStart = Date.now();
@@ -828,6 +901,7 @@ Deno.serve(async (req) => {
             {
               postedAt: postedAt,
               ownerUsername: username,
+              imageUrl: imageUrl || undefined,
               // instagramAccountId not yet available - will be looked up later
             }
           );
@@ -1125,6 +1199,7 @@ Deno.serve(async (req) => {
                 postedAt: postedAt,
                 ownerUsername: username,
                 instagramAccountId: account.id,
+                imageUrl: imageUrl || undefined,
               }
             );
             
@@ -1224,9 +1299,6 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Extract image URL from Apify data (displayUrl or imageUrl)
-        const imageUrl = item.displayUrl || item.imageUrl;
-        
         // Extract additional images from carousel posts
         const additionalImages = extractCarouselImages(item);
 
@@ -1348,6 +1420,9 @@ Deno.serve(async (req) => {
           ai_extraction: eventInfo.aiExtraction || null,
           ai_confidence: eventInfo.aiConfidence || null,
           ai_reasoning: eventInfo.aiReasoning || null,
+          // OCR extraction fields
+          ocr_text_extracted: eventInfo.ocrTextExtracted || null,
+          ocr_confidence: eventInfo.ocrConfidence || null,
         };
         
         // Add additional images from carousel if available
@@ -1491,6 +1566,9 @@ Deno.serve(async (req) => {
             const hashtags = post.hashtags || [];
             const mentions = post.mentions || [];
             const postUrl = post.url || `https://www.instagram.com/p/${post.shortCode}/`;
+            
+            // Extract image URL early for OCR extraction during parsing
+            const imageUrl = post.displayUrl || post.imageUrl;
 
             // Parse event information
             let eventInfo;
@@ -1504,6 +1582,7 @@ Deno.serve(async (req) => {
                   postedAt: post.timestamp,
                   ownerUsername: account.username,
                   instagramAccountId: account.id,
+                  imageUrl: imageUrl || undefined,
                 }
               );
             } catch (parseError) {
@@ -1590,6 +1669,7 @@ Deno.serve(async (req) => {
                     postedAt: post.timestamp,
                     ownerUsername: account.username,
                     instagramAccountId: account.id,
+                    imageUrl: imageUrl || undefined,
                   }
                 );
                 
