@@ -1,5 +1,8 @@
 project_id = "ltgxvskqotbuclrinhej"
 
+[functions.ai-extract-event]
+verify_jwt = false
+
 [functions.cleanup-old-events]
 verify_jwt = false
 
