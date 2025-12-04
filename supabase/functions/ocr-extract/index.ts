@@ -6,6 +6,14 @@
  * then used by the AI extraction pipeline for intelligent parsing.
  */
 
+// OCR.space exit code confidence mapping
+// Exit code 1: File parsed successfully
+// Exit code 0: File parsed but without confidence
+// Other codes: Partial or failed parsing
+const OCR_CONFIDENCE_SUCCESS = 0.9;
+const OCR_CONFIDENCE_PARSED = 0.7;
+const OCR_CONFIDENCE_PARTIAL = 0.5;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -84,8 +92,11 @@ Deno.serve(async (req) => {
     const fullText: string = result.ParsedResults?.[0]?.ParsedText || '';
     
     // Calculate confidence from exit code
+    // Exit code 1 = success, 0 = parsed but uncertain, other = partial
     const exitCode: number = result.ParsedResults?.[0]?.FileParseExitCode || 0;
-    const confidence = exitCode === 1 ? 0.9 : exitCode === 0 ? 0.7 : 0.5;
+    const confidence = exitCode === 1 ? OCR_CONFIDENCE_SUCCESS : 
+                       exitCode === 0 ? OCR_CONFIDENCE_PARSED : 
+                       OCR_CONFIDENCE_PARTIAL;
 
     const ocrResult: OCRResult = {
       success: true,

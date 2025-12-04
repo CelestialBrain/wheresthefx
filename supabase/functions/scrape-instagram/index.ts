@@ -128,6 +128,11 @@ function extractUsernameFromUrl(url: string): string | undefined {
 // AI EXTRACTION TYPES AND HELPER
 // ============================================================
 
+// Caption length thresholds for OCR extraction decisions
+const SHORT_CAPTION_THRESHOLD = 100; // Captions shorter than this may have details in image
+const EMOJI_TEXT_THRESHOLD = 50; // Text content below this after removing emojis/hashtags indicates image-heavy post
+const MESSY_EXTRACTION_THRESHOLD = 100; // Location/title longer than this indicates messy extraction
+
 /**
  * AI extraction result structure
  */
@@ -170,7 +175,7 @@ function shouldExtractFromImage(
   const captionLength = caption?.length || 0;
   
   // Caption is very short (details probably in image)
-  const shortCaption = captionLength < 100;
+  const shortCaption = captionLength < SHORT_CAPTION_THRESHOLD;
   
   // Missing critical fields
   const missingDate = !eventInfo.eventDate;
@@ -186,7 +191,7 @@ function shouldExtractFromImage(
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/#\w+/g, '')
     .trim();
-  const mostlyEmojis = textWithoutEmojisHashtags.length < 50;
+  const mostlyEmojis = textWithoutEmojisHashtags.length < EMOJI_TEXT_THRESHOLD;
   
   return (shortCaption && hasEventKeywords) || 
          (missingMultiple && hasEventKeywords) || 
@@ -197,8 +202,8 @@ function shouldExtractFromImage(
  * Determines if regex extraction results need AI correction.
  * Returns true if:
  * - Missing critical info (date, time, or location)
- * - Location name is too long (>100 chars) indicating messy extraction
- * - Event title is too long (>100 chars)
+ * - Location name is too long indicating messy extraction
+ * - Event title is too long
  */
 function needsAIExtraction(eventInfo: {
   eventDate?: string;
@@ -212,8 +217,8 @@ function needsAIExtraction(eventInfo: {
   const missingLocation = !eventInfo.locationName;
   
   // Messy extraction (too long) - explicitly convert to boolean
-  const messyLocation = Boolean(eventInfo.locationName && eventInfo.locationName.length > 100);
-  const messyTitle = Boolean(eventInfo.eventTitle && eventInfo.eventTitle.length > 100);
+  const messyLocation = Boolean(eventInfo.locationName && eventInfo.locationName.length > MESSY_EXTRACTION_THRESHOLD);
+  const messyTitle = Boolean(eventInfo.eventTitle && eventInfo.eventTitle.length > MESSY_EXTRACTION_THRESHOLD);
   
   return missingDate || missingTime || missingLocation || messyLocation || messyTitle;
 }

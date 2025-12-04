@@ -10,6 +10,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
 import { buildAIContext, AIContext } from './contextBuilder.ts';
 
+// Caption length threshold - captions shorter than this may have details in image
+const SHORT_CAPTION_THRESHOLD = 100;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -597,7 +600,7 @@ Deno.serve(async (req) => {
     const shouldUseOCR = imageUrl && supabaseUrl && supabaseServiceKey && (
       useOCR || 
       !caption || 
-      (caption && caption.length < 100)
+      (caption && caption.length < SHORT_CAPTION_THRESHOLD)
     );
 
     if (shouldUseOCR) {
