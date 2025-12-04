@@ -511,6 +511,7 @@ export type Database = {
       }
       instagram_posts: {
         Row: {
+          additional_images: string[] | null
           ai_confidence: number | null
           ai_extraction: Json | null
           ai_reasoning: string | null
@@ -557,6 +558,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          additional_images?: string[] | null
           ai_confidence?: number | null
           ai_extraction?: Json | null
           ai_reasoning?: string | null
@@ -603,6 +605,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          additional_images?: string[] | null
           ai_confidence?: number | null
           ai_extraction?: Json | null
           ai_reasoning?: string | null
@@ -947,15 +950,7 @@ export type Database = {
           rejected_by?: string | null
           rejection_reason?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "post_rejections_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       profiles: {
         Row: {
