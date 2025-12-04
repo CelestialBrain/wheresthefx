@@ -547,7 +547,7 @@ function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
   if ((hasPMContext || hasEveningEvent) && !hasAMContext) return 'PM';
   
   // Strong AM signal from context or event type
-  if ((hasAMContext || hasMorningEvent) && !hasPMContext) return 'PM';
+  if ((hasAMContext || hasMorningEvent) && !hasPMContext) return 'AM';
   
   // Special case: 12 noon vs 12 midnight
   if (hour === 12) {
