@@ -1373,7 +1373,7 @@ export type Database = {
       event_type: "party" | "thrift" | "market" | "concert" | "other"
       event_visibility: "public" | "private" | "unlisted"
       report_status: "pending" | "reviewed" | "resolved"
-      scrape_run_status: "running" | "completed" | "failed"
+      scrape_run_status: "running" | "completed" | "failed" | "cancelled"
       scrape_run_type: "manual_dataset" | "manual_scrape" | "automated"
     }
     CompositeTypes: {
@@ -1508,7 +1508,7 @@ export const Constants = {
       event_type: ["party", "thrift", "market", "concert", "other"],
       event_visibility: ["public", "private", "unlisted"],
       report_status: ["pending", "reviewed", "resolved"],
-      scrape_run_status: ["running", "completed", "failed"],
+      scrape_run_status: ["running", "completed", "failed", "cancelled"],
       scrape_run_type: ["manual_dataset", "manual_scrape", "automated"],
     },
   },
