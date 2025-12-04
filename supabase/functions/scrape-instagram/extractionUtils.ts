@@ -344,6 +344,7 @@ export function preNormalizeText(text: string): string {
 
 // Check if post is DEFINITELY a vendor/merchant listing (hard reject)
 // This is a strict filter for obvious non-event vendor posts
+// Enhanced with NCR-specific patterns
 export function isVendorPostStrict(text: string): boolean {
   const strictVendorPatterns = [
     // Vendor recruitment/applications
@@ -361,6 +362,13 @@ export function isVendorPostStrict(text: string): boolean {
     // Sales inquiry patterns (strong signals)
     /\b(dm for price|pm for price|message for price)\b/i,
     /\b(size|sizes|color|colors)\s*[:/]?\s*(?:s|m|l|xl|small|medium|large)\b/i, // Size variants
+    
+    // NCR-specific vendor patterns
+    /\b(tiangge|tiyangge|palengke|palengke selling|ukay-?ukay|ukay selling)\b/i,
+    /\b(fb live selling|facebook live|live selling|selling live)\b/i,
+    /\b(divisoria|168 mall|168 shopping|baclaran)\s+(seller|merchant|supplier|wholesale)\b/i,
+    /\b(pasalubong business|reseller|wholesale price|factory price)\b/i,
+    /\b(overrun|surplus|factory reject|reject items)\b/i,
   ];
 
   return strictVendorPatterns.some(pattern => pattern.test(text));
@@ -500,7 +508,8 @@ export async function extractPrice(
 
 /**
  * Infer AM/PM from context when time lacks explicit meridiem
- * Uses contextual keywords and reasonable defaults
+ * Uses contextual keywords, event types, and reasonable defaults
+ * Enhanced with Filipino context and event-type based inference
  */
 function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
   const lowerText = text.toLowerCase();
@@ -511,19 +520,50 @@ function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
   // If hour is clearly early morning (0-5), it's AM
   if (hour >= 0 && hour <= 5) return 'AM';
   
-  // Context clues for ambiguous hours (6-12)
-  const pmKeywords = ['evening', 'night', 'dinner', 'sunset', 'gabi', 'hapunan', 'nightlife', 'concert'];
-  const amKeywords = ['morning', 'breakfast', 'brunch', 'umaga', 'almusal', 'sunrise'];
+  // Enhanced PM keywords (evening/night activities, Filipino terms)
+  const pmKeywords = [
+    'evening', 'night', 'dinner', 'sunset', 'gabi', 'hapunan', 'nightlife', 'concert',
+    'party', 'club', 'bar', 'drinks', 'inuman', 'tagay', 'late night', 'after dark',
+    'midnight', 'rave', 'dj set', 'live music', 'gig', 'happy hour'
+  ];
+  
+  // Enhanced AM keywords (morning/daytime activities, Filipino terms)
+  const amKeywords = [
+    'morning', 'breakfast', 'brunch', 'umaga', 'almusal', 'sunrise',
+    'misa', 'mass', 'church', 'sunday service', 'yoga', 'run', 'marathon',
+    'farmers market', 'early bird', 'wake up', 'coffee', 'kape'
+  ];
+  
+  // Event type based inference
+  const eveningEventTypes = ['concert', 'party', 'club', 'bar', 'nightlife', 'rave', 'gig'];
+  const morningEventTypes = ['yoga', 'run', 'marathon', 'mass', 'breakfast', 'brunch', 'market'];
   
   const hasPMContext = pmKeywords.some(kw => lowerText.includes(kw));
   const hasAMContext = amKeywords.some(kw => lowerText.includes(kw));
+  const hasEveningEvent = eveningEventTypes.some(et => lowerText.includes(et));
+  const hasMorningEvent = morningEventTypes.some(et => lowerText.includes(et));
   
-  if (hasPMContext && !hasAMContext) return 'PM';
-  if (hasAMContext && !hasPMContext) return 'AM';
+  // Strong PM signal from context or event type
+  if ((hasPMContext || hasEveningEvent) && !hasAMContext) return 'PM';
   
-  // Default assumptions for ambiguous hours without context
+  // Strong AM signal from context or event type
+  if ((hasAMContext || hasMorningEvent) && !hasPMContext) return 'PM';
+  
+  // Special case: 12 noon vs 12 midnight
+  if (hour === 12) {
+    // Check for noon indicators
+    const noonKeywords = ['noon', 'tanghali', 'lunch', 'tanghalian'];
+    const midnightKeywords = ['midnight', 'hatinggabi', 'late night'];
+    
+    if (noonKeywords.some(kw => lowerText.includes(kw))) return 'PM';
+    if (midnightKeywords.some(kw => lowerText.includes(kw))) return 'AM';
+    
+    // Default 12 to PM (noon is more common for events)
+    return 'PM';
+  }
+  
+  // Default assumptions for ambiguous hours without clear context
   if (hour >= 6 && hour <= 11) return 'PM'; // 6-11 assume evening events
-  if (hour === 12) return 'PM'; // 12 assume noon/midnight context
   
   return null; // Unable to infer
 }

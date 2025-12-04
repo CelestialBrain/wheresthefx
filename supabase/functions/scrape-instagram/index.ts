@@ -17,6 +17,8 @@ import {
   canonicalizeVenueName,
 } from './extractionUtils.ts';
 import { ScraperLogger, RejectedPostLogData } from './logger.ts';
+import { lookupNCRVenue, fuzzyMatchVenue } from './ncrGeoCache.ts';
+import { fetchWithRetry, fetchWithTimeout } from './retryUtils.ts';
 
 /*
  * DATABASE SCHEMA NOTES:
@@ -31,6 +33,9 @@ import { ScraperLogger, RejectedPostLogData } from './logger.ts';
  * - tags: TEXT[] (already exists)
  *   Auto-generated tags including new merchant/promo tags:
  *   'sale', 'shop', 'promotion' (for merchant content detection)
+ * 
+ * - additional_images: TEXT[] (for carousel image support)
+ *   Stores additional image URLs from carousel posts
  * 
  * No schema migrations are needed for this change.
  */
@@ -61,7 +66,36 @@ interface ApifyDatasetItem {
   mentions?: string[];
   error?: string;
   errorDescription?: string;
-  childPosts?: any[];
+  childPosts?: Array<{
+    displayUrl?: string;
+    imageUrl?: string;
+    type?: string;
+  }>;
+}
+
+/**
+ * Extract additional images from carousel posts (Sidecar type)
+ * Returns array of up to 3 additional image URLs
+ */
+function extractCarouselImages(item: ApifyDatasetItem): string[] {
+  if (item.type !== 'Sidecar' || !item.childPosts || item.childPosts.length === 0) {
+    return [];
+  }
+  
+  const additionalImages: string[] = [];
+  
+  // Skip first child (it's usually the primary image already in displayUrl)
+  // Extract up to 3 additional images
+  for (let i = 1; i < Math.min(item.childPosts.length, 4); i++) {
+    const child = item.childPosts[i];
+    const imageUrl = child.displayUrl || child.imageUrl;
+    
+    if (imageUrl && child.type !== 'Video') {
+      additionalImages.push(imageUrl);
+    }
+  }
+  
+  return additionalImages;
 }
 
 // Extract dataset ID and token from input
@@ -484,9 +518,44 @@ Deno.serve(async (req) => {
       await logger.info('fetch', `Fetching dataset: ${datasetId}`, { datasetId });
       
       const fetchStart = Date.now();
-      const apifyResponse = await fetch(
-        `https://api.apify.com/v2/datasets/${datasetId}/items?token=${finalToken}&clean=1`
-      );
+      
+      // Use retry logic for Apify dataset fetch
+      let apifyResponse: Response;
+      try {
+        apifyResponse = await fetchWithRetry(
+          () => fetchWithTimeout(
+            `https://api.apify.com/v2/datasets/${datasetId}/items?token=${finalToken}&clean=1`,
+            { timeout: 30000 } // 30 second timeout
+          ),
+          {
+            maxRetries: 3,
+            baseDelay: 2000,
+            maxDelay: 8000,
+            onRetry: (attempt, error) => {
+              console.log(`Retry attempt ${attempt} for dataset fetch: ${error.message}`);
+              logger.warn('fetch', `Dataset fetch retry ${attempt}`, { datasetId, error: error.message });
+            },
+          }
+        );
+      } catch (fetchError) {
+        const errorMsg = fetchError instanceof Error 
+          ? `Failed to fetch dataset: ${fetchError.message}`
+          : 'Failed to fetch dataset: Unknown error';
+        console.error(errorMsg);
+        await logger.error('fetch', 'Dataset fetch failed after retries', { datasetId }, { error: errorMsg });
+        
+        if (runId) {
+          await supabase.from('scrape_runs').update({
+            status: 'failed',
+            error_message: errorMsg,
+            completed_at: new Date().toISOString(),
+          }).eq('id', runId);
+        }
+        
+        await logger.close();
+        throw new Error(errorMsg);
+      }
+      
       const fetchDuration = Date.now() - fetchStart;
 
       if (!apifyResponse.ok) {
@@ -584,51 +653,113 @@ Deno.serve(async (req) => {
         await logger.logParsing(postId, undefined, item.caption || '', eventInfo, parseDuration);
 
         // PHASE 3: Validate and geocode venue if address exists
+        // First check NCR geocache, then fall back to API
         let locationLat: number | null = null;
         let locationLng: number | null = null;
         let geocodedAddress: string | null = null;
+        let cacheHit = false;
         
-        if (eventInfo.locationName && eventInfo.locationAddress && isValidAddress(eventInfo.locationAddress)) {
+        if (eventInfo.locationName) {
+          // Try NCR geocache first (exact match)
+          const cachedVenue = lookupNCRVenue(eventInfo.locationName);
+          if (cachedVenue) {
+            locationLat = cachedVenue.lat;
+            locationLng = cachedVenue.lng;
+            geocodedAddress = `${eventInfo.locationName}, ${cachedVenue.city}`;
+            cacheHit = true;
+            
+            await logger.success('geocache', 'NCR venue cache hit (exact)', {
+              postId,
+              venue: eventInfo.locationName,
+              city: cachedVenue.city,
+              lat: cachedVenue.lat,
+              lng: cachedVenue.lng,
+            });
+          } else {
+            // Try fuzzy match
+            const fuzzyMatch = fuzzyMatchVenue(eventInfo.locationName, 0.7);
+            if (fuzzyMatch) {
+              locationLat = fuzzyMatch.lat;
+              locationLng = fuzzyMatch.lng;
+              geocodedAddress = `${fuzzyMatch.matchedName}, ${fuzzyMatch.city}`;
+              cacheHit = true;
+              
+              await logger.success('geocache', 'NCR venue cache hit (fuzzy)', {
+                postId,
+                venue: eventInfo.locationName,
+                matchedName: fuzzyMatch.matchedName,
+                city: fuzzyMatch.city,
+                lat: fuzzyMatch.lat,
+                lng: fuzzyMatch.lng,
+              });
+            }
+          }
+        }
+        
+        // If no cache hit and we have a valid address, call geocoding API with retry
+        if (!cacheHit && eventInfo.locationName && eventInfo.locationAddress && isValidAddress(eventInfo.locationAddress)) {
           try {
-            await logger.info('validation', `Validating venue: ${eventInfo.locationName}`, { 
+            await logger.info('validation', `Validating venue (cache miss): ${eventInfo.locationName}`, { 
               postId, 
               venue: eventInfo.locationName,
               address: eventInfo.locationAddress 
             });
             
             const geocodeStart = Date.now();
-            const { data: geocodeData, error: geocodeError } = await supabase.functions.invoke('validate-venue', {
-              body: { 
-                venue: eventInfo.locationName, 
-                address: eventInfo.locationAddress 
+            
+            // Use retry logic for geocoding API call
+            const geocodeResult = await fetchWithRetry(
+              async () => {
+                const { data, error } = await supabase.functions.invoke('validate-venue', {
+                  body: { 
+                    venue: eventInfo.locationName, 
+                    address: eventInfo.locationAddress 
+                  },
+                });
+                
+                if (error) throw error;
+                return data;
               },
-            });
+              {
+                maxRetries: 2,
+                baseDelay: 1000,
+                maxDelay: 3000,
+                onRetry: (attempt, error) => {
+                  logger.warn('validation', `Geocoding retry attempt ${attempt}`, {
+                    postId,
+                    venue: eventInfo.locationName,
+                    error: error.message,
+                  });
+                },
+              }
+            );
+            
             const geocodeDuration = Date.now() - geocodeStart;
             
-            if (!geocodeError && geocodeData?.isValid) {
-              locationLat = geocodeData.lat;
-              locationLng = geocodeData.lng;
-              geocodedAddress = geocodeData.formattedAddress || eventInfo.locationAddress;
+            if (geocodeResult?.isValid) {
+              locationLat = geocodeResult.lat;
+              locationLng = geocodeResult.lng;
+              geocodedAddress = geocodeResult.formattedAddress || eventInfo.locationAddress;
               
               await logger.success('validation', 'Venue geocoded successfully', {
                 postId,
                 venue: eventInfo.locationName,
-                lat: geocodeData.lat,
-                lng: geocodeData.lng,
-                confidence: geocodeData.confidence,
+                lat: geocodeResult.lat,
+                lng: geocodeResult.lng,
+                confidence: geocodeResult.confidence,
                 duration_ms: geocodeDuration
               });
             } else {
               await logger.warn('validation', 'Venue validation failed', {
                 postId,
                 venue: eventInfo.locationName,
-                error: geocodeError?.message || 'No valid coordinates returned'
+                error: 'No valid coordinates returned'
               });
               // Log as rejected post for venue validation failure (post continues without coordinates)
               await logger.logRejectedPost({
                 postId,
                 reason: 'VENUE_VALIDATION_FAILED',
-                reasonMessage: geocodeError?.message || 'No valid coordinates returned',
+                reasonMessage: 'No valid coordinates returned',
                 captionPreview: item.caption?.substring(0, 200) || null,
                 locationName: eventInfo.locationName || null,
                 locationAddress: eventInfo.locationAddress || null,
@@ -888,6 +1019,9 @@ Deno.serve(async (req) => {
 
         // Extract image URL from Apify data (displayUrl or imageUrl)
         const imageUrl = item.displayUrl || item.imageUrl;
+        
+        // Extract additional images from carousel posts
+        const additionalImages = extractCarouselImages(item);
 
         // Download and store image in Supabase Storage
         let storedImageUrl: string | null = null;
@@ -1003,6 +1137,11 @@ Deno.serve(async (req) => {
           needs_review: needsReview,
           tags: tags, // PHASE 1: Add auto-generated tags
         };
+        
+        // Add additional images from carousel if available
+        if (additionalImages.length > 0) {
+          insertData.additional_images = additionalImages;
+        }
 
         // Only add event_time if we have a valid value
         if (eventInfo.eventTime && !eventInfo.timeValidationFailed) {
