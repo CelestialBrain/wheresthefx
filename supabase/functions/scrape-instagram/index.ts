@@ -1426,7 +1426,7 @@ Deno.serve(async (req) => {
           ai_confidence: eventInfo.aiConfidence || null,
           ai_reasoning: eventInfo.aiReasoning || null,
           // OCR extraction fields
-          ocr_text_extracted: eventInfo.ocrTextExtracted || null,
+          ocr_text: eventInfo.ocrTextExtracted || null,
           ocr_confidence: eventInfo.ocrConfidence || null,
         };
         
