@@ -929,31 +929,45 @@ Deno.serve(async (req) => {
         await logger.logParsing(postId, undefined, item.caption || '', eventInfo, parseDuration);
 
         // PHASE 3: Validate and geocode venue if address exists
-        // First check NCR geocache, then fall back to API
+        // First check NCR geocache, then known_venues DB, then fall back to API
         let locationLat: number | null = null;
         let locationLng: number | null = null;
         let geocodedAddress: string | null = null;
         let cacheHit = false;
         
+        // Helper to clean venue name for geocoding lookups
+        const cleanVenueNameForGeocoding = (name: string): string => {
+          return name
+            .split(/\s*[-–—(]\s*/)[0]  // Stop at dashes/parentheses
+            .split(/\s+(?:Dec|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov)\s+/i)[0]  // Stop at dates
+            .split(/For online|can waze|via waze|see you|join us/i)[0]  // Stop at directions/CTAs
+            .replace(/\d{1,2}(?:am|pm)/gi, '')  // Remove times
+            .replace(/\s+/g, ' ')  // Normalize whitespace
+            .trim();
+        };
+        
         if (eventInfo.locationName) {
+          const cleanedVenueName = cleanVenueNameForGeocoding(eventInfo.locationName);
+          
           // Try NCR geocache first (exact match)
-          const cachedVenue = lookupNCRVenue(eventInfo.locationName);
+          const cachedVenue = lookupNCRVenue(cleanedVenueName);
           if (cachedVenue) {
             locationLat = cachedVenue.lat;
             locationLng = cachedVenue.lng;
-            geocodedAddress = `${eventInfo.locationName}, ${cachedVenue.city}`;
+            geocodedAddress = `${cleanedVenueName}, ${cachedVenue.city}`;
             cacheHit = true;
             
             await logger.success('geocache', 'NCR venue cache hit (exact)', {
               postId,
               venue: eventInfo.locationName,
+              cleanedName: cleanedVenueName,
               city: cachedVenue.city,
               lat: cachedVenue.lat,
               lng: cachedVenue.lng,
             });
           } else {
-            // Try fuzzy match
-            const fuzzyMatch = fuzzyMatchVenue(eventInfo.locationName, 0.7);
+            // Try fuzzy match on NCR cache
+            const fuzzyMatch = fuzzyMatchVenue(cleanedVenueName, 0.7);
             if (fuzzyMatch) {
               locationLat = fuzzyMatch.lat;
               locationLng = fuzzyMatch.lng;
@@ -963,10 +977,77 @@ Deno.serve(async (req) => {
               await logger.success('geocache', 'NCR venue cache hit (fuzzy)', {
                 postId,
                 venue: eventInfo.locationName,
+                cleanedName: cleanedVenueName,
                 matchedName: fuzzyMatch.matchedName,
                 city: fuzzyMatch.city,
                 lat: fuzzyMatch.lat,
                 lng: fuzzyMatch.lng,
+              });
+            }
+          }
+          
+          // FALLBACK: Check known_venues database table
+          if (!cacheHit) {
+            try {
+              const searchName = cleanedVenueName.toLowerCase().replace(/[%_]/g, '');
+              
+              // Query known_venues with name match or alias match
+              const { data: knownVenue } = await supabase
+                .from('known_venues')
+                .select('name, lat, lng, city, aliases')
+                .or(`name.ilike.%${searchName}%`)
+                .limit(5);
+              
+              // Check results for exact or alias match
+              let matchedVenue = null;
+              if (knownVenue && knownVenue.length > 0) {
+                for (const venue of knownVenue) {
+                  const venueLower = venue.name.toLowerCase();
+                  if (venueLower.includes(searchName) || searchName.includes(venueLower)) {
+                    matchedVenue = venue;
+                    break;
+                  }
+                  // Check aliases
+                  if (venue.aliases && Array.isArray(venue.aliases)) {
+                    for (const alias of venue.aliases) {
+                      const aliasLower = alias.toLowerCase();
+                      if (aliasLower.includes(searchName) || searchName.includes(aliasLower)) {
+                        matchedVenue = venue;
+                        break;
+                      }
+                    }
+                  }
+                  if (matchedVenue) break;
+                }
+              }
+              
+              if (matchedVenue?.lat && matchedVenue?.lng) {
+                locationLat = Number(matchedVenue.lat);
+                locationLng = Number(matchedVenue.lng);
+                geocodedAddress = `${matchedVenue.name}, ${matchedVenue.city || 'Metro Manila'}`;
+                cacheHit = true;
+                
+                await logger.success('geocache', 'known_venues DB hit', {
+                  postId,
+                  venue: eventInfo.locationName,
+                  cleanedName: cleanedVenueName,
+                  matchedName: matchedVenue.name,
+                  city: matchedVenue.city,
+                  lat: matchedVenue.lat,
+                  lng: matchedVenue.lng,
+                });
+              } else {
+                await logger.warn('geocache', 'No match in NCR cache or known_venues DB', {
+                  postId,
+                  venue: eventInfo.locationName,
+                  cleanedName: cleanedVenueName,
+                });
+              }
+            } catch (dbError) {
+              await logger.warn('geocache', 'known_venues DB lookup failed', {
+                postId,
+                venue: eventInfo.locationName,
+                error: dbError instanceof Error ? dbError.message : 'Unknown error',
               });
             }
           }
