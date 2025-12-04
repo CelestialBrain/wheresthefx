@@ -106,6 +106,7 @@ export async function fetchLearnedPatterns(
     .eq('pattern_type', patternType)
     .eq('is_active', true)
     .gte('confidence_score', 0.3) // Lower threshold to allow learning
+    .order('priority', { ascending: true }) // Lower priority number = higher precedence
     .order('confidence_score', { ascending: false })
     .limit(20);
 
@@ -290,11 +291,11 @@ export async function recordExtractionFeedback(
       .from('extraction_feedback')
       .insert({
         post_id: feedback.postId,
-        field: feedback.field,
-        raw_text: feedback.rawText,
-        correct_value: feedback.correctValue,
-        used_pattern_id: feedback.usedPatternId,
-        is_correct: feedback.isCorrect,
+        field_name: feedback.field,
+        original_value: feedback.rawText,
+        corrected_value: feedback.correctValue || '',
+        pattern_id: feedback.usedPatternId,
+        feedback_type: feedback.isCorrect ? 'confirm' : 'correction',
       });
 
     if (error) {
