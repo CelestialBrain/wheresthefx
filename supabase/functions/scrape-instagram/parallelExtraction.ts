@@ -21,6 +21,18 @@ import {
 } from './extractionUtils.ts';
 
 /**
+ * Minimum word overlap threshold for fuzzy venue matching.
+ * A value of 0.5 means at least half of the words must match.
+ */
+const VENUE_WORD_OVERLAP_THRESHOLD = 0.5;
+
+/**
+ * Minimum word length to consider for venue matching.
+ * Shorter words are often articles/prepositions that don't indicate venue identity.
+ */
+const MIN_WORD_LENGTH_FOR_MATCHING = 2;
+
+/**
  * Result from a single extraction source (regex or AI)
  */
 export interface ExtractionResult {
@@ -130,11 +142,11 @@ export function valuesMatch(
       if (norm1 === norm2) return true;
       if (norm1.includes(norm2) || norm2.includes(norm1)) return true;
       // Check for significant word overlap
-      const words1 = new Set(norm1.split(' ').filter(w => w.length > 2));
-      const words2 = new Set(norm2.split(' ').filter(w => w.length > 2));
+      const words1 = new Set(norm1.split(' ').filter(w => w.length > MIN_WORD_LENGTH_FOR_MATCHING));
+      const words2 = new Set(norm2.split(' ').filter(w => w.length > MIN_WORD_LENGTH_FOR_MATCHING));
       const intersection = [...words1].filter(w => words2.has(w));
       const minWords = Math.min(words1.size, words2.size);
-      if (minWords > 0 && intersection.length / minWords >= 0.5) return true;
+      if (minWords > 0 && intersection.length / minWords >= VENUE_WORD_OVERLAP_THRESHOLD) return true;
       return false;
     
     case 'price':
