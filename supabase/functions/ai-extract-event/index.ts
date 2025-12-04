@@ -10,6 +10,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
 import { buildAIContext, AIContext } from './contextBuilder.ts';
 
+// Caption length threshold - captions shorter than this may have details in image
+const SHORT_CAPTION_THRESHOLD = 100;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -42,6 +45,25 @@ interface AIExtractionResult {
   isFree?: boolean;
   price?: number;
   signupUrl?: string;
+  // OCR metadata (added when OCR extraction is used)
+  ocrTextExtracted?: string[];
+  ocrConfidence?: number;
+  extractionMethod?: 'ai' | 'ocr_ai';
+  sourceBreakdown?: {
+    fromCaption: string[];
+    fromImage: string[];
+  };
+}
+
+/**
+ * OCR extraction result from ocr-extract edge function
+ */
+interface OCRExtractResult {
+  success: boolean;
+  textLines: string[];
+  fullText: string;
+  confidence: number;
+  error?: string;
 }
 
 /**
@@ -154,6 +176,170 @@ Return a valid JSON object with these exact fields:
 }`;
 
   return prompt;
+}
+
+/**
+ * Build the extraction prompt with OCR text from image
+ */
+function buildPromptWithOCR(
+  caption: string,
+  ocrText: string,
+  ocrLines: string[],
+  context: AIContext
+): string {
+  const cleanedCaption = cleanCaptionForExtraction(caption);
+  
+  // Use Philippine timezone (UTC+8) for consistent date handling
+  const philippineTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const currentYear = philippineTime.getUTCFullYear();
+  const today = philippineTime.toISOString().split('T')[0];
+  
+  let prompt = `You are an expert at extracting event information from Filipino Instagram posts.
+
+TODAY'S DATE: ${today}
+
+INSTAGRAM CAPTION:
+"""
+${cleanedCaption || '(No caption provided)'}
+"""
+`;
+
+  if (ocrText && ocrText.trim().length > 0) {
+    prompt += `
+TEXT EXTRACTED FROM EVENT POSTER IMAGE (via OCR):
+"""
+${ocrText}
+"""
+
+INDIVIDUAL TEXT LINES FROM IMAGE:
+${ocrLines.map((line, i) => `${i + 1}. ${line}`).join('\n')}
+
+IMPORTANT: The IMAGE TEXT often contains the real event details (date, time, venue, price).
+The CAPTION is often just promotional text. Prioritize information from the image!
+`;
+  }
+
+  if (context.similarCorrections && context.similarCorrections.length > 0) {
+    prompt += `
+PAST CORRECTIONS (learn from these):
+${context.similarCorrections.map(c => `- "${c.original}" → "${c.corrected}"`).join('\n')}
+`;
+  }
+
+  if (context.knownVenues && context.knownVenues.length > 0) {
+    prompt += `
+KNOWN VENUES (use exact names when matching):
+${context.knownVenues.map(v => `- "${v.name}"${v.aliases?.length > 0 ? ` (aliases: ${v.aliases.join(', ')})` : ''}`).join('\n')}
+`;
+  }
+
+  prompt += `
+
+EXTRACTION RULES:
+1. EVENT TITLE: Look for the largest/most prominent text in the image, not the caption
+2. DATE: Look for month names, day numbers. Convert to YYYY-MM-DD format. Assume year ${currentYear} if not specified.
+3. TIME: Look for "PM", "AM", time formats. Convert to 24-hour HH:MM:SS
+4. VENUE: The venue name from the image is usually more accurate than the caption
+5. PRICE: Look for "₱", "PHP", "P", "FREE", "LIBRE" in the image
+6. If date is ambiguous, assume it's in the future (not past)
+
+Return ONLY valid JSON (no markdown, no code blocks):
+{
+  "eventTitle": "string",
+  "eventDate": "YYYY-MM-DD",
+  "eventEndDate": "YYYY-MM-DD or null",
+  "eventTime": "HH:MM:SS",
+  "endTime": "HH:MM:SS or null",
+  "locationName": "venue name only, clean",
+  "locationAddress": "full address if found, or null",
+  "price": number or null,
+  "isFree": boolean,
+  "signupUrl": "URL if found or null",
+  "isEvent": boolean,
+  "confidence": 0.0 to 1.0,
+  "reasoning": "brief explanation of what was found where",
+  "sourceBreakdown": {
+    "fromCaption": ["fields found in caption"],
+    "fromImage": ["fields found in image OCR"]
+  }
+}`;
+
+  return prompt;
+}
+
+/**
+ * Call OCR extraction edge function
+ */
+async function callOCRExtract(
+  imageUrl: string,
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<OCRExtractResult | null> {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/ocr-extract`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ imageUrl })
+    });
+    
+    if (!response.ok) {
+      console.error(`OCR extraction failed with status ${response.status}`);
+      return null;
+    }
+    
+    const result = await response.json() as OCRExtractResult;
+    return result;
+  } catch (error) {
+    console.error('OCR extraction error:', error);
+    return null;
+  }
+}
+
+/**
+ * Extract event with OCR assistance
+ * This combines OCR text from image with caption text for AI analysis
+ */
+async function extractWithOCRAndAI(
+  caption: string,
+  imageUrl: string,
+  context: AIContext,
+  supabaseUrl: string,
+  supabaseKey: string,
+  geminiApiKey: string
+): Promise<AIExtractionResult> {
+  
+  // Step 1: Run OCR on image
+  let ocrText = '';
+  let ocrLines: string[] = [];
+  let ocrConfidence = 0;
+  
+  const ocrResult = await callOCRExtract(imageUrl, supabaseUrl, supabaseKey);
+  
+  if (ocrResult && ocrResult.success) {
+    ocrText = ocrResult.fullText;
+    ocrLines = ocrResult.textLines;
+    ocrConfidence = ocrResult.confidence;
+    console.log(`OCR extracted ${ocrLines.length} lines with confidence ${ocrConfidence}`);
+  } else {
+    console.warn('OCR failed, falling back to AI vision only:', ocrResult?.error || 'Unknown error');
+  }
+
+  // Step 2: Build enhanced prompt with OCR text
+  const combinedPrompt = buildPromptWithOCR(caption, ocrText, ocrLines, context);
+  
+  // Step 3: Call Gemini with combined context
+  const aiResult = await callGeminiAPI(combinedPrompt, geminiApiKey);
+  
+  // Step 4: Add OCR metadata
+  return {
+    ...aiResult,
+    ocrTextExtracted: ocrLines.length > 0 ? ocrLines : undefined,
+    ocrConfidence: ocrConfidence > 0 ? ocrConfidence : undefined,
+    extractionMethod: ocrLines.length > 0 ? 'ocr_ai' : 'ai'
+  };
 }
 
 /**
@@ -350,20 +536,21 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body = await req.json();
-    // Note: imageUrl is accepted for future multimodal extraction support
-    // Currently only caption text is processed
     const { 
       caption, 
+      imageUrl,
       locationHint, 
       postId, 
       postedAt, 
       ownerUsername, 
-      instagramAccountId 
+      instagramAccountId,
+      useOCR // Optional flag to force OCR extraction
     } = body;
 
-    if (!caption) {
+    // Allow extraction with just imageUrl (for image-only posts)
+    if (!caption && !imageUrl) {
       return new Response(
-        JSON.stringify({ error: 'Caption is required' }),
+        JSON.stringify({ error: 'Either caption or imageUrl is required' }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -371,7 +558,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`AI extraction for post: ${postId || 'unknown'}`);
+    console.log(`AI extraction for post: ${postId || 'unknown'}${imageUrl ? ' (with image)' : ''}`);
 
     // Initialize Supabase client for context building
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -383,7 +570,7 @@ Deno.serve(async (req) => {
       // Build smart context from database
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
       context = await buildAIContext({
-        caption,
+        caption: caption || '',
         locationHint,
         postedAt,
         ownerUsername,
@@ -395,7 +582,7 @@ Deno.serve(async (req) => {
       // Fallback: no smart context, just raw data
       console.log('Supabase not configured, using raw data only');
       context = {
-        caption,
+        caption: caption || '',
         locationHint: locationHint || null,
         postedAt: postedAt || null,
         ownerUsername: ownerUsername || null,
@@ -405,14 +592,36 @@ Deno.serve(async (req) => {
       };
     }
 
-    // Build prompt with context and call Gemini
-    const prompt = buildExtractionPrompt(context);
-    const rawResult = await callGeminiAPI(prompt, geminiApiKey);
+    let result: AIExtractionResult;
+
+    // Use OCR extraction if imageUrl is provided and either:
+    // 1. useOCR flag is explicitly set
+    // 2. Caption is short/missing (details probably in image)
+    const shouldUseOCR = imageUrl && supabaseUrl && supabaseServiceKey && (
+      useOCR || 
+      !caption || 
+      (caption && caption.length < SHORT_CAPTION_THRESHOLD)
+    );
+
+    if (shouldUseOCR) {
+      console.log(`Using OCR+AI extraction for post: ${postId || 'unknown'}`);
+      const rawResult = await extractWithOCRAndAI(
+        caption || '',
+        imageUrl,
+        context,
+        supabaseUrl!,
+        supabaseServiceKey!,
+        geminiApiKey
+      );
+      result = validateExtractionResult(rawResult);
+    } else {
+      // Standard caption-only AI extraction
+      const prompt = buildExtractionPrompt(context);
+      const rawResult = await callGeminiAPI(prompt, geminiApiKey);
+      result = validateExtractionResult(rawResult);
+    }
     
-    // Validate and clean the result
-    const result = validateExtractionResult(rawResult);
-    
-    console.log(`AI extraction result for ${postId}: isEvent=${result.isEvent}, confidence=${result.confidence}`);
+    console.log(`AI extraction result for ${postId}: isEvent=${result.isEvent}, confidence=${result.confidence}, method=${result.extractionMethod || 'ai'}`);
 
     return new Response(
       JSON.stringify({
