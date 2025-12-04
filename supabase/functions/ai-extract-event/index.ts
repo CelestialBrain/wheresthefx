@@ -126,7 +126,8 @@ async function extractWithGeminiVision(
   imageUrl: string,
   caption: string,
   context: AIContext,
-  apiKey: string
+  apiKey: string,
+  postTimestamp?: string | null
 ): Promise<AIExtractionResult> {
   
   // Fetch image and convert to base64
@@ -137,11 +138,15 @@ async function extractWithGeminiVision(
   const currentYear = philippineTime.getUTCFullYear();
   const today = philippineTime.toISOString().split('T')[0];
   
+  // Parse post timestamp for relative date calculations
+  const postDate = postTimestamp ? new Date(postTimestamp).toISOString().split('T')[0] : null;
+  
   const cleanedCaption = cleanCaptionForExtraction(caption);
   
   let prompt = `You are an expert at extracting event information from Filipino Instagram event posters.
 
 TODAY'S DATE: ${today}
+${postDate ? `POST TIMESTAMP: ${postDate}` : ''}
 
 INSTAGRAM CAPTION (may be incomplete):
 """
@@ -150,17 +155,60 @@ ${cleanedCaption || '(No caption provided)'}
 
 The attached image is an event poster. Extract ALL event details directly from the image.
 
-IMPORTANT - Look for:
-1. EVENT NAME/TITLE - Usually the LARGEST text, may be in stylized/artistic fonts
-2. DATE - Look for month names, day numbers (e.g., "DEC 04", "December 4"). Assume year ${currentYear} if not specified.
-3. TIME - Look for "PM", "AM", time formats, "doors open"
-4. VENUE/LOCATION - Look for addresses, venue names, 📍 symbols
-5. PRICE - Look for "₱", "PHP", "FREE", "LIBRE", ticket prices
+DATE EXTRACTION PRIORITY (CRITICAL):
+1. EXPLICIT date in image (highest priority) - e.g., "Nov 29", "December 7", "DEC 04"
+2. EXPLICIT date in caption - e.g., "December 7th", "on the 15th"
+3. RELATIVE words calculated from POST TIMESTAMP${postDate ? ` (${postDate})` : ''} (not today):
+   - "tomorrow" = post_date + 1 day
+   - "tonight" = post_date
+   - "this weekend" = next Sat/Sun from post_date
+   - "bukas" (Filipino) = post_date + 1 day
+   - "mamaya" (Filipino) = later today (post_date)
 
-SPECIAL ATTENTION:
-- Stylized/graffiti/artistic text often contains the event or artist name
-- Small text at bottom usually has venue address and contact info
-- Venue logo (often in corner) indicates the location
+IMPORTANT: If caption says "tomorrow" BUT image shows "Nov 29" → USE "Nov 29"
+Relative words just confirm the date, they don't override explicit dates.
+
+YEAR INFERENCE:
+- If month/day has already passed this year → assume next year
+- "Jan 5" posted in December ${currentYear} → January 5, ${currentYear + 1}
+- Always prefer future dates over past dates
+
+MULTI-DAY EVENTS:
+- "Dec 6-7" or "December 6-7" → eventDate: first date, eventEndDate: last date
+- "Friday & Saturday" → calculate both dates, set eventEndDate
+- "3-day event Dec 12-14" → eventDate: Dec 12, eventEndDate: Dec 14
+
+TIME EXTRACTION RULES:
+- Look for "PM", "AM", time formats, "doors open"
+- TIME AMBIGUITY: Infer AM/PM from context:
+  * Bar/club/party/concert events: single-digit hours = PM (9 → 21:00)
+  * Market/fair/yoga/run events: morning activities = AM (9 → 09:00)
+  * "Doors open 8" at a club → 20:00
+  * "Yoga class 7" → 07:00
+
+MIDNIGHT CROSSING:
+- If end time is LESS than start time, event crosses midnight
+- "10PM - 4AM" on Dec 7 → eventTime: 22:00, endTime: 04:00, eventEndDate: Dec 8
+- "11PM - 3AM" → end date is next day
+
+VENUE/LOCATION:
+- Look for addresses, venue names, 📍 symbols
+- Extract ONLY the venue name, not descriptions or dates
+- Stop extracting at: dates, times, hashtags, URLs, sponsor text
+- Handle Instagram handles: "@radius_katipunan" → "Radius Katipunan"
+- Split venue and address when possible
+
+PRICE FORMATS TO RECOGNIZE:
+- "₱500", "P500", "Php500", "PHP 500" → 500
+- "500 pesos", "500php" → 500
+- "₱300-500" or "₱300 to ₱500" → 300 (use minimum/presale)
+- "₱300 presale / ₱500 door" → 300 (use presale price)
+- "FREE", "LIBRE", "Walang bayad", "No cover" → isFree: true, price: null
+
+FILIPINO DATE/TIME WORDS:
+- Date: "bukas" = tomorrow, "mamaya" = later today, "ngayon" = today
+- Days: "Lunes"=Mon, "Martes"=Tue, "Miyerkules"=Wed, "Huwebes"=Thu, "Biyernes"=Fri, "Sabado"=Sat, "Linggo"=Sun
+- Time: "tanghali"=noon (~12:00), "hapon"=afternoon (~15:00-18:00), "gabi"=evening (~18:00+), "umaga"=morning (~06:00-11:00)
 `;
 
   // Add known venues context if available
@@ -184,12 +232,12 @@ Return ONLY valid JSON (no markdown, no code blocks):
 {
   "eventTitle": "string - the main event/artist name from stylized text",
   "eventDate": "YYYY-MM-DD",
-  "eventEndDate": "YYYY-MM-DD or null",
+  "eventEndDate": "YYYY-MM-DD or null (for multi-day events or midnight crossing)",
   "eventTime": "HH:MM:SS (24-hour format)",
   "endTime": "HH:MM:SS or null",
-  "locationName": "venue name only",
+  "locationName": "venue name only - no dates, times, or descriptions",
   "locationAddress": "full address if visible",
-  "price": number or null,
+  "price": number or null (use minimum/presale price),
   "isFree": boolean,
   "signupUrl": "URL if visible or null",
   "isEvent": boolean,
@@ -293,7 +341,8 @@ function cleanCaptionForExtraction(caption: string): string {
  * Build the extraction prompt for Gemini with smart context
  */
 function buildExtractionPrompt(
-  context: AIContext
+  context: AIContext,
+  postTimestamp?: string | null
 ): string {
   const cleanedCaption = cleanCaptionForExtraction(context.caption);
   
@@ -302,9 +351,13 @@ function buildExtractionPrompt(
   const currentYear = philippineTime.getUTCFullYear();
   const today = philippineTime.toISOString().split('T')[0];
   
+  // Parse post timestamp for relative date calculations
+  const postDate = postTimestamp ? new Date(postTimestamp).toISOString().split('T')[0] : null;
+  
   let prompt = `You are an expert at extracting event information from Filipino Instagram posts.
 
 TODAY'S DATE: ${today}
+${postDate ? `POST TIMESTAMP: ${postDate}` : ''}
 
 CAPTION TO ANALYZE:
 """
@@ -345,31 +398,65 @@ ${context.ownerUsername ? `POSTED BY: @${context.ownerUsername}` : ''}
   }
 
   prompt += `
-RULES:
-1. event_title: Extract the actual event NAME, not the first line of caption. Look for event names like "Solana Holiday Pop-Up Tour", "Community Fleamarket", "Open Siomaic", etc.
-2. event_date: Convert to YYYY-MM-DD format. Handle Filipino dates like "ika-5 ng Mayo", "Disyembre 6-7". For date ranges, use the start date. Assume current year (${currentYear}) if not specified.
-3. event_end_date: For date ranges like "Dec 6-7", put the end date in YYYY-MM-DD format.
-4. event_time: Convert to 24-hour format (HH:MM:SS). Infer AM/PM from context:
-   - "gabi" = PM (evening), "umaga" = AM (morning)
-   - Events at bars/clubs default to PM
-   - Markets/fairs typically start in AM
-5. location_name: ONLY the venue name. If a known venue matches, use its exact name. STOP extraction at:
-   - Dates (December 6, Nov 29-30)
-   - Times (11 am, 10:00)
-   - Hashtags (#event)
-   - Sponsor text ("Made possible by:", "Powered by:")
-   - @mentions
-6. location_address: The city/area if mentioned separately from venue name
-7. If multiple venues/dates exist, put the FIRST one as primary and list others in additionalDates
-8. is_event: true if this describes an upcoming event with date/time/location
-9. confidence: 0.0-1.0 based on how certain you are about the extraction
-10. reasoning: Brief explanation of your extraction logic
+DATE EXTRACTION PRIORITY (CRITICAL):
+1. EXPLICIT date in caption (highest priority) - e.g., "December 7th", "Nov 29", "on the 15th"
+2. RELATIVE words calculated from POST TIMESTAMP${postDate ? ` (${postDate})` : ''} (not today):
+   - "tomorrow" = post_date + 1 day
+   - "tonight" = post_date
+   - "this weekend" = next Sat/Sun from post_date
+   - "bukas" (Filipino) = post_date + 1 day
+   - "mamaya" (Filipino) = later today (post_date)
+
+IMPORTANT: Relative words are hints. If both "tomorrow" AND "Nov 29" appear → USE "Nov 29"
+
+YEAR INFERENCE:
+- If month/day has already passed this year → assume next year
+- "Jan 5" posted in December ${currentYear} → January 5, ${currentYear + 1}
+- Always prefer future dates over past dates
+
+MULTI-DAY EVENTS:
+- "Dec 6-7" → eventDate: ${currentYear}-12-06, eventEndDate: ${currentYear}-12-07
+- "Friday & Saturday" → calculate both dates, set eventEndDate
+- "3-day event Dec 12-14" → eventDate: Dec 12, eventEndDate: Dec 14
+
+TIME EXTRACTION:
+- Convert to 24-hour format (HH:MM:SS)
+- TIME AMBIGUITY - Infer AM/PM from context:
+  * "gabi" = PM (evening), "umaga" = AM (morning), "tanghali" = noon
+  * Bar/club/party/concert events: hours like 8, 9, 10 = PM (20:00, 21:00, 22:00)
+  * Market/fair/yoga/run events: hours like 7, 8, 9 = AM (07:00, 08:00, 09:00)
+
+MIDNIGHT CROSSING:
+- If end time < start time, event crosses midnight
+- "10PM - 4AM" on Dec 7 → eventTime: 22:00, endTime: 04:00, eventEndDate: Dec 8
+
+LOCATION EXTRACTION:
+- ONLY the venue name. If a known venue matches, use its exact name.
+- STOP extraction at: dates, times, hashtags, sponsor text, @mentions
+- "@radius_katipunan" → "Radius Katipunan"
+- Split: "Xin Chào - 4344 Valdez St." → locationName: "Xin Chào", locationAddress: "4344 Valdez St."
+
+PRICE FORMATS:
+- "₱500", "P500", "Php500", "PHP 500" → 500
+- "₱300-500" → 300 (use minimum/presale)
+- "FREE", "LIBRE", "Walang bayad" → isFree: true, price: null
+
+FILIPINO LANGUAGE:
+- Date: "bukas"=tomorrow, "mamaya"=later today, "ngayon"=today
+- Days: "Lunes"=Mon, "Martes"=Tue, "Miyerkules"=Wed, "Huwebes"=Thu, "Biyernes"=Fri, "Sabado"=Sat, "Linggo"=Sun
+- Time: "tanghali"=noon, "hapon"=afternoon, "gabi"=evening, "umaga"=morning
+
+OTHER RULES:
+- event_title: Extract the actual event NAME, not the first line of caption
+- If multiple venues/dates exist, put the FIRST one as primary and list others in additionalDates
+- is_event: true if this describes an upcoming event with date/time/location
+- confidence: 0.0-1.0 based on how certain you are about the extraction
 
 Return a valid JSON object with these exact fields:
 {
   "eventTitle": string or null,
   "eventDate": "YYYY-MM-DD" or null,
-  "eventEndDate": "YYYY-MM-DD" or null,
+  "eventEndDate": "YYYY-MM-DD" or null (for multi-day events or midnight crossing),
   "eventTime": "HH:MM:SS" or null,
   "endTime": "HH:MM:SS" or null,
   "locationName": string or null (venue name only, no dates/times/hashtags),
@@ -379,7 +466,7 @@ Return a valid JSON object with these exact fields:
   "reasoning": string explaining extraction logic,
   "additionalDates": [{"date": "YYYY-MM-DD", "venue": string, "time": "HH:MM:SS"}] or null,
   "isFree": boolean or null,
-  "price": number or null (in PHP),
+  "price": number or null (in PHP, use minimum/presale),
   "signupUrl": string or null
 }`;
 
@@ -393,7 +480,8 @@ function buildPromptWithOCR(
   caption: string,
   ocrText: string,
   ocrLines: string[],
-  context: AIContext
+  context: AIContext,
+  postTimestamp?: string | null
 ): string {
   const cleanedCaption = cleanCaptionForExtraction(caption);
   
@@ -402,9 +490,13 @@ function buildPromptWithOCR(
   const currentYear = philippineTime.getUTCFullYear();
   const today = philippineTime.toISOString().split('T')[0];
   
+  // Parse post timestamp for relative date calculations
+  const postDate = postTimestamp ? new Date(postTimestamp).toISOString().split('T')[0] : null;
+  
   let prompt = `You are an expert at extracting event information from Filipino Instagram posts.
 
 TODAY'S DATE: ${today}
+${postDate ? `POST TIMESTAMP: ${postDate}` : ''}
 
 INSTAGRAM CAPTION:
 """
@@ -443,24 +535,62 @@ ${context.knownVenues.map(v => `- "${v.name}"${v.aliases?.length > 0 ? ` (aliase
 
   prompt += `
 
-EXTRACTION RULES:
-1. EVENT TITLE: Look for the largest/most prominent text in the image, not the caption
-2. DATE: Look for month names, day numbers. Convert to YYYY-MM-DD format. Assume year ${currentYear} if not specified.
-3. TIME: Look for "PM", "AM", time formats. Convert to 24-hour HH:MM:SS
-4. VENUE: The venue name from the image is usually more accurate than the caption
-5. PRICE: Look for "₱", "PHP", "P", "FREE", "LIBRE" in the image
-6. If date is ambiguous, assume it's in the future (not past)
+DATE EXTRACTION PRIORITY (CRITICAL):
+1. EXPLICIT date in image (highest priority) - e.g., "Nov 29", "December 7", "DEC 04"
+2. EXPLICIT date in caption - e.g., "December 7th", "on the 15th"
+3. RELATIVE words calculated from POST TIMESTAMP${postDate ? ` (${postDate})` : ''} (not today):
+   - "tomorrow" = post_date + 1 day
+   - "tonight" = post_date
+   - "this weekend" = next Sat/Sun from post_date
+   - "bukas" (Filipino) = post_date + 1 day
+
+IMPORTANT: If caption says "tomorrow" BUT image shows "Nov 29" → USE "Nov 29"
+Relative words just confirm the date, they don't override explicit dates.
+
+YEAR INFERENCE:
+- If month/day has already passed this year → assume next year
+- "Jan 5" posted in December ${currentYear} → January 5, ${currentYear + 1}
+- Always prefer future dates over past dates
+
+MULTI-DAY EVENTS:
+- "Dec 6-7" → eventDate: first date, eventEndDate: last date
+- "Friday & Saturday" → calculate both dates
+
+TIME EXTRACTION:
+- Look for "PM", "AM", time formats. Convert to 24-hour HH:MM:SS
+- TIME AMBIGUITY: Infer AM/PM from context:
+  * Bar/club/party/concert → PM (9 → 21:00)
+  * Market/fair/yoga → AM (9 → 09:00)
+
+MIDNIGHT CROSSING:
+- If end time < start time, event crosses midnight
+- "10PM - 4AM" on Dec 7 → eventTime: 22:00, endTime: 04:00, eventEndDate: Dec 8
+
+LOCATION EXTRACTION:
+- Extract ONLY the venue name from the image (usually more accurate than caption)
+- STOP extraction at: dates, times, hashtags, sponsor text, @mentions
+- "@radius_katipunan" → "Radius Katipunan"
+
+PRICE FORMATS:
+- "₱500", "P500", "Php500", "PHP 500" → 500
+- "₱300-500" → 300 (use minimum/presale)
+- "FREE", "LIBRE", "Walang bayad" → isFree: true, price: null
+
+FILIPINO LANGUAGE:
+- Date: "bukas"=tomorrow, "mamaya"=later today, "ngayon"=today
+- Days: "Lunes"=Mon, "Martes"=Tue, "Miyerkules"=Wed, "Huwebes"=Thu, "Biyernes"=Fri, "Sabado"=Sat, "Linggo"=Sun
+- Time: "tanghali"=noon, "hapon"=afternoon, "gabi"=evening, "umaga"=morning
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {
   "eventTitle": "string",
   "eventDate": "YYYY-MM-DD",
-  "eventEndDate": "YYYY-MM-DD or null",
+  "eventEndDate": "YYYY-MM-DD or null (for multi-day events or midnight crossing)",
   "eventTime": "HH:MM:SS",
   "endTime": "HH:MM:SS or null",
-  "locationName": "venue name only, clean",
+  "locationName": "venue name only - no dates, times, or descriptions",
   "locationAddress": "full address if found, or null",
-  "price": number or null,
+  "price": number or null (use minimum/presale),
   "isFree": boolean,
   "signupUrl": "URL if found or null",
   "isEvent": boolean,
@@ -517,7 +647,8 @@ async function extractWithOCRAndAI(
   context: AIContext,
   supabaseUrl: string,
   supabaseKey: string,
-  geminiApiKey: string
+  geminiApiKey: string,
+  postTimestamp?: string | null
 ): Promise<AIExtractionResult> {
   
   // Step 1: Run OCR on image
@@ -544,7 +675,7 @@ async function extractWithOCRAndAI(
     console.log(`OCR confidence too low (${ocrConfidence}) or text too short (${ocrText.length} chars). Using Gemini Vision.`);
     
     try {
-      const visionResult = await extractWithGeminiVision(imageUrl, caption, context, geminiApiKey);
+      const visionResult = await extractWithGeminiVision(imageUrl, caption, context, geminiApiKey, postTimestamp);
       return {
         ...visionResult,
         extractionMethod: 'vision',
@@ -557,7 +688,7 @@ async function extractWithOCRAndAI(
   }
 
   // Step 3: Build enhanced prompt with OCR text (original flow)
-  const combinedPrompt = buildPromptWithOCR(caption, ocrText, ocrLines, context);
+  const combinedPrompt = buildPromptWithOCR(caption, ocrText, ocrLines, context, postTimestamp);
   
   // Step 4: Call Gemini with combined context
   const aiResult = await callGeminiAPI(combinedPrompt, geminiApiKey);
@@ -840,12 +971,13 @@ Deno.serve(async (req) => {
         context,
         supabaseUrl!,
         supabaseServiceKey!,
-        geminiApiKey
+        geminiApiKey,
+        postedAt // Pass post timestamp for relative date calculations
       );
       result = validateExtractionResult(rawResult);
     } else {
       // Standard caption-only AI extraction
-      const prompt = buildExtractionPrompt(context);
+      const prompt = buildExtractionPrompt(context, postedAt);
       const rawResult = await callGeminiAPI(prompt, geminiApiKey);
       result = validateExtractionResult(rawResult);
     }
