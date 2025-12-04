@@ -79,9 +79,10 @@ function extractVenueKeywords(caption: string): string[] {
   }
   
   // Extract text after "at" or "sa" (case insensitive)
+  // Using more permissive pattern to capture venues starting with lowercase/numbers
   const atPatterns = [
-    /\bat\s+([A-Z][a-zA-Z0-9\s]+?)(?=[\n,.]|$)/gi,
-    /\bsa\s+([A-Z][a-zA-Z0-9\s]+?)(?=[\n,.]|$)/gi,
+    /\bat\s+([a-zA-Z0-9@][a-zA-Z0-9\s@_.]+?)(?=[\n,.]|$)/gi,
+    /\bsa\s+([a-zA-Z0-9@][a-zA-Z0-9\s@_.]+?)(?=[\n,.]|$)/gi,
   ];
   
   for (const pattern of atPatterns) {
@@ -103,6 +104,17 @@ function extractVenueKeywords(caption: string): string[] {
 }
 
 /**
+ * Sanitize string for use in ilike filter to prevent SQL injection
+ * Escapes special characters: %, _, \
+ */
+function sanitizeForIlike(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')  // Escape backslashes first
+    .replace(/%/g, '\\%')    // Escape percent
+    .replace(/_/g, '\\_');   // Escape underscore
+}
+
+/**
  * Query similar corrections from extraction_corrections table
  */
 async function getSimilarCorrections(
@@ -118,10 +130,12 @@ async function getSimilarCorrections(
     const corrections: SimilarCorrection[] = [];
     
     for (const keyword of keywords.slice(0, 5)) { // Limit to 5 keywords
+      // Sanitize keyword to prevent SQL injection
+      const sanitizedKeyword = sanitizeForIlike(keyword);
       const { data, error } = await supabase
         .from('extraction_corrections')
         .select('original_extracted_value, corrected_value, field_name')
-        .or(`original_extracted_value.ilike.%${keyword}%,corrected_value.ilike.%${keyword}%`)
+        .or(`original_extracted_value.ilike.%${sanitizedKeyword}%,corrected_value.ilike.%${sanitizedKeyword}%`)
         .limit(5);
       
       if (error) {
@@ -177,10 +191,12 @@ async function getKnownVenues(
     const venues: KnownVenue[] = [];
     
     for (const term of searchTerms.slice(0, 5)) { // Limit to 5 search terms
+      // Sanitize term to prevent SQL injection
+      const sanitizedTerm = sanitizeForIlike(term);
       const { data, error } = await supabase
         .from('known_venues')
         .select('name, aliases, address')
-        .or(`name.ilike.%${term}%,aliases.cs.{${term}}`)
+        .or(`name.ilike.%${sanitizedTerm}%,aliases.cs.{${sanitizedTerm}}`)
         .limit(5);
       
       if (error) {

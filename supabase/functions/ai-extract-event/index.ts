@@ -66,8 +66,11 @@ function buildExtractionPrompt(
   context: AIContext
 ): string {
   const cleanedCaption = cleanCaptionForExtraction(context.caption);
-  const currentYear = new Date().getFullYear();
-  const today = new Date().toISOString().split('T')[0];
+  
+  // Use Philippine timezone (UTC+8) for consistent date handling
+  const philippineTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const currentYear = philippineTime.getUTCFullYear();
+  const today = philippineTime.toISOString().split('T')[0];
   
   let prompt = `You are an expert at extracting event information from Filipino Instagram posts.
 

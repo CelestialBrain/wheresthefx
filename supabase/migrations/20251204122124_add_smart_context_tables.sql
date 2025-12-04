@@ -71,11 +71,13 @@ CREATE POLICY "Admins can manage account venue stats"
 
 -- ============================================================
 -- Trigger to auto-update account_venue_stats on post insert
+-- Only triggers for event posts with a location to improve performance
 -- ============================================================
 CREATE OR REPLACE FUNCTION public.update_account_venue_stats()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.location_name IS NOT NULL THEN
+  -- Only update stats for event posts with a location name
+  IF NEW.is_event = true AND NEW.location_name IS NOT NULL THEN
     INSERT INTO public.account_venue_stats (instagram_account_id, venue_name, post_count, last_used_at)
     VALUES (NEW.instagram_account_id, NEW.location_name, 1, NOW())
     ON CONFLICT (instagram_account_id, venue_name)
