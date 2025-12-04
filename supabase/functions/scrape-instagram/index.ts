@@ -166,9 +166,9 @@ function needsAIExtraction(eventInfo: {
   const missingTime = !eventInfo.eventTime;
   const missingLocation = !eventInfo.locationName;
   
-  // Messy extraction (too long)
-  const messyLocation = eventInfo.locationName && eventInfo.locationName.length > 100;
-  const messyTitle = eventInfo.eventTitle && eventInfo.eventTitle.length > 100;
+  // Messy extraction (too long) - explicitly convert to boolean
+  const messyLocation = Boolean(eventInfo.locationName && eventInfo.locationName.length > 100);
+  const messyTitle = Boolean(eventInfo.eventTitle && eventInfo.eventTitle.length > 100);
   
   return missingDate || missingTime || missingLocation || messyLocation || messyTitle;
 }
@@ -192,7 +192,7 @@ interface AIExtractionInput {
  */
 async function parseEventWithAI(
   input: AIExtractionInput,
-  supabase: ReturnType<typeof createClient>
+  supabase: any
 ): Promise<AIExtractionResult | null> {
   try {
     const { data, error } = await supabase.functions.invoke('ai-extract-event', {
@@ -336,7 +336,7 @@ function parseRelativeDate(text: string): string | null {
 async function parseEventFromCaption(
   caption: string,
   locationName?: string | null,
-  supabase?: ReturnType<typeof createClient>,
+  supabase?: any,
   postId?: string,
   additionalContext?: {
     postedAt?: string | null;
