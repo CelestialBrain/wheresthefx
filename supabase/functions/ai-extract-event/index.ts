@@ -70,26 +70,51 @@ interface OCRExtractResult {
 const OCR_CONFIDENCE_THRESHOLD = 0.5;
 const OCR_MIN_TEXT_LENGTH = 20;
 
+// Timeout for image fetch in milliseconds
+const IMAGE_FETCH_TIMEOUT_MS = 30000;
+
 /**
  * Fetch an image and convert it to base64 encoding
+ * Returns both the base64 data and the detected MIME type
  */
-async function fetchImageAsBase64(imageUrl: string): Promise<string> {
-  const response = await fetch(imageUrl);
+async function fetchImageAsBase64(imageUrl: string): Promise<{ base64: string; mimeType: string }> {
+  // Create AbortController for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
   
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status}`);
+  try {
+    const response = await fetch(imageUrl, { signal: controller.signal });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+    
+    // Detect MIME type from response headers, default to image/jpeg
+    const contentType = response.headers.get('content-type');
+    let mimeType = 'image/jpeg';
+    if (contentType) {
+      // Extract just the mime type, ignore charset etc
+      const mimeMatch = contentType.match(/^(image\/[a-z]+)/i);
+      if (mimeMatch) {
+        mimeType = mimeMatch[1].toLowerCase();
+      }
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Convert to base64 using chunked approach for better memory efficiency
+    const CHUNK_SIZE = 32768; // 32KB chunks
+    let binary = '';
+    for (let i = 0; i < uint8Array.length; i += CHUNK_SIZE) {
+      const chunk = uint8Array.subarray(i, Math.min(i + CHUNK_SIZE, uint8Array.length));
+      binary += String.fromCharCode.apply(null, [...chunk]);
+    }
+    
+    return { base64: btoa(binary), mimeType };
+  } finally {
+    clearTimeout(timeoutId);
   }
-  
-  const arrayBuffer = await response.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
-  
-  // Convert to base64
-  let binary = '';
-  for (let i = 0; i < uint8Array.length; i++) {
-    binary += String.fromCharCode(uint8Array[i]);
-  }
-  
-  return btoa(binary);
 }
 
 /**
@@ -105,7 +130,7 @@ async function extractWithGeminiVision(
 ): Promise<AIExtractionResult> {
   
   // Fetch image and convert to base64
-  const base64Image = await fetchImageAsBase64(imageUrl);
+  const { base64: base64Image, mimeType } = await fetchImageAsBase64(imageUrl);
   
   // Use Philippine timezone (UTC+8) for consistent date handling
   const philippineTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
@@ -183,7 +208,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
             { text: prompt },
             {
               inline_data: {
-                mime_type: 'image/jpeg',
+                mime_type: mimeType,
                 data: base64Image
               }
             }
