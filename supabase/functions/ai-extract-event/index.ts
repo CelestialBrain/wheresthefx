@@ -48,7 +48,7 @@ interface AIExtractionResult {
   // OCR metadata (added when OCR extraction is used)
   ocrTextExtracted?: string[];
   ocrConfidence?: number;
-  extractionMethod?: 'ai' | 'ocr_ai';
+  extractionMethod?: 'ai' | 'ocr_ai' | 'vision';
   sourceBreakdown?: {
     fromCaption: string[];
     fromImage: string[];
@@ -64,6 +64,189 @@ interface OCRExtractResult {
   fullText: string;
   confidence: number;
   error?: string;
+}
+
+// OCR confidence and text length thresholds for triggering vision fallback
+const OCR_CONFIDENCE_THRESHOLD = 0.5;
+const OCR_MIN_TEXT_LENGTH = 20;
+
+/**
+ * Fetch an image and convert it to base64 encoding
+ */
+async function fetchImageAsBase64(imageUrl: string): Promise<string> {
+  const response = await fetch(imageUrl);
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.status}`);
+  }
+  
+  const arrayBuffer = await response.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  
+  // Convert to base64
+  let binary = '';
+  for (let i = 0; i < uint8Array.length; i++) {
+    binary += String.fromCharCode(uint8Array[i]);
+  }
+  
+  return btoa(binary);
+}
+
+/**
+ * Extract event data using Gemini Vision API
+ * This function sends the image directly to Gemini for visual understanding,
+ * which is better at reading stylized/artistic text than OCR.
+ */
+async function extractWithGeminiVision(
+  imageUrl: string,
+  caption: string,
+  context: AIContext,
+  apiKey: string
+): Promise<AIExtractionResult> {
+  
+  // Fetch image and convert to base64
+  const base64Image = await fetchImageAsBase64(imageUrl);
+  
+  // Use Philippine timezone (UTC+8) for consistent date handling
+  const philippineTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const currentYear = philippineTime.getUTCFullYear();
+  const today = philippineTime.toISOString().split('T')[0];
+  
+  const cleanedCaption = cleanCaptionForExtraction(caption);
+  
+  let prompt = `You are an expert at extracting event information from Filipino Instagram event posters.
+
+TODAY'S DATE: ${today}
+
+INSTAGRAM CAPTION (may be incomplete):
+"""
+${cleanedCaption || '(No caption provided)'}
+"""
+
+The attached image is an event poster. Extract ALL event details directly from the image.
+
+IMPORTANT - Look for:
+1. EVENT NAME/TITLE - Usually the LARGEST text, may be in stylized/artistic fonts
+2. DATE - Look for month names, day numbers (e.g., "DEC 04", "December 4"). Assume year ${currentYear} if not specified.
+3. TIME - Look for "PM", "AM", time formats, "doors open"
+4. VENUE/LOCATION - Look for addresses, venue names, 📍 symbols
+5. PRICE - Look for "₱", "PHP", "FREE", "LIBRE", ticket prices
+
+SPECIAL ATTENTION:
+- Stylized/graffiti/artistic text often contains the event or artist name
+- Small text at bottom usually has venue address and contact info
+- Venue logo (often in corner) indicates the location
+`;
+
+  // Add known venues context if available
+  if (context.knownVenues && context.knownVenues.length > 0) {
+    prompt += `
+KNOWN VENUES (match if you see these):
+${context.knownVenues.map(v => `- "${v.name}"${v.address ? ` at ${v.address}` : ''}`).join('\n')}
+`;
+  }
+
+  // Add past corrections context if available
+  if (context.similarCorrections && context.similarCorrections.length > 0) {
+    prompt += `
+PAST CORRECTIONS (learn from these):
+${context.similarCorrections.map(c => `- "${c.original}" → "${c.corrected}" (${c.field})`).join('\n')}
+`;
+  }
+
+  prompt += `
+Return ONLY valid JSON (no markdown, no code blocks):
+{
+  "eventTitle": "string - the main event/artist name from stylized text",
+  "eventDate": "YYYY-MM-DD",
+  "eventEndDate": "YYYY-MM-DD or null",
+  "eventTime": "HH:MM:SS (24-hour format)",
+  "endTime": "HH:MM:SS or null",
+  "locationName": "venue name only",
+  "locationAddress": "full address if visible",
+  "price": number or null,
+  "isFree": boolean,
+  "signupUrl": "URL if visible or null",
+  "isEvent": boolean,
+  "confidence": 0.0 to 1.0,
+  "reasoning": "describe what you found in the image"
+}`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: 'image/jpeg',
+                data: base64Image
+              }
+            }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 1024,
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini Vision API error (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  
+  // Extract the text content from Gemini response
+  const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  
+  if (!textContent) {
+    throw new Error('No content in Gemini Vision response');
+  }
+  
+  // Parse the JSON response
+  // Clean up the response - remove markdown code blocks if present
+  let jsonStr = textContent.trim();
+  if (jsonStr.startsWith('```json')) {
+    jsonStr = jsonStr.slice(7);
+  }
+  if (jsonStr.startsWith('```')) {
+    jsonStr = jsonStr.slice(3);
+  }
+  if (jsonStr.endsWith('```')) {
+    jsonStr = jsonStr.slice(0, -3);
+  }
+  jsonStr = jsonStr.trim();
+  
+  // Extract JSON from response if there's extra text
+  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('No JSON found in Gemini Vision response');
+  }
+  
+  const result = JSON.parse(jsonMatch[0]) as AIExtractionResult;
+  
+  // Validate required fields
+  if (typeof result.isEvent !== 'boolean') {
+    result.isEvent = false;
+  }
+  if (typeof result.confidence !== 'number') {
+    result.confidence = 0.5;
+  }
+  if (!result.reasoning) {
+    result.reasoning = 'Extracted using Gemini Vision';
+  }
+  
+  result.extractionMethod = 'vision';
+  
+  return result;
 }
 
 /**
@@ -300,7 +483,8 @@ async function callOCRExtract(
 
 /**
  * Extract event with OCR assistance
- * This combines OCR text from image with caption text for AI analysis
+ * This combines OCR text from image with caption text for AI analysis.
+ * Falls back to Gemini Vision when OCR confidence is low or text extraction is minimal.
  */
 async function extractWithOCRAndAI(
   caption: string,
@@ -324,16 +508,36 @@ async function extractWithOCRAndAI(
     ocrConfidence = ocrResult.confidence;
     console.log(`OCR extracted ${ocrLines.length} lines with confidence ${ocrConfidence}`);
   } else {
-    console.warn('OCR failed, falling back to AI vision only:', ocrResult?.error || 'Unknown error');
+    console.warn('OCR failed:', ocrResult?.error || 'Unknown error');
   }
 
-  // Step 2: Build enhanced prompt with OCR text
+  // Step 2: Check if OCR was successful enough
+  const ocrSuccessful = ocrConfidence >= OCR_CONFIDENCE_THRESHOLD && ocrText.length >= OCR_MIN_TEXT_LENGTH;
+  
+  if (!ocrSuccessful && imageUrl) {
+    // OCR struggled - fall back to Gemini Vision
+    console.log(`OCR confidence too low (${ocrConfidence}) or text too short (${ocrText.length} chars). Using Gemini Vision.`);
+    
+    try {
+      const visionResult = await extractWithGeminiVision(imageUrl, caption, context, geminiApiKey);
+      return {
+        ...visionResult,
+        extractionMethod: 'vision',
+        ocrConfidence: ocrConfidence > 0 ? ocrConfidence : undefined, // Track that OCR was attempted
+      };
+    } catch (visionError) {
+      console.warn('Gemini Vision failed, falling back to OCR+AI:', visionError);
+      // Continue with OCR+AI as last resort
+    }
+  }
+
+  // Step 3: Build enhanced prompt with OCR text (original flow)
   const combinedPrompt = buildPromptWithOCR(caption, ocrText, ocrLines, context);
   
-  // Step 3: Call Gemini with combined context
+  // Step 4: Call Gemini with combined context
   const aiResult = await callGeminiAPI(combinedPrompt, geminiApiKey);
   
-  // Step 4: Add OCR metadata
+  // Step 5: Add OCR metadata
   return {
     ...aiResult,
     ocrTextExtracted: ocrLines.length > 0 ? ocrLines : undefined,
