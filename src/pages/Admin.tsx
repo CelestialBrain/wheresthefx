@@ -6,12 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database } from "lucide-react";
 import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
 import { PatternManager } from "@/components/PatternManager";
 import { ScraperLogs } from "@/components/ScraperLogs";
+import { KnownVenuesManager } from "@/components/KnownVenuesManager";
+import { LocationCorrectionsViewer } from "@/components/LocationCorrectionsViewer";
+import { AccountVenueStatsViewer } from "@/components/AccountVenueStatsViewer";
 
 interface InstagramAccount {
   id: string;
@@ -331,7 +334,7 @@ const Admin = () => {
         <h1 className="text-2xl md:text-3xl font-bold">Admin Dashboard</h1>
         
         <Tabs defaultValue="scraping">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-1">
+          <TabsList className="grid w-full grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1">
             <TabsTrigger value="scraping" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
               <Instagram className="w-3 h-3 md:w-4 md:h-4" />
               <span className="hidden sm:inline">Scraping</span>
@@ -355,6 +358,11 @@ const Admin = () => {
               <MapPin className="w-3 h-3 md:w-4 md:h-4" />
               <span className="hidden sm:inline">Templates</span>
               <span className="sm:hidden">Loc</span>
+            </TabsTrigger>
+            <TabsTrigger value="knowledge" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <Database className="w-3 h-3 md:w-4 md:h-4" />
+              <span className="hidden sm:inline">Knowledge</span>
+              <span className="sm:hidden">Data</span>
             </TabsTrigger>
             <TabsTrigger value="logs" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
               <Eye className="w-3 h-3 md:w-4 md:h-4" />
@@ -636,6 +644,12 @@ const Admin = () => {
 
           <TabsContent value="templates">
             <LocationTemplatesManager />
+          </TabsContent>
+
+          <TabsContent value="knowledge" className="space-y-6 mt-6">
+            <KnownVenuesManager />
+            <LocationCorrectionsViewer />
+            <AccountVenueStatsViewer />
           </TabsContent>
 
           <TabsContent value="logs">
