@@ -558,12 +558,41 @@ export async function extractPrice(
   
   // Fall back to hardcoded patterns
   // Check for free keywords first (English + Filipino)
-  if (/\b(free|complimentary|walang\s*bayad|libre|free\s*admission|free\s*entrance)\b/i.test(text)) {
+  if (/\b(free|complimentary|walang\s*bayad|libre|free\s*admission|free\s*entrance|no\s*cover)\b/i.test(text)) {
     return { amount: 0, currency: 'PHP', isFree: true };
   }
   
+  // Check for presale/door pricing - extract presale (lower) price
+  // "₱300 presale / ₱500 door" or "₱300 advance / ₱500 at door"
+  const presalePattern = /\b(?:₱|PHP|Php|P)\s*(\d{1,3}(?:[,\s]\d{3})*)\s*(?:presale|advance|early\s*bird)/i;
+  const presaleMatch = text.match(presalePattern);
+  if (presaleMatch) {
+    const amount = parseFloat(presaleMatch[1].replace(/[,\s]/g, ''));
+    if (amount >= 0 && amount <= 1000000) {
+      return { amount, currency: 'PHP', isFree: false };
+    }
+  }
+  
+  // Filipino slang multipliers
+  const HUNDO_MULTIPLIER = 100;  // "5 hundo" = 500
+  const LIBO_AMOUNT = 1000;      // "isang libo" = 1000
+  
+  // Filipino slang: "5 hundo" = 500
+  const hundoMatch = text.match(/\b(\d+)\s*hundo\b/i);
+  if (hundoMatch) {
+    const amount = parseInt(hundoMatch[1]) * HUNDO_MULTIPLIER;
+    if (amount >= 0 && amount <= 1000000) {
+      return { amount, currency: 'PHP', isFree: false };
+    }
+  }
+  
+  // Filipino slang: "isang libo" = 1000
+  if (/\bisang\s*libo\b/i.test(text)) {
+    return { amount: LIBO_AMOUNT, currency: 'PHP', isFree: false };
+  }
+  
   // Price range pattern (₱299–₱349, PHP 299 to 349, P299-349)
-  const rangePattern = /\b(?:₱|PHP|P)\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)\s*(?:-|–|to|hanggang)\s*(?:₱|PHP|P)?\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)\s*([kKmM])?\b/i;
+  const rangePattern = /\b(?:₱|PHP|Php|P)\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)\s*(?:-|–|to|hanggang)\s*(?:₱|PHP|Php|P)?\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)\s*([kKmM])?\b/i;
   const rangeMatch = text.match(rangePattern);
   
   if (rangeMatch) {
@@ -578,7 +607,8 @@ export async function extractPrice(
   }
   
   // Single price pattern with k/m suffix
-  const singlePattern = /\b(?:₱|PHP|P)\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)\s*([kKmM])?\b/i;
+  // Extended to match: "₱500", "P500", "Php500", "PHP 500", "500 pesos", "500php"
+  const singlePattern = /\b(?:₱|PHP|Php|P)\s*(\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)\s*([kKmM])?\b/i;
   const singleMatch = text.match(singlePattern);
   
   if (singleMatch) {
@@ -588,6 +618,16 @@ export async function extractPrice(
     if (suf === 'm' || suf === 'M') amount *= 1000000;
     
     // Sanity check
+    if (amount >= 0 && amount <= 1000000) {
+      return { amount, currency: 'PHP', isFree: false };
+    }
+  }
+  
+  // Pattern for "500 pesos" or "500php"
+  const pesosPattern = /\b(\d{1,3}(?:[,\s]\d{3})*)\s*(?:pesos?|php)\b/i;
+  const pesosMatch = text.match(pesosPattern);
+  if (pesosMatch) {
+    const amount = parseFloat(pesosMatch[1].replace(/[,\s]/g, ''));
     if (amount >= 0 && amount <= 1000000) {
       return { amount, currency: 'PHP', isFree: false };
     }
@@ -614,14 +654,14 @@ function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
   const pmKeywords = [
     'evening', 'night', 'dinner', 'sunset', 'gabi', 'hapunan', 'nightlife', 'concert',
     'party', 'club', 'bar', 'drinks', 'inuman', 'tagay', 'late night', 'after dark',
-    'midnight', 'rave', 'dj set', 'live music', 'gig', 'happy hour'
+    'midnight', 'rave', 'dj set', 'live music', 'gig', 'happy hour', 'hapon'
   ];
   
   // Enhanced AM keywords (morning/daytime activities, Filipino terms)
   const amKeywords = [
     'morning', 'breakfast', 'brunch', 'umaga', 'almusal', 'sunrise',
     'misa', 'mass', 'church', 'sunday service', 'yoga', 'run', 'marathon',
-    'farmers market', 'early bird', 'wake up', 'coffee', 'kape'
+    'farmers market', 'early bird', 'wake up', 'coffee', 'kape', 'madaling araw'
   ];
   
   // Event type based inference
@@ -641,9 +681,10 @@ function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
   
   // Special case: 12 noon vs 12 midnight
   if (hour === 12) {
-    // Check for noon indicators
+    // Check for noon indicators (tanghali = noon in Filipino)
     const noonKeywords = ['noon', 'tanghali', 'lunch', 'tanghalian'];
-    const midnightKeywords = ['midnight', 'hatinggabi', 'late night'];
+    // hatinggabi = midnight in Filipino
+    const midnightKeywords = ['midnight', 'hatinggabi', 'late night', 'madaling araw'];
     
     if (noonKeywords.some(kw => lowerText.includes(kw))) return 'PM';
     if (midnightKeywords.some(kw => lowerText.includes(kw))) return 'AM';
@@ -798,11 +839,33 @@ function parseRelativeDate(text: string, referenceDate: Date = new Date()): Date
   // Get current day of week (0=Sunday, 6=Saturday)
   const currentDay = referenceDate.getDay();
   
-  // Days of week patterns
+  // Days of week patterns (English + Filipino)
   const dayPatterns: Record<string, number> = {
     'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4,
-    'friday': 5, 'saturday': 6, 'sunday': 0
+    'friday': 5, 'saturday': 6, 'sunday': 0,
+    // Filipino days
+    'lunes': 1, 'martes': 2, 'miyerkules': 3, 'huwebes': 4,
+    'biyernes': 5, 'sabado': 6, 'linggo': 0
   };
+  
+  // Filipino relative date words
+  // "bukas" = tomorrow, "mamaya" = later today, "ngayon" = today
+  if (/\bbukas\b/i.test(lowerText)) {
+    return new Date(referenceDate.getTime() + 86400000); // tomorrow
+  }
+  if (/\b(mamaya|ngayon)\b/i.test(lowerText)) {
+    return referenceDate; // today
+  }
+  
+  // "tonight", "today" = today
+  if (/\b(tonight|today)\b/i.test(lowerText)) {
+    return referenceDate;
+  }
+  
+  // "tomorrow" = tomorrow
+  if (/\btomorrow\b/i.test(lowerText)) {
+    return new Date(referenceDate.getTime() + 86400000);
+  }
   
   // "this [day]" - next occurrence of that day this week
   for (const [dayName, dayNum] of Object.entries(dayPatterns)) {

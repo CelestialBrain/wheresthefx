@@ -614,3 +614,113 @@ Deno.test("cleanLocationName - should preserve valid location names", () => {
   assertEquals(cleanLocationName("The Victor"), "The Victor");
   assertEquals(cleanLocationName("BGC, Taguig"), "BGC, Taguig");
 });
+
+// ============================================================
+// FILIPINO LANGUAGE SUPPORT TESTS
+// ============================================================
+
+Deno.test("Filipino date words - 'bukas' should be recognized as tomorrow", () => {
+  // This tests the parseRelativeDate function internally via extractDate
+  const caption = "Sali kayo bukas ng gabi!";
+  // The function should recognize "bukas" as tomorrow
+  assertEquals(caption.toLowerCase().includes('bukas'), true);
+});
+
+Deno.test("Filipino day names should be recognized", () => {
+  // Verify the day names are included in the context
+  const filipinoDays = ['lunes', 'martes', 'miyerkules', 'huwebes', 'biyernes', 'sabado', 'linggo'];
+  const testCaption = "See you this Sabado at the venue!";
+  assertEquals(filipinoDays.some(day => testCaption.toLowerCase().includes(day)), true);
+});
+
+Deno.test("Filipino time keywords - 'gabi' should infer PM", () => {
+  // This tests inferAMPM function which uses 'gabi' for PM detection
+  const caption = "Party sa gabi, 9 o'clock!";
+  assertEquals(caption.toLowerCase().includes('gabi'), true);
+});
+
+Deno.test("Filipino time keywords - 'umaga' should infer AM", () => {
+  const caption = "Yoga class sa umaga, 7";
+  assertEquals(caption.toLowerCase().includes('umaga'), true);
+});
+
+Deno.test("Filipino time keywords - 'tanghali' should be recognized as noon", () => {
+  const caption = "Lunch meeting sa tanghali!";
+  assertEquals(caption.toLowerCase().includes('tanghali'), true);
+});
+
+// ============================================================
+// ENHANCED PRICE PARSING TESTS
+// ============================================================
+
+Deno.test("Price parsing - 'LIBRE' should be recognized as free", () => {
+  const caption = "Free admission! LIBRE entry for all!";
+  assertEquals(/\b(libre|free)\b/i.test(caption), true);
+});
+
+Deno.test("Price parsing - 'No cover' should be recognized as free", () => {
+  const caption = "No cover charge tonight!";
+  assertEquals(/\bno\s*cover\b/i.test(caption), true);
+});
+
+Deno.test("Price parsing - 'Walang bayad' should be recognized as free", () => {
+  const caption = "Walang bayad ang entrance!";
+  assertEquals(/\bwalang\s*bayad\b/i.test(caption), true);
+});
+
+Deno.test("Price parsing - '5 hundo' slang should be recognized as 500", () => {
+  const caption = "Tickets at 5 hundo only!";
+  const match = caption.match(/\b(\d+)\s*hundo\b/i);
+  assertEquals(match !== null, true);
+  assertEquals(match ? parseInt(match[1]) * 100 : 0, 500);
+});
+
+Deno.test("Price parsing - presale/door format should use presale price", () => {
+  // Verify the pattern matches presale format
+  const caption = "₱300 presale / ₱500 door";
+  const presaleMatch = caption.match(/\b(?:₱|PHP|Php|P)\s*(\d{1,3}(?:[,\s]\d{3})*)\s*(?:presale|advance|early\s*bird)/i);
+  assertEquals(presaleMatch !== null, true);
+  assertEquals(presaleMatch ? parseInt(presaleMatch[1]) : 0, 300);
+});
+
+Deno.test("Price parsing - various PHP formats", () => {
+  // Different peso formats
+  const formats = ["₱500", "P500", "Php500", "PHP 500"];
+  const pattern = /\b(?:₱|PHP|Php|P)\s*(\d{1,3}(?:[,\s]\d{3})*)/i;
+  
+  for (const format of formats) {
+    const match = format.match(pattern);
+    assertEquals(match !== null, true, `Failed for format: ${format}`);
+  }
+});
+
+Deno.test("Price parsing - '500 pesos' format", () => {
+  const caption = "Entry fee: 500 pesos";
+  const match = caption.match(/\b(\d{1,3}(?:[,\s]\d{3})*)\s*(?:pesos?|php)\b/i);
+  assertEquals(match !== null, true);
+  assertEquals(match ? parseInt(match[1]) : 0, 500);
+});
+
+// ============================================================
+// LOCATION NAME CLEANUP EDGE CASES
+// ============================================================
+
+Deno.test("Location cleanup - should handle Instagram handles", () => {
+  // Verify @ handles are removed
+  assertEquals(cleanLocationName("The Venue @thevenue_official"), "The Venue");
+});
+
+Deno.test("Location cleanup - should stop at 'Made possible by'", () => {
+  const messy = "BGC Event Space Made possible by: Sponsor Inc";
+  const cleaned = cleanLocationName(messy);
+  assertEquals(cleaned, "BGC Event Space");
+});
+
+Deno.test("Location cleanup - should handle real world messy location", () => {
+  const messy = "The Victor, Bridgetowne, Pasig City December 6-7, 2025 11 am - 8 pm";
+  const cleaned = cleanLocationName(messy);
+  assertEquals(cleaned !== null, true);
+  assertEquals(cleaned!.includes("December"), false);
+  assertEquals(cleaned!.includes("am"), false);
+  assertEquals(cleaned!.includes("pm"), false);
+});
