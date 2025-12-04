@@ -26,3 +26,6 @@ verify_jwt = true
 
 [functions.backfill-images]
 verify_jwt = false
+
+[functions.ocr-extract]
+verify_jwt = false

@@ -246,7 +246,7 @@ interface AIExtractionInput {
  */
 async function parseEventWithAI(
   input: AIExtractionInput,
-  supabase: ReturnType<typeof createClient>
+  supabase: any // eslint-disable-line @typescript-eslint/no-explicit-any
 ): Promise<AIExtractionResult | null> {
   try {
     const { data, error } = await supabase.functions.invoke('ai-extract-event', {
@@ -392,7 +392,7 @@ function parseRelativeDate(text: string): string | null {
 async function parseEventFromCaption(
   caption: string,
   locationName?: string | null,
-  supabase?: ReturnType<typeof createClient>,
+  supabase?: any, // eslint-disable-line @typescript-eslint/no-explicit-any
   postId?: string,
   additionalContext?: {
     postedAt?: string | null;
@@ -602,7 +602,7 @@ async function parseEventFromCaption(
       ownerUsername: additionalContext?.ownerUsername,
       instagramAccountId: additionalContext?.instagramAccountId,
       imageUrl: useOCR ? imageUrl : undefined,
-      useOCR: useOCR,
+      useOCR: !!useOCR,
     }, supabase);
     
     if (aiResult && aiResult.confidence >= 0.6) {
@@ -1573,7 +1573,7 @@ Deno.serve(async (req) => {
             const postUrl = post.url || `https://www.instagram.com/p/${post.shortCode}/`;
             
             // Extract image URL early for OCR extraction during parsing
-            const imageUrl = post.displayUrl || post.imageUrl;
+            const postImageUrl = post.displayUrl || post.imageUrl;
 
             // Parse event information
             let eventInfo;
@@ -1587,7 +1587,7 @@ Deno.serve(async (req) => {
                   postedAt: post.timestamp,
                   ownerUsername: account.username,
                   instagramAccountId: account.id,
-                  imageUrl: imageUrl || undefined,
+                    imageUrl: postImageUrl || undefined,
                 }
               );
             } catch (parseError) {
@@ -1674,7 +1674,7 @@ Deno.serve(async (req) => {
                     postedAt: post.timestamp,
                     ownerUsername: account.username,
                     instagramAccountId: account.id,
-                    imageUrl: imageUrl || undefined,
+                    imageUrl: postImageUrl || undefined,
                   }
                 );
                 
@@ -1758,8 +1758,8 @@ Deno.serve(async (req) => {
             const hasIncompleteData = !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName;
             const needsReview = eventInfo.needsReview || hasIncompleteData;
 
-            // Extract image URL from Apify data
-            const imageUrl = post.displayUrl || post.imageUrl;
+            // Extract image URL from Apify data (use postImageUrl defined earlier)
+            const finalImageUrl = postImageUrl || post.displayUrl || post.imageUrl;
 
             // Insert new post
             const { data: insertedPost, error: insertError } = await supabase
@@ -1769,7 +1769,7 @@ Deno.serve(async (req) => {
                 post_id: postId,
                 caption: post.caption,
                 post_url: postUrl,
-                image_url: imageUrl,
+                image_url: finalImageUrl,
                 posted_at: post.timestamp,
                 likes_count: likesCount,
                 comments_count: commentsCount,
