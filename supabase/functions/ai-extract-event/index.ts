@@ -62,13 +62,14 @@ function buildExtractionPrompt(
   locationHint: string | null
 ): string {
   const cleanedCaption = cleanCaptionForExtraction(caption);
+  const currentYear = new Date().getFullYear();
   
   return `You are an expert at extracting event information from Filipino Instagram posts.
 
 RULES:
 1. event_title: Extract the actual event NAME, not the first line of caption. Look for event names like "Solana Holiday Pop-Up Tour", "Community Fleamarket", "Open Siomaic", etc.
-2. event_date: Convert to YYYY-MM-DD format. Handle Filipino dates like "ika-5 ng Mayo", "Disyembre 6-7". For date ranges, use the start date.
-3. event_end_date: For date ranges like "Dec 6-7", put "2025-12-07" here.
+2. event_date: Convert to YYYY-MM-DD format. Handle Filipino dates like "ika-5 ng Mayo", "Disyembre 6-7". For date ranges, use the start date. Assume current year (${currentYear}) if not specified.
+3. event_end_date: For date ranges like "Dec 6-7", put the end date in YYYY-MM-DD format.
 4. event_time: Convert to 24-hour format (HH:MM:SS). Infer AM/PM from context:
    - "gabi" = PM (evening), "umaga" = AM (morning)
    - Events at bars/clubs default to PM
@@ -303,7 +304,9 @@ Deno.serve(async (req) => {
 
     // Parse request body
     const body = await req.json();
-    const { caption, locationHint, postId, imageUrl } = body;
+    // Note: imageUrl is accepted for future multimodal extraction support
+    // Currently only caption text is processed
+    const { caption, locationHint, postId } = body;
 
     if (!caption) {
       return new Response(
