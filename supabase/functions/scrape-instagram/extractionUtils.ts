@@ -1183,17 +1183,9 @@ export async function extractVenue(
     }
   }
   
-  // Priority 3: "@" mentions (common for venue tags)
-  const mentionPattern = /@([a-zA-Z0-9._]+)/;
-  const mentionMatch = text.match(mentionPattern);
-  
-  if (mentionMatch) {
-    const rawVenueName = mentionMatch[1].replace(/_/g, ' ').trim();
-    const venueName = normalizeLocationName(rawVenueName);
-    return { venueName, address: null, patternId: null };
-  }
-  
-  // Priority 4: "at" or "sa" (Filipino) patterns
+  // Priority 3: "at" or "sa" (Filipino) patterns
+  // NOTE: Removed @ mention pattern - it caused false positives matching @photographer_credits etc.
+  // The 📍 emoji pattern and AI extraction handle venue detection accurately
   const atPattern = /\b(?:at|sa)\s+(?![\w.]+\s*$)([A-Z][^\n,@#]{2,40})(?:,\s*([^\n]+))?/;
   const atMatch = text.match(atPattern);
   
