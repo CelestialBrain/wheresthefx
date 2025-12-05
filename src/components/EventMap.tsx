@@ -136,8 +136,11 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     layer.clearLayers();
 
     markers.forEach((m) => {
+      // Get primary category from first event (most common in cluster)
+      const primaryCategory = m.events[0]?.category || 'other';
+      
       const marker = L.marker([m.lat, m.lng], {
-        icon: createMiddleFingerIcon(m.eventCount),
+        icon: createMiddleFingerIcon(m.eventCount, primaryCategory),
       });
       marker.on("click", () => setSelectedMarker(m));
       marker.addTo(layer);

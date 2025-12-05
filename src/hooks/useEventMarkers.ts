@@ -9,6 +9,7 @@ interface UseEventMarkersOptions {
   priceFilter?: 'free' | 'paid' | 'all';
   searchQuery?: string;
   interestTags?: string[];
+  category?: string;
 }
 
 export function useEventMarkers(options: UseEventMarkersOptions = {}) {
@@ -57,6 +58,11 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
         query = query.or(tagFilters);
       }
 
+      // Filter by category
+      if (options.category && options.category !== 'all') {
+        query = query.eq('category', options.category);
+      }
+
       const { data, error } = await query;
 
       if (error) throw error;
@@ -84,6 +90,7 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
         signup_url: event.signup_url,
         likes_count: event.likes_count,
         comments_count: event.comments_count,
+        category: event.category || 'other',
         instagram_accounts: event.instagram_account_username ? {
           username: event.instagram_account_username
         } : null

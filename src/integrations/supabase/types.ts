@@ -484,6 +484,7 @@ export type Database = {
         Row: {
           bio: string | null
           created_at: string
+          default_category: string | null
           display_name: string | null
           follower_count: number | null
           id: string
@@ -498,6 +499,7 @@ export type Database = {
         Insert: {
           bio?: string | null
           created_at?: string
+          default_category?: string | null
           display_name?: string | null
           follower_count?: number | null
           id?: string
@@ -512,6 +514,7 @@ export type Database = {
         Update: {
           bio?: string | null
           created_at?: string
+          default_category?: string | null
           display_name?: string | null
           follower_count?: number | null
           id?: string
@@ -532,6 +535,7 @@ export type Database = {
           ai_extraction: Json | null
           ai_reasoning: string | null
           caption: string | null
+          category: string | null
           comments_count: number | null
           created_at: string
           end_time: string | null
@@ -579,6 +583,7 @@ export type Database = {
           ai_extraction?: Json | null
           ai_reasoning?: string | null
           caption?: string | null
+          category?: string | null
           comments_count?: number | null
           created_at?: string
           end_time?: string | null
@@ -626,6 +631,7 @@ export type Database = {
           ai_extraction?: Json | null
           ai_reasoning?: string | null
           caption?: string | null
+          category?: string | null
           comments_count?: number | null
           created_at?: string
           end_time?: string | null
@@ -1055,6 +1061,7 @@ export type Database = {
       published_events: {
         Row: {
           caption: string | null
+          category: string | null
           comments_count: number | null
           created_at: string
           description: string | null
@@ -1086,6 +1093,7 @@ export type Database = {
         }
         Insert: {
           caption?: string | null
+          category?: string | null
           comments_count?: number | null
           created_at?: string
           description?: string | null
@@ -1117,6 +1125,7 @@ export type Database = {
         }
         Update: {
           caption?: string | null
+          category?: string | null
           comments_count?: number | null
           created_at?: string
           description?: string | null
