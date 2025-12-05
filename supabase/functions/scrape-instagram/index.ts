@@ -888,24 +888,28 @@ Deno.serve(async (req) => {
             }
             
             // 5. If still no coordinates, check known_venues table
+            // Note: Fetches all venues (small table) for flexible matching - same pattern as dataset import mode
             if (!locationLat && canonicalVenue) {
               try {
+                // Remove SQL wildcard chars to prevent injection when building search term
                 const searchTerm = canonicalVenue.toLowerCase().replace(/[%_]/g, '');
                 const { data: venues } = await supabase
                   .from('known_venues')
                   .select('name, lat, lng, city, aliases')
-                  .limit(10);
+                  .limit(50);
                 
                 if (venues && venues.length > 0) {
+                  type KnownVenueRow = { name: string; lat: number; lng: number; city?: string; aliases?: string[] };
+                  
                   // Try exact match first
-                  let matchedVenue = venues.find((v: { name: string; lat: number; lng: number; city?: string; aliases?: string[] }) => 
+                  let matchedVenue = venues.find((v: KnownVenueRow) => 
                     v.name?.toLowerCase() === searchTerm ||
                     v.aliases?.some((a: string) => a.toLowerCase() === searchTerm)
                   );
                   
                   // Try partial match
                   if (!matchedVenue) {
-                    matchedVenue = venues.find((v: { name: string; lat: number; lng: number; city?: string; aliases?: string[] }) => 
+                    matchedVenue = venues.find((v: KnownVenueRow) => 
                       v.name?.toLowerCase().includes(searchTerm) ||
                       searchTerm.includes(v.name?.toLowerCase() || '') ||
                       v.aliases?.some((a: string) => 
