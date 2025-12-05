@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.cleanup-old-events]
 verify_jwt = false
 
+[functions.cleanup-stuck-scrapes]
+verify_jwt = false
+
 [functions.scrape-instagram]
 verify_jwt = false
 
