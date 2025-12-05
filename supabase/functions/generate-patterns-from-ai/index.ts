@@ -213,14 +213,38 @@ function validatePatternAgainstSamples(
 }
 
 /**
- * Check if regex is valid
+ * Check if regex is valid and doesn't contain problematic characters
  */
-function isValidRegex(pattern: string): boolean {
+function isValidRegex(pattern: string): { valid: boolean; error?: string } {
+  // Check for control characters (ASCII 0-31) which indicate corruption
+  for (let i = 0; i < pattern.length; i++) {
+    const charCode = pattern.charCodeAt(i);
+    if (charCode >= 0 && charCode <= 31 && charCode !== 10 && charCode !== 13) {
+      // Allow newline (10) and carriage return (13) but reject others
+      return { 
+        valid: false, 
+        error: `Pattern contains control character (ASCII ${charCode}) at position ${i}` 
+      };
+    }
+  }
+
+  // Check for double-escaped sequences that indicate storage issues
+  if (pattern.includes('\\\\b') || pattern.includes('\\\\d') || pattern.includes('\\\\s')) {
+    return {
+      valid: false,
+      error: 'Pattern contains double-escaped sequences (\\\\b, \\\\d, \\\\s)'
+    };
+  }
+
+  // Try to compile the regex
   try {
     new RegExp(pattern, 'gi');
-    return true;
-  } catch {
-    return false;
+    return { valid: true };
+  } catch (e) {
+    return { 
+      valid: false, 
+      error: `Invalid regex syntax: ${e instanceof Error ? e.message : 'Unknown error'}` 
+    };
   }
 }
 
@@ -435,13 +459,14 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      if (!isValidRegex(generated.regex)) {
-        console.log(`[GeneratePatterns] Invalid regex for ${patternType}: ${generated.regex}`);
+      const regexValidation = isValidRegex(generated.regex);
+      if (!regexValidation.valid) {
+        console.log(`[GeneratePatterns] Invalid regex for ${patternType}: ${generated.regex} - ${regexValidation.error}`);
         results.push({
           patternType,
           status: 'invalid_regex',
           pattern: generated.regex,
-          reason: 'Generated regex is invalid',
+          reason: regexValidation.error || 'Generated regex is invalid',
         });
         patternsRejected++;
         continue;
