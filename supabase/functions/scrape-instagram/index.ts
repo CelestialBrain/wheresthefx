@@ -1377,7 +1377,9 @@ Deno.serve(async (req) => {
                 .update({
                   caption: item.caption,
                   event_date: newEventInfo.eventDate,
+                  event_end_date: newEventInfo.eventEndDate || null,
                   event_time: newEventInfo.eventTime,
+                  end_time: newEventInfo.endTime || null,
                   location_name: newEventInfo.locationName,
                   location_address: newEventInfo.locationAddress,
                   likes_count: likesCount,
@@ -1600,6 +1602,16 @@ Deno.serve(async (req) => {
         // Only add event_time if we have a valid value
         if (eventInfo.eventTime && !eventInfo.timeValidationFailed) {
           insertData.event_time = eventInfo.eventTime;
+        }
+        
+        // Add end_time if available and valid
+        if (eventInfo.endTime && !eventInfo.timeValidationFailed) {
+          insertData.end_time = eventInfo.endTime;
+        }
+        
+        // Add event_end_date if available
+        if (eventInfo.eventEndDate) {
+          insertData.event_end_date = eventInfo.eventEndDate;
         }
 
         // Insert new post with error handling
