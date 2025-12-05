@@ -36,6 +36,16 @@ interface PostWithEventEditorProps {
 }
 
 export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithEventEditorProps) => {
+  // Store original values for correction tracking
+  const originalValues = {
+    event_title: post.event_title || "",
+    event_date: post.event_date || "",
+    event_time: post.event_time || "",
+    location_name: post.location_name || "",
+    signup_url: post.signup_url || "",
+    price: null as number | null,
+  };
+
   const [eventData, setEventData] = useState({
     event_title: post.event_title || "",
     event_date: post.event_date || "",
@@ -63,6 +73,86 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     setShowLocationEditor(false);
   };
 
+  // Log all field corrections for pattern learning
+  const logCorrections = async (finalLocation: { venueName: string }) => {
+    const corrections: Array<{
+      post_id: string;
+      field_name: string;
+      original_extracted_value: string;
+      corrected_value: string;
+      extraction_method: string;
+      original_ocr_text: string | null;
+    }> = [];
+
+    // Track all field changes
+    if (originalValues.event_title !== eventData.event_title && eventData.event_title) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "event_title",
+        original_extracted_value: originalValues.event_title,
+        corrected_value: eventData.event_title,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (originalValues.event_date !== eventData.event_date && eventData.event_date) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "event_date",
+        original_extracted_value: originalValues.event_date,
+        corrected_value: eventData.event_date,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (originalValues.event_time !== eventData.event_time && eventData.event_time) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "event_time",
+        original_extracted_value: originalValues.event_time,
+        corrected_value: eventData.event_time,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (originalValues.location_name !== finalLocation.venueName && finalLocation.venueName) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "location_name",
+        original_extracted_value: originalValues.location_name,
+        corrected_value: finalLocation.venueName,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (originalValues.signup_url !== eventData.signup_url && eventData.signup_url) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "signup_url",
+        original_extracted_value: originalValues.signup_url,
+        corrected_value: eventData.signup_url,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (!eventData.is_free && eventData.price !== null && eventData.price !== originalValues.price) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "price",
+        original_extracted_value: String(originalValues.price || ""),
+        corrected_value: String(eventData.price),
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+
+    if (corrections.length > 0) {
+      const { error } = await supabase.from("extraction_corrections").insert(corrections);
+      if (error) console.error("Failed to log corrections:", error);
+      else console.log(`Logged ${corrections.length} corrections for pattern learning`);
+    }
+  };
+
   const handleCreateEvent = async () => {
     if (isPublishing) return;
     
@@ -75,11 +165,8 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     };
 
     try {
-      // Log corrections for pattern learning
-      const corrections = [];
-      if (post.event_date !== eventData.event_date) corrections.push({ post_id: post.id, field_name: "event_date", original_extracted_value: String(post.event_date || ""), corrected_value: eventData.event_date, extraction_method: "manual", original_ocr_text: post.caption });
-      if (post.event_time !== eventData.event_time) corrections.push({ post_id: post.id, field_name: "event_time", original_extracted_value: String(post.event_time || ""), corrected_value: eventData.event_time, extraction_method: "manual", original_ocr_text: post.caption });
-      if (corrections.length > 0) await supabase.from("extraction_corrections").insert(corrections);
+      // Log all field corrections for pattern learning
+      await logCorrections(location);
 
       // Update post with all event data
       const { error: updateError } = await supabase
