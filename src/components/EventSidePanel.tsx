@@ -91,6 +91,7 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                   location_lng: event.location_lng,
                   signup_url: event.signup_url,
                   is_event: true,
+                  category: event.category,
                   instagram_accounts: {
                     username: event.instagram_accounts?.username || 'unknown',
                     display_name: event.instagram_accounts?.display_name || null,
