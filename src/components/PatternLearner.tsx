@@ -343,6 +343,13 @@ export const PatternLearner = () => {
               Generate regex patterns automatically using AI from {learningStats?.groundTruthCount || 0} ground truth records 
               and {learningStats?.pendingSuggestions || 0} pending suggestions.
             </p>
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>Note:</strong> Venue/address patterns cannot be auto-generated (venue names are proper nouns with no regex pattern). 
+                These are handled by AI extraction + known_venues database instead. Date/time patterns may fail if existing patterns already cover the format.
+              </AlertDescription>
+            </Alert>
             <Button
               onClick={() => generateFromAIMutation.mutate()}
               disabled={isGeneratingFromAI || ((learningStats?.groundTruthCount || 0) + (learningStats?.pendingSuggestions || 0) < 3)}

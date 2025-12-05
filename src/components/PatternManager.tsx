@@ -92,13 +92,19 @@ export const PatternManager = () => {
     },
   });
 
+  const [testingType, setTestingType] = useState<string>("all");
+
   const testPattern = (patternRegex: string, description: string | null): { matches: string[]; error: string | null } => {
     console.log('---');
     console.log('Pattern:', description);
     console.log('Regex string:', patternRegex);
+    console.log('Regex length:', patternRegex.length);
+    // Log first 30 chars as character codes to detect hidden escaping issues
+    console.log('First 30 chars as codes:', patternRegex.slice(0, 30).split('').map(c => `${c}(${c.charCodeAt(0)})`).join(' '));
     try {
       const regex = new RegExp(patternRegex, "gi");
       console.log('Regex object:', regex);
+      console.log('Test text preview:', testText.slice(0, 100));
       const matches = testText.match(regex);
       console.log('Matches:', matches);
       return { matches: matches || [], error: null };
@@ -109,21 +115,37 @@ export const PatternManager = () => {
   };
 
   const getTestResults = (): PatternTestResult[] => {
-    if (!patterns || !testText.trim()) return [];
+    console.log('=== Pattern Testing ===');
+    console.log('Total patterns from query:', patterns?.length || 0);
+    console.log('Selected type filter:', selectedType);
+    console.log('Testing type filter:', testingType);
+    console.log('Test text length:', testText.length);
     
-    return patterns
-      .filter(p => p.is_active)
-      .map(pattern => {
-        const { matches, error } = testPattern(pattern.pattern_regex, pattern.pattern_description);
-        return {
-          patternId: pattern.id,
-          patternType: pattern.pattern_type,
-          description: pattern.pattern_description,
-          regex: pattern.pattern_regex,
-          matches,
-          error,
-        };
-      });
+    if (!patterns || !testText.trim()) {
+      console.log('No patterns or empty test text');
+      return [];
+    }
+    
+    const activePatterns = patterns.filter(p => p.is_active);
+    console.log('Active patterns:', activePatterns.length);
+    
+    // Filter by testing type (separate from selectedType which filters the Patterns tab)
+    const patternsToTest = testingType === "all" 
+      ? activePatterns 
+      : activePatterns.filter(p => p.pattern_type === testingType);
+    console.log('Patterns to test after type filter:', patternsToTest.length);
+    
+    return patternsToTest.map(pattern => {
+      const { matches, error } = testPattern(pattern.pattern_regex, pattern.pattern_description);
+      return {
+        patternId: pattern.id,
+        patternType: pattern.pattern_type,
+        description: pattern.pattern_description,
+        regex: pattern.pattern_regex,
+        matches,
+        error,
+      };
+    });
   };
 
   const testResults = getTestResults();
@@ -338,20 +360,41 @@ export const PatternManager = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 md:p-6 pt-0 space-y-4">
-              <div>
-                <label className="text-sm font-medium">Test Text</label>
-                <Textarea
-                  placeholder="Paste event caption or OCR text here to test patterns..."
-                  value={testText}
-                  onChange={(e) => setTestText(e.target.value)}
-                  className="mt-1 min-h-[100px]"
-                />
+              <div className="space-y-3">
+                <div className="flex flex-col md:flex-row gap-2">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium">Test Text</label>
+                    <Textarea
+                      placeholder="Paste event caption or OCR text here to test patterns..."
+                      value={testText}
+                      onChange={(e) => setTestText(e.target.value)}
+                      className="mt-1 min-h-[100px]"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">Test against:</label>
+                  <select
+                    value={testingType}
+                    onChange={(e) => setTestingType(e.target.value)}
+                    className="px-3 py-2 border rounded-md text-sm bg-background"
+                  >
+                    {patternTypes.map(type => (
+                      <option key={type} value={type}>
+                        {type === "all" ? "All pattern types" : `${type.charAt(0).toUpperCase() + type.slice(1)} patterns only`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {testText.trim() && (
                 <div className="space-y-4">
                   {/* Summary Stats */}
                   <div className="flex flex-wrap gap-4 p-3 bg-muted rounded-md">
+                    <span className="text-xs text-muted-foreground">
+                      Testing {testingType === "all" ? "all pattern types" : `${testingType} patterns only`} ({testResults.length} patterns)
+                    </span>
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
                       <span className="text-sm font-medium">{matchedResults.length} matched</span>

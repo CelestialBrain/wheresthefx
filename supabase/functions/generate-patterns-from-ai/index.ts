@@ -262,7 +262,10 @@ Deno.serve(async (req) => {
 
     console.log(`[GeneratePatterns] Starting with options: useGroundTruth=${useGroundTruth}, useSuggestions=${useSuggestions}, minSamples=${minSamplesPerType}, minSuccessRate=${minSuccessRate}`);
 
-    // Collect samples from pattern_suggestions (pending status with NEEDS_GENERATION)
+    // Pattern types that should NOT be auto-generated (use AI + known_venues instead)
+    const SKIP_PATTERN_TYPES = ['venue', 'address'];
+
+    // Collect samples from pattern_suggestions (pending status with low attempt count)
     const samplesByType = new Map<string, Sample[]>();
 
     if (useSuggestions) {
@@ -270,6 +273,7 @@ Deno.serve(async (req) => {
         .from('pattern_suggestions')
         .select('*')
         .eq('status', 'pending')
+        .lt('attempt_count', 3)  // Skip suggestions that failed 3+ times
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -372,9 +376,37 @@ Deno.serve(async (req) => {
     // Generate patterns for each type with enough samples
     let patternsGenerated = 0;
     let patternsRejected = 0;
+    let suggestionsSkipped = 0;
     const results: Array<{ patternType: string; status: string; pattern?: string; reason?: string }> = [];
 
     for (const [patternType, samples] of samplesByType.entries()) {
+      // Skip pattern types that shouldn't be auto-generated (handled by AI + DB)
+      if (SKIP_PATTERN_TYPES.includes(patternType)) {
+        console.log(`[GeneratePatterns] Skipping ${patternType} - handled by AI + known_venues DB`);
+        
+        // Mark these suggestions as "not_applicable" so they're not retried
+        const suggestionIds = samples
+          .filter(s => s.source === 'suggestion')
+          .map(s => s.id);
+        
+        if (suggestionIds.length > 0) {
+          await supabase
+            .from('pattern_suggestions')
+            .update({ status: 'not_applicable' })
+            .in('id', suggestionIds);
+          
+          console.log(`[GeneratePatterns] Marked ${suggestionIds.length} ${patternType} suggestions as not_applicable`);
+          suggestionsSkipped += suggestionIds.length;
+        }
+        
+        results.push({
+          patternType,
+          status: 'skipped',
+          reason: 'Pattern type handled by AI extraction + known venues database',
+        });
+        continue;
+      }
+
       if (samples.length < minSamplesPerType) {
         console.log(`[GeneratePatterns] Skipping ${patternType} - only ${samples.length} samples (need ${minSamplesPerType})`);
         results.push({
@@ -420,6 +452,43 @@ Deno.serve(async (req) => {
 
       if (validation.successRate < minSuccessRate) {
         console.log(`[GeneratePatterns] Pattern for ${patternType} failed validation: ${(validation.successRate * 100).toFixed(1)}% success rate (need ${minSuccessRate * 100}%)`);
+        
+        // Increment attempt count for failed suggestions
+        const failedSuggestionIds = samples
+          .filter(s => s.source === 'suggestion')
+          .map(s => s.id);
+        
+        if (failedSuggestionIds.length > 0) {
+          // Fetch current attempt counts
+          const { data: currentSuggestions } = await supabase
+            .from('pattern_suggestions')
+            .select('id, attempt_count')
+            .in('id', failedSuggestionIds);
+          
+          if (currentSuggestions) {
+            // Increment attempt count for each and check if should mark as failed
+            for (const suggestion of currentSuggestions) {
+              const newAttemptCount = (suggestion.attempt_count || 0) + 1;
+              const updateData: { attempt_count: number; status?: string } = { 
+                attempt_count: newAttemptCount 
+              };
+              
+              // Mark as generation_failed after 3 attempts
+              if (newAttemptCount >= 3) {
+                updateData.status = 'generation_failed';
+                console.log(`[GeneratePatterns] Marking suggestion ${suggestion.id} as generation_failed after ${newAttemptCount} attempts`);
+              }
+              
+              await supabase
+                .from('pattern_suggestions')
+                .update(updateData)
+                .eq('id', suggestion.id);
+            }
+            
+            console.log(`[GeneratePatterns] Incremented attempt count for ${currentSuggestions.length} suggestions`);
+          }
+        }
+        
         results.push({
           patternType,
           status: 'validation_failed',
