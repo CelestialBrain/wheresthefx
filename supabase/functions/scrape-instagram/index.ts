@@ -727,15 +727,18 @@ Deno.serve(async (req) => {
 
     // Constant-time comparison to prevent timing attacks
     const safeCompare = (a: string, b: string): boolean => {
-      if (a.length !== b.length) {
-        // Still do a comparison to prevent timing information leak on length difference
-        const dummy = new TextEncoder().encode(a);
-        const dummyB = new TextEncoder().encode(a);
-        crypto.subtle.timingSafeEqual(dummy, dummyB);
-        return false;
-      }
+      // For security, we always perform a comparison even if lengths differ
+      // This prevents timing attacks based on length checking
       const aBytes = new TextEncoder().encode(a);
       const bBytes = new TextEncoder().encode(b);
+      
+      // If lengths differ, compare 'a' against itself to take constant time,
+      // then return false. This prevents length-based timing leaks.
+      if (aBytes.length !== bBytes.length) {
+        crypto.subtle.timingSafeEqual(aBytes, aBytes);
+        return false;
+      }
+      
       return crypto.subtle.timingSafeEqual(aBytes, bBytes);
     };
 
