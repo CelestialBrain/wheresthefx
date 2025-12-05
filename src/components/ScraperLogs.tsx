@@ -202,6 +202,9 @@ export const ScraperLogs = () => {
       case 'validation': return 'bg-orange-500/10 text-orange-500';
       case 'save': return 'bg-green-500/10 text-green-500';
       case 'skip': return 'bg-gray-500/10 text-gray-500';
+      case 'image': return 'bg-pink-500/10 text-pink-500';
+      case 'geocache': return 'bg-emerald-500/10 text-emerald-500';
+      case 'rejection': return 'bg-red-500/10 text-red-500';
       default: return 'bg-muted text-muted-foreground';
     }
   };
@@ -273,6 +276,9 @@ export const ScraperLogs = () => {
                 <SelectItem value="validation">Validation</SelectItem>
                 <SelectItem value="save">Save</SelectItem>
                 <SelectItem value="skip">Skip</SelectItem>
+                <SelectItem value="image">Image</SelectItem>
+                <SelectItem value="geocache">Geocache</SelectItem>
+                <SelectItem value="rejection">Rejection</SelectItem>
               </SelectContent>
             </Select>
 
