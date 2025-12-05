@@ -940,6 +940,7 @@ export type Database = {
       }
       pattern_suggestions: {
         Row: {
+          attempt_count: number | null
           created_at: string | null
           expected_value: string | null
           id: string
@@ -951,6 +952,7 @@ export type Database = {
           suggested_regex: string
         }
         Insert: {
+          attempt_count?: number | null
           created_at?: string | null
           expected_value?: string | null
           id?: string
@@ -962,6 +964,7 @@ export type Database = {
           suggested_regex: string
         }
         Update: {
+          attempt_count?: number | null
           created_at?: string | null
           expected_value?: string | null
           id?: string
