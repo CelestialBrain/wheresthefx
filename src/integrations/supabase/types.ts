@@ -356,13 +356,6 @@ export type Database = {
             referencedRelation: "extraction_patterns"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "extraction_corrections_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
         ]
       }
       extraction_feedback: {
@@ -410,13 +403,6 @@ export type Database = {
             referencedRelation: "extraction_patterns"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "extraction_feedback_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
         ]
       }
       extraction_ground_truth: {
@@ -447,15 +433,7 @@ export type Database = {
           post_id?: string | null
           source?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "extraction_ground_truth_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       extraction_patterns: {
         Row: {
