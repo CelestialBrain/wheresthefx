@@ -1,5 +1,6 @@
 import L from "leaflet";
 import markerIcon from "@/assets/middle-finger-marker.png";
+import { getCategoryFilter } from "@/constants/categoryColors";
 
 export interface LocationMarker {
   lat: number;
@@ -16,8 +17,9 @@ const ICON_H = 40;
 const PALM_X = 13.5; // horizontal center
 const PALM_Y = 14; // slightly above vertical center = palm area
 
-export function createMiddleFingerIcon(count: number): L.DivIcon {
+export function createMiddleFingerIcon(count: number, category: string = 'other'): L.DivIcon {
   const hasCount = count > 1;
+  const filter = getCategoryFilter(category);
 
   const iconHtml = `
     <div class="relative select-none" style="width:${ICON_W}px;height:${ICON_H}px">
@@ -25,7 +27,7 @@ export function createMiddleFingerIcon(count: number): L.DivIcon {
         src="${markerIcon}"
         alt="Event marker"
         class="absolute inset-0 w-full h-full block pointer-events-none"
-        style="filter: brightness(0) saturate(100%) invert(34%) sepia(98%) saturate(4764%) hue-rotate(280deg) brightness(95%) contrast(94%); transform: rotate(180deg);"
+        style="filter: ${filter}; transform: rotate(180deg);"
         aria-hidden="true"
       />
       ${

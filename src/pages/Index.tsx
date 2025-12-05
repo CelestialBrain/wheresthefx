@@ -5,6 +5,7 @@ import { EventSidebar } from "@/components/EventSidebar";
 import { EventMap } from "@/components/EventMap";
 import { MapFilters } from "@/components/MapFilters";
 import { UserOnboarding } from "@/components/UserOnboarding";
+import { CategoryFilter } from "@/components/CategoryFilter";
 import { Button } from "@/components/ui/button";
 import { UserCircle } from "lucide-react";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
@@ -14,8 +15,9 @@ const Index = () => {
   const navigate = useNavigate();
   const [isVerified, setIsVerified] = useState(false);
   const [isMapUnlocked, setIsMapUnlocked] = useState(false);
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState<any>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const { hasCompletedOnboarding } = useUserPreferences();
@@ -151,7 +153,17 @@ const Index = () => {
       {/* Map (always rendered, revealed after fade) */}
       <div className={`h-screen transition-opacity duration-1000 ${isMapUnlocked ? 'opacity-100' : 'opacity-0'}`}>
         <MapFilters onFilterChange={setFilters} onSearchChange={setSearchQuery} />
-        <EventMap filters={filters} searchQuery={searchQuery} />
+        {/* Category filter chips - Instagram Stories style */}
+        <div className="fixed top-16 left-0 right-0 z-30">
+          <CategoryFilter 
+            activeCategory={selectedCategory} 
+            onCategoryChange={(cat) => {
+              setSelectedCategory(cat);
+              setFilters((prev: any) => ({ ...prev, category: cat }));
+            }} 
+          />
+        </div>
+        <EventMap filters={{ ...filters, category: selectedCategory }} searchQuery={searchQuery} />
         <UserOnboarding open={showOnboarding} onComplete={handleOnboardingComplete} />
       </div>
     </div>
