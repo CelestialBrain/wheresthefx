@@ -20,6 +20,8 @@ import {
 import { ScraperLogger, RejectedPostLogData } from './logger.ts';
 import { lookupNCRVenue, fuzzyMatchVenue } from './ncrGeoCache.ts';
 import { fetchWithRetry, fetchWithTimeout } from './retryUtils.ts';
+import { saveGroundTruth, trainPatternsFromComparison } from './patternTrainer.ts';
+import { extractInParallel, mergeResults, MergedExtractionResult } from './parallelExtraction.ts';
 
 /*
  * DATABASE SCHEMA NOTES:
@@ -422,6 +424,7 @@ async function parseEventFromCaption(
   datePatternId?: string | null;
   timePatternId?: string | null;
   venuePatternId?: string | null;
+  signupUrlPatternId?: string | null;
   vendorPatternId?: string | null;
   // AI extraction fields
   extractionMethod?: 'regex' | 'ai' | 'ai_corrected' | 'ocr_ai';
@@ -506,7 +509,8 @@ async function parseEventFromCaption(
   const timeInfo = await extractTime(normalized, supabase);
   const dateInfo = await extractDate(normalized, supabase);
   let venueInfo = await extractVenue(normalized, locationName, supabase);
-  const signupUrl = extractSignupUrl(normalized);
+  const signupUrlInfo = await extractSignupUrl(normalized, supabase);
+  const signupUrl = signupUrlInfo.url;
   
   // Clean location name if it's messy (>100 chars)
   if (venueInfo.venueName && venueInfo.venueName.length > 100) {
@@ -575,6 +579,7 @@ async function parseEventFromCaption(
     datePatternId: dateInfo.patternId,
     timePatternId: timeInfo.patternId,
     venuePatternId: venueInfo.patternId,
+    signupUrlPatternId: signupUrlInfo.patternId,
     vendorPatternId: null,
     extractionMethod: 'regex' as const,
     aiExtraction: undefined as AIExtractionResult | undefined,
@@ -638,6 +643,7 @@ async function parseEventFromCaption(
         datePatternId: regexResult.datePatternId,
         timePatternId: regexResult.timePatternId,
         venuePatternId: regexResult.venuePatternId,
+        signupUrlPatternId: regexResult.signupUrlPatternId,
         vendorPatternId: regexResult.vendorPatternId,
         extractionMethod,
         aiExtraction: aiResult,
@@ -1567,8 +1573,51 @@ Deno.serve(async (req) => {
           totalScrapedPosts++;
           console.log(`✓ Inserted post ${postId}${needsReview ? ' (needs review)' : ''}`);
 
-          // PHASE 1: Removed enrich-post-ocr call - OCR is handled by ClientOCRProcessor
-          // Mark post for admin review instead
+          // Pattern training: Save ground truth and train patterns from AI extraction
+          // Only process if we have AI extraction results
+          if (eventInfo.aiExtraction && eventInfo.aiConfidence && eventInfo.aiConfidence >= 0.7) {
+            try {
+              // Convert eventInfo to MergedExtractionResult format for training
+              const mergedResult: MergedExtractionResult = {
+                eventTitle: eventInfo.eventTitle,
+                eventDate: eventInfo.eventDate,
+                eventEndDate: eventInfo.eventEndDate,
+                eventTime: eventInfo.eventTime,
+                endTime: eventInfo.endTime,
+                locationName: eventInfo.locationName,
+                locationAddress: eventInfo.locationAddress,
+                signupUrl: eventInfo.signupUrl,
+                price: eventInfo.price,
+                isFree: eventInfo.isFree,
+                isEvent: eventInfo.isEvent,
+                confidence: eventInfo.aiConfidence,
+                reasoning: eventInfo.aiReasoning,
+                datePatternId: eventInfo.datePatternId,
+                timePatternId: eventInfo.timePatternId,
+                venuePatternId: eventInfo.venuePatternId,
+                pricePatternId: eventInfo.pricePatternId,
+                signupUrlPatternId: eventInfo.signupUrlPatternId,
+                sources: {
+                  eventDate: eventInfo.datePatternId ? 'regex' : (eventInfo.eventDate ? 'ai' : undefined),
+                  eventTime: eventInfo.timePatternId ? 'regex' : (eventInfo.eventTime ? 'ai' : undefined),
+                  locationName: eventInfo.venuePatternId ? 'regex' : (eventInfo.locationName ? 'ai' : undefined),
+                  price: eventInfo.pricePatternId ? 'regex' : (eventInfo.price ? 'ai' : undefined),
+                  signupUrl: eventInfo.signupUrlPatternId ? 'regex' : (eventInfo.signupUrl ? 'ai' : undefined),
+                },
+                conflicts: [],
+                overallSource: eventInfo.extractionMethod === 'ai' ? 'ai_only' : 'both',
+              };
+
+              // Save ground truth for future training
+              await saveGroundTruth(postId, item.caption || '', mergedResult, supabase);
+
+              // Train patterns from comparison
+              await trainPatternsFromComparison(postId, item.caption || '', mergedResult, supabase);
+            } catch (trainErr) {
+              console.warn(`Pattern training failed for ${postId}:`, trainErr);
+              // Don't fail the whole post insertion if training fails
+            }
+          }
         } catch (unexpectedError) {
           console.error(`Unexpected error inserting post ${postId}:`, unexpectedError);
           totalFailed++;
