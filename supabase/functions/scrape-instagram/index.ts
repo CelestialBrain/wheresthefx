@@ -907,22 +907,63 @@ Deno.serve(async (req) => {
         // Extract image URL early for OCR extraction during parsing
         const imageUrl = item.displayUrl || item.imageUrl;
 
-        // Parse event information
+        // Parse event information using parallel extraction (regex + AI)
         const parseStart = Date.now();
         let eventInfo;
         try {
-          eventInfo = await parseEventFromCaption(
-            item.caption || '', 
-            item.locationName, 
-            supabase, 
+          const parallelResult = await extractInParallel(
+            item.caption || '',
+            item.locationName,
             postId,
+            supabase,
             {
               postedAt: postedAt,
               ownerUsername: username,
+              instagramAccountId: undefined, // Will be looked up later
               imageUrl: imageUrl || undefined,
-              // instagramAccountId not yet available - will be looked up later
             }
           );
+
+          // Map parallelResult to eventInfo for backward compatibility
+          eventInfo = {
+            eventTitle: parallelResult.eventTitle,
+            eventDate: parallelResult.eventDate,
+            eventEndDate: parallelResult.eventEndDate,
+            eventTime: parallelResult.eventTime,
+            endTime: parallelResult.endTime,
+            locationName: parallelResult.locationName,
+            locationAddress: parallelResult.locationAddress,
+            price: parallelResult.price,
+            isFree: parallelResult.isFree ?? undefined,
+            isEvent: parallelResult.isEvent,
+            signupUrl: parallelResult.signupUrl,
+            needsReview: (parallelResult.confidence ?? 0) < 0.7,
+            extractionMethod: parallelResult.overallSource,
+            aiConfidence: parallelResult.confidence,
+            extractionSources: parallelResult.sources,
+            extractionConflicts: parallelResult.conflicts,
+            aiReasoning: parallelResult.reasoning,
+            // Pattern tracking IDs from parallel extraction
+            datePatternId: parallelResult.datePatternId,
+            timePatternId: parallelResult.timePatternId,
+            venuePatternId: parallelResult.venuePatternId,
+            pricePatternId: parallelResult.pricePatternId,
+            signupUrlPatternId: parallelResult.signupUrlPatternId,
+            // Legacy fields for backward compatibility
+            timeValidationFailed: false,
+            rawEventTime: parallelResult.eventTime,
+            rawEndTime: parallelResult.endTime,
+            ocrTextExtracted: null,
+            ocrConfidence: null,
+            aiExtraction: parallelResult.confidence ? {
+              eventTitle: parallelResult.eventTitle,
+              eventDate: parallelResult.eventDate,
+              eventTime: parallelResult.eventTime,
+              locationName: parallelResult.locationName,
+              price: parallelResult.price,
+              confidence: parallelResult.confidence,
+            } : null,
+          };
         } catch (parseError) {
           const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
           totalSkipped++;
@@ -1198,7 +1239,7 @@ Deno.serve(async (req) => {
 
         // Skip events that have ended (unless force import)
         if (eventInfo.eventDate && !forceImport) {
-          if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate)) {
+          if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate ?? undefined)) {
             totalSkipped++;
             await logger.logSkip(postId, 'Event has ended', { 
               eventDate: eventInfo.eventDate,
@@ -1612,7 +1653,7 @@ Deno.serve(async (req) => {
                   signupUrl: eventInfo.signupUrlPatternId ? 'regex' : (eventInfo.signupUrl ? 'ai' : undefined),
                 },
                 conflicts: [],
-                overallSource: eventInfo.extractionMethod === 'ai' ? 'ai_only' : 'both',
+                overallSource: eventInfo.extractionMethod === 'ai_only' ? 'ai_only' : (eventInfo.extractionMethod || 'both'),
               };
 
               // Save ground truth for future training
