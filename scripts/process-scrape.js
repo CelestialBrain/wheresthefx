@@ -4,7 +4,7 @@ import path from 'path';
 
 // Environment variables (only 3 needed!)
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const GITHUB_INGEST_TOKEN = process.env.GITHUB_INGEST_TOKEN;
+const DATA_INGEST_TOKEN = process.env.DATA_INGEST_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const BATCH_SIZE = 10;
@@ -104,7 +104,7 @@ async function sendBatchToEdgeFunction(posts) {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/scrape-instagram`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${GITHUB_INGEST_TOKEN}`,
+      'Authorization': `Bearer ${DATA_INGEST_TOKEN}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -166,8 +166,8 @@ async function main() {
     console.error('❌ SUPABASE_URL not set');
     process.exit(1);
   }
-  if (!GITHUB_INGEST_TOKEN) {
-    console.error('❌ GITHUB_INGEST_TOKEN not set');
+  if (!DATA_INGEST_TOKEN) {
+    console.error('❌ DATA_INGEST_TOKEN not set');
     process.exit(1);
   }
   if (!GEMINI_API_KEY) {
