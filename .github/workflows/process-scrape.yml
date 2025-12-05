@@ -1,0 +1,84 @@
+name: Process Instagram Scrape
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset_id:
+        description: 'Apify Dataset ID'
+        required: true
+        type: string
+      run_id:
+        description: 'Scrape Run ID (for tracking)'
+        required: false
+        type: string
+
+  repository_dispatch:
+    types: [process-scrape]
+
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  APIFY_API_KEY: ${{ secrets.APIFY_API_KEY }}
+
+jobs:
+  process-scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm ci
+
+      - name: Get inputs
+        id: inputs
+        run: |
+          if [ -n "${{ github.event.inputs.dataset_id }}" ]; then
+            echo "dataset_id=${{ github.event.inputs.dataset_id }}" >> $GITHUB_OUTPUT
+            echo "run_id=${{ github.event.inputs.run_id }}" >> $GITHUB_OUTPUT
+          else
+            echo "dataset_id=${{ github.event.client_payload.dataset_id }}" >> $GITHUB_OUTPUT
+            echo "run_id=${{ github.event.client_payload.run_id }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update scrape run status (started)
+        working-directory: scripts
+        run: node update-run-status.js "${{ steps.inputs.outputs.run_id }}" "processing" "GitHub Actions started"
+
+      - name: Fetch Apify dataset
+        working-directory: scripts
+        run: node fetch-dataset.js "${{ steps.inputs.outputs.dataset_id }}"
+
+      - name: Process posts
+        id: process
+        working-directory: scripts
+        run: node process-posts.js
+
+      - name: Update scrape run status (completed)
+        if: success()
+        working-directory: scripts
+        run: node update-run-status.js "${{ steps.inputs.outputs.run_id }}" "completed" "Processing finished"
+
+      - name: Update scrape run status (failed)
+        if: failure()
+        working-directory: scripts
+        run: node update-run-status.js "${{ steps.inputs.outputs.run_id }}" "failed" "Processing failed"
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-results-${{ github.run_id }}
+          path: scripts/results/
+          retention-days: 30
