@@ -4,6 +4,7 @@ import {
   isVendorPost,
   isVendorPostStrict,
   isPossiblyVendorPost,
+  isRecurringSchedulePost,
   extractPrice,
   extractTime,
   extractDate,
@@ -445,6 +446,12 @@ async function parseEventFromCaption(
   
   // STEP 1: Check for vendor/merchant posts using STRICT detection (hard reject)
   if (isVendorPostStrict(normalized)) {
+    return { isEvent: false, isFree: true, needsReview: false };
+  }
+  
+  // STEP 1.5: Check for recurring schedule posts (operating hours, not events)
+  // e.g., "6PM — Tues to Sat", "Every Friday night", "Open daily"
+  if (isRecurringSchedulePost(normalized)) {
     return { isEvent: false, isFree: true, needsReview: false };
   }
   
