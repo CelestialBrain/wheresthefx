@@ -33,7 +33,9 @@ interface Post {
   caption: string | null;
   event_title: string | null;
   event_date: string | null;
+  event_end_date: string | null;
   event_time: string | null;
+  end_time: string | null;
   location_name: string | null;
   location_address: string | null;
   price: number | null;
