@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square, Eraser, Github, ExternalLink, AlertCircle } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square, Eraser, Github, ExternalLink, AlertCircle, Upload } from "lucide-react";
 import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
@@ -51,6 +51,7 @@ const Admin = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [isBulkPublishing, setIsBulkPublishing] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
 
   useEffect(() => {
@@ -406,6 +407,125 @@ const Admin = () => {
     }
   };
 
+  const bulkPublishEvents = async () => {
+    try {
+      setIsBulkPublishing(true);
+      
+      // Get all reviewed event posts with coordinates and future dates
+      const { data: postsToPublish, error: fetchError } = await supabase
+        .from("instagram_posts")
+        .select(`
+          id,
+          event_title,
+          event_date,
+          event_time,
+          end_time,
+          location_name,
+          location_address,
+          location_lat,
+          location_lng,
+          caption,
+          image_url,
+          stored_image_url,
+          is_free,
+          price,
+          signup_url,
+          category,
+          topic_label,
+          post_url,
+          likes_count,
+          comments_count,
+          instagram_account_id
+        `)
+        .eq("is_event", true)
+        .eq("needs_review", false)
+        .not("location_lat", "is", null)
+        .not("location_lng", "is", null)
+        .gte("event_date", new Date().toISOString().split('T')[0]);
+
+      if (fetchError) throw fetchError;
+
+      if (!postsToPublish || postsToPublish.length === 0) {
+        toast({
+          title: "No Events to Publish",
+          description: "No reviewed events with coordinates and future dates found",
+        });
+        return;
+      }
+
+      // Get account usernames
+      const accountIds = [...new Set(postsToPublish.map(p => p.instagram_account_id))];
+      const { data: accounts } = await supabase
+        .from("instagram_accounts")
+        .select("id, username")
+        .in("id", accountIds);
+
+      const accountMap = new Map(accounts?.map(a => [a.id, a.username]) || []);
+
+      // Check which posts are already published
+      const { data: existingPublished } = await supabase
+        .from("published_events")
+        .select("source_post_id")
+        .in("source_post_id", postsToPublish.map(p => p.id));
+
+      const existingIds = new Set(existingPublished?.map(p => p.source_post_id) || []);
+      const newPosts = postsToPublish.filter(p => !existingIds.has(p.id));
+
+      if (newPosts.length === 0) {
+        toast({
+          title: "All Events Already Published",
+          description: `${postsToPublish.length} events are already published`,
+        });
+        return;
+      }
+
+      // Insert new published events
+      const publishedEvents = newPosts.map(post => ({
+        event_title: post.event_title || "Untitled Event",
+        event_date: post.event_date,
+        event_time: post.event_time,
+        end_time: post.end_time,
+        location_name: post.location_name || "Unknown Venue",
+        location_address: post.location_address,
+        location_lat: post.location_lat,
+        location_lng: post.location_lng,
+        caption: post.caption,
+        image_url: post.image_url,
+        stored_image_url: post.stored_image_url,
+        is_free: post.is_free,
+        price: post.price,
+        signup_url: post.signup_url,
+        category: post.category,
+        topic_label: post.topic_label,
+        instagram_post_url: post.post_url,
+        instagram_account_username: accountMap.get(post.instagram_account_id),
+        source_post_id: post.id,
+        likes_count: post.likes_count,
+        comments_count: post.comments_count,
+      }));
+
+      const { error: insertError } = await supabase
+        .from("published_events")
+        .insert(publishedEvents);
+
+      if (insertError) throw insertError;
+
+      toast({
+        title: "Events Published!",
+        description: `Published ${newPosts.length} events to the map. ${existingIds.size > 0 ? `(${existingIds.size} already existed)` : ''}`,
+      });
+
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to bulk publish events",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBulkPublishing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
@@ -638,6 +758,29 @@ const Admin = () => {
                 >
                   <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                   {isLoading ? "Processing..." : "Backfill Images"}
+                </Button>
+              </div>
+            </CardHeader>
+          </Card>
+
+          {/* Bulk Publish Events */}
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-base md:text-lg">Bulk Publish Events</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Publish all reviewed events with coordinates to the map
+                  </p>
+                </div>
+                <Button
+                  onClick={bulkPublishEvents}
+                  disabled={isBulkPublishing}
+                  variant="default"
+                  className="w-full md:w-auto"
+                >
+                  <Upload className={`h-4 w-4 mr-2 ${isBulkPublishing ? "animate-pulse" : ""}`} />
+                  {isBulkPublishing ? "Publishing..." : "Bulk Publish"}
                 </Button>
               </div>
             </CardHeader>
