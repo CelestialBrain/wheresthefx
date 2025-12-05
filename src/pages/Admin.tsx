@@ -28,7 +28,7 @@ interface InstagramAccount {
 
 interface ScrapeRun {
   id: string;
-  run_type: 'manual_dataset' | 'manual_scrape' | 'automated';
+  run_type: 'manual_dataset' | 'manual_scrape' | 'automated' | 'github_actions_ingest';
   dataset_id: string | null;
   posts_added: number;
   posts_updated: number;

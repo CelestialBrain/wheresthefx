@@ -1441,7 +1441,11 @@ export type Database = {
       event_visibility: "public" | "private" | "unlisted"
       report_status: "pending" | "reviewed" | "resolved"
       scrape_run_status: "running" | "completed" | "failed" | "cancelled"
-      scrape_run_type: "manual_dataset" | "manual_scrape" | "automated"
+      scrape_run_type:
+        | "manual_dataset"
+        | "manual_scrape"
+        | "automated"
+        | "github_actions_ingest"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1576,7 +1580,12 @@ export const Constants = {
       event_visibility: ["public", "private", "unlisted"],
       report_status: ["pending", "reviewed", "resolved"],
       scrape_run_status: ["running", "completed", "failed", "cancelled"],
-      scrape_run_type: ["manual_dataset", "manual_scrape", "automated"],
+      scrape_run_type: [
+        "manual_dataset",
+        "manual_scrape",
+        "automated",
+        "github_actions_ingest",
+      ],
     },
   },
 } as const
