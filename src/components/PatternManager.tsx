@@ -278,12 +278,12 @@ export const PatternManager = () => {
                             })
                           }
                         />
-                        {pattern.source === "learned" && (
+                        {(pattern.source === "learned" || pattern.source === "ai_learned") && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => deletePatternMutation.mutate(pattern.id)}
-                            className="text-xs"
+                            className="text-xs text-destructive hover:text-destructive"
                           >
                             Delete
                           </Button>
