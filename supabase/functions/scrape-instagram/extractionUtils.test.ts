@@ -760,6 +760,10 @@ Deno.test("hasExplicitDate - should NOT detect without explicit date", () => {
   assertEquals(hasExplicitDate("Mon to Sat"), false);
   assertEquals(hasExplicitDate("Weekly event"), false);
   assertEquals(hasExplicitDate("Tonight at the venue"), false);
+  // Should NOT match time formats
+  assertEquals(hasExplicitDate("Event at 6:30"), false);
+  assertEquals(hasExplicitDate("Doors open 8:00pm"), false);
+  assertEquals(hasExplicitDate("Show starts 9:45"), false);
 });
 
 Deno.test("isRecurringSchedulePost - should detect venue operating hours", () => {

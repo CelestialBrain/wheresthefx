@@ -514,8 +514,8 @@ const recurringPatterns = [
   /\bopen\s+(daily|everyday|24\/7)\b/i,
   // Weekly recurring
   /\bweekly\b/i,
-  // Operating hours with day range: "6PM — Tues to Sat"
-  /\b\d{1,2}\s*(am|pm)?\s*[-–—]\s*(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)/i,
+  // Operating hours with day range: "6PM — Tues to Sat" (time followed by day range)
+  /\b\d{1,2}\s*(am|pm)\s*[-–—]\s*(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)(day)?\s*(to|[-–—])\s*(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)(day)?\b/i,
 ];
 
 /**
@@ -527,8 +527,10 @@ export function hasExplicitDate(text: string): boolean {
   const monthDayPattern = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\s*\.?\s*\d{1,2}(?:st|nd|rd|th)?/i;
   const dayMonthPattern = /\b\d{1,2}(?:st|nd|rd|th)?\s+(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)/i;
   
-  // Numeric date patterns: "12/25", "12-25-2025"
-  const numericDatePattern = /\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b/;
+  // Numeric date patterns with month validation (1-12 for month, 1-31 for day)
+  // Matches: "12/25", "12-25-2025", "1/5", but not times like "6:30"
+  // Requires the first number to be 1-12 (month) and second to be 1-31 (day)
+  const numericDatePattern = /\b(0?[1-9]|1[0-2])[/-](0?[1-9]|[12]\d|3[01])([/-]\d{2,4})?\b/;
   
   // ISO format: "2025-01-15"
   const isoPattern = /\b\d{4}-\d{2}-\d{2}\b/;
