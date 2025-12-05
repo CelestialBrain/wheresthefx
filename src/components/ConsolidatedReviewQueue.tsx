@@ -89,11 +89,12 @@ export function ConsolidatedReviewQueue() {
   const [fieldIssues, setFieldIssues] = useState<Record<string, boolean>>({});
   const [rejectionNotes, setRejectionNotes] = useState("");
   const [postToReject, setPostToReject] = useState<Post | null>(null);
+  const [hidePastEvents, setHidePastEvents] = useState(true);
   const queryClient = useQueryClient();
 
   // Fetch all posts needing attention
   const { data: allPosts, isLoading } = useQuery({
-    queryKey: ["consolidated-review-queue", currentPage, filterTab],
+    queryKey: ["consolidated-review-queue", currentPage, filterTab, hidePastEvents],
     queryFn: async () => {
       let query = supabase
         .from("instagram_posts")
@@ -119,8 +120,17 @@ export function ConsolidatedReviewQueue() {
       
       if (error) throw error;
 
+      // Filter past events if toggle is on
+      const today = new Date().toISOString().split('T')[0];
+      let filteredData = data || [];
+      if (hidePastEvents) {
+        filteredData = filteredData.filter(post => 
+          !post.event_date || post.event_date >= today
+        );
+      }
+
       // Calculate priority scores and sort
-      const postsWithPriority = (data || []).map(post => ({
+      const postsWithPriority = filteredData.map(post => ({
         ...post,
         priority: calculatePriority(post),
         completeness: calculateCompleteness(post)
@@ -323,11 +333,26 @@ export function ConsolidatedReviewQueue() {
             </TabsList>
 
             <TabsContent value={filterTab} className="space-y-3 md:space-y-4 mt-4 md:mt-6">
-              {/* Pagination controls */}
+              {/* Filter and pagination controls */}
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                <p className="text-xs md:text-sm text-muted-foreground">
-                  Showing {currentPage * ITEMS_PER_PAGE + 1}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, allPosts?.length || 0)} of {allPosts?.length || 0}
-                </p>
+                <div className="flex items-center gap-4">
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Showing {currentPage * ITEMS_PER_PAGE + 1}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, allPosts?.length || 0)} of {allPosts?.length || 0}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Checkbox 
+                      id="hidePast" 
+                      checked={hidePastEvents} 
+                      onCheckedChange={(checked) => {
+                        setHidePastEvents(checked as boolean);
+                        setCurrentPage(0);
+                      }}
+                    />
+                    <Label htmlFor="hidePast" className="text-xs md:text-sm cursor-pointer">
+                      Hide past events
+                    </Label>
+                  </div>
+                </div>
                 <div className="flex gap-2 w-full md:w-auto">
                   <Button 
                     size="sm" 
