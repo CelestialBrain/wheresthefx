@@ -854,7 +854,87 @@ Deno.serve(async (req) => {
           // Use account's default_category if AI didn't detect one
           const category = post.aiExtraction?.category || defaultCategory || 'other';
           
-          // Upsert the post
+          // === KNOWLEDGE BASE INTEGRATION ===
+          
+          // 1. Get raw venue name from AI extraction or post data
+          const rawVenueName = post.aiExtraction?.venueName || post.locationName;
+          let canonicalVenue: string | null = rawVenueName || null;
+          let locationLat: number | null = null;
+          let locationLng: number | null = null;
+          
+          if (rawVenueName) {
+            // 2. Canonicalize venue name (apply aliases, clean up)
+            const cleaned = cleanLocationName(rawVenueName);
+            if (cleaned) {
+              const { canonical } = canonicalizeVenueName(cleaned);
+              canonicalVenue = canonical;
+            }
+            
+            // 3. Try NCR geocache first (fast, in-memory)
+            const searchName = canonicalVenue || rawVenueName;
+            const cachedVenue = lookupNCRVenue(searchName);
+            if (cachedVenue) {
+              locationLat = cachedVenue.lat;
+              locationLng = cachedVenue.lng;
+              console.log(`  📍 NCR cache hit: ${searchName} → (${locationLat}, ${locationLng})`);
+            } else {
+              // 4. Try fuzzy match in NCR cache
+              const fuzzyMatch = fuzzyMatchVenue(searchName, 0.7);
+              if (fuzzyMatch) {
+                locationLat = fuzzyMatch.lat;
+                locationLng = fuzzyMatch.lng;
+                console.log(`  📍 NCR fuzzy match: ${searchName} → ${fuzzyMatch.matchedName}`);
+              }
+            }
+            
+            // 5. If still no coordinates, check known_venues table
+            // Note: Fetches all venues (small table) for flexible matching - same pattern as dataset import mode
+            if (!locationLat && canonicalVenue) {
+              try {
+                // Remove SQL wildcard chars to prevent injection when building search term
+                const searchTerm = canonicalVenue.toLowerCase().replace(/[%_]/g, '');
+                const { data: venues } = await supabase
+                  .from('known_venues')
+                  .select('name, lat, lng, city, aliases')
+                  .limit(50);
+                
+                if (venues && venues.length > 0) {
+                  type KnownVenueRow = { name: string; lat: number; lng: number; city?: string; aliases?: string[] };
+                  
+                  // Try exact match first
+                  let matchedVenue = venues.find((v: KnownVenueRow) => 
+                    v.name?.toLowerCase() === searchTerm ||
+                    v.aliases?.some((a: string) => a.toLowerCase() === searchTerm)
+                  );
+                  
+                  // Try partial match
+                  if (!matchedVenue) {
+                    matchedVenue = venues.find((v: KnownVenueRow) => 
+                      v.name?.toLowerCase().includes(searchTerm) ||
+                      searchTerm.includes(v.name?.toLowerCase() || '') ||
+                      v.aliases?.some((a: string) => 
+                        a.toLowerCase().includes(searchTerm) || 
+                        searchTerm.includes(a.toLowerCase())
+                      )
+                    );
+                  }
+                  
+                  if (matchedVenue?.lat && matchedVenue?.lng) {
+                    locationLat = matchedVenue.lat;
+                    locationLng = matchedVenue.lng;
+                    canonicalVenue = matchedVenue.name; // Use canonical name from DB
+                    console.log(`  📍 Known venue match: ${searchName} → ${matchedVenue.name}`);
+                  }
+                }
+              } catch (dbError) {
+                console.error(`  ⚠️ Known venues lookup failed:`, dbError);
+              }
+            }
+          }
+          
+          // === END KNOWLEDGE BASE INTEGRATION ===
+          
+          // Upsert the post with enriched data
           const { error } = await supabase.from('instagram_posts').upsert({
             post_id: post.postId,
             post_url: `https://www.instagram.com/p/${post.shortCode || post.postId}/`,
@@ -862,8 +942,10 @@ Deno.serve(async (req) => {
             caption: post.caption,
             image_url: post.imageUrl,
             posted_at: post.timestamp || new Date().toISOString(),
-            location_name: post.locationName || post.aiExtraction?.venueName,
+            location_name: canonicalVenue,  // Use canonicalized name
             location_address: post.aiExtraction?.venueAddress,
+            location_lat: locationLat,      // From geocache/known_venues
+            location_lng: locationLng,      // From geocache/known_venues
             is_event: post.aiExtraction?.isEvent || false,
             event_title: post.aiExtraction?.eventTitle,
             event_date: post.aiExtraction?.eventDate,
