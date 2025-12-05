@@ -4,18 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Brain, Loader2, TrendingUp, AlertCircle, Info, HelpCircle } from "lucide-react";
+import { Brain, Loader2, TrendingUp, Info, HelpCircle, Sparkles, Ban, Database } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
-interface CorrectionAnalysis {
-  field_name: string;
-  correction_count: number;
-  common_patterns: string[];
-}
+import { Separator } from "@/components/ui/separator";
 
 export const PatternLearner = () => {
   const [isLearning, setIsLearning] = useState(false);
+  const [isGeneratingFromAI, setIsGeneratingFromAI] = useState(false);
+  const [isDisablingFailing, setIsDisablingFailing] = useState(false);
   const [progress, setProgress] = useState(0);
   const queryClient = useQueryClient();
 
@@ -57,13 +54,19 @@ export const PatternLearner = () => {
 
       const { data: patterns } = await supabase
         .from("extraction_patterns")
-        .select("source, confidence_score");
+        .select("source, confidence_score, success_count, failure_count, is_active");
 
-      const learnedPatterns = patterns?.filter(p => p.source === "learned").length || 0;
+      const learnedPatterns = patterns?.filter(p => p.source === "learned" || p.source === "ai_learned").length || 0;
       const defaultPatterns = patterns?.filter(p => p.source === "default").length || 0;
       const avgConfidence = patterns?.length 
         ? patterns.reduce((sum, p) => sum + Number(p.confidence_score), 0) / patterns.length
         : 0;
+
+      // Count failing patterns (>66% failure rate with 10+ attempts)
+      const failingPatterns = patterns?.filter(p => {
+        const total = (p.success_count || 0) + (p.failure_count || 0);
+        return p.is_active && total > 10 && (p.failure_count || 0) > (p.success_count || 0) * 2;
+      }).length || 0;
 
       // Get most recent correction date
       const lastCorrectionAt = corrections?.[0]?.created_at;
@@ -74,6 +77,18 @@ export const PatternLearner = () => {
         fieldCounts[c.field_name] = (fieldCounts[c.field_name] || 0) + 1;
       });
 
+      // Get pending suggestions count
+      const { count: pendingSuggestions } = await supabase
+        .from("pattern_suggestions")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+
+      // Get ground truth count
+      const { count: groundTruthCount } = await supabase
+        .from("extraction_ground_truth")
+        .select("*", { count: "exact", head: true })
+        .eq("source", "ai_high_confidence");
+
       return {
         totalCorrections: corrections?.length || 0,
         learnedPatterns,
@@ -81,7 +96,91 @@ export const PatternLearner = () => {
         avgConfidence: avgConfidence.toFixed(2),
         lastCorrectionAt,
         fieldCounts,
+        pendingSuggestions: pendingSuggestions || 0,
+        groundTruthCount: groundTruthCount || 0,
+        failingPatterns,
       };
+    },
+  });
+
+  // Mutation for generating patterns from AI
+  const generateFromAIMutation = useMutation({
+    mutationFn: async () => {
+      setIsGeneratingFromAI(true);
+      
+      const { data, error } = await supabase.functions.invoke("generate-patterns-from-ai", {
+        body: {
+          useGroundTruth: true,
+          useSuggestions: true,
+          minSamplesPerType: 3,
+          minSuccessRate: 0.7,
+        },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.patternsGenerated > 0) {
+        toast.success(`Generated ${data.patternsGenerated} new patterns from AI!`);
+      } else {
+        toast.info("No new patterns were generated. Need more samples or patterns already exist.");
+      }
+      queryClient.invalidateQueries({ queryKey: ["extraction-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["learning-stats"] });
+      setIsGeneratingFromAI(false);
+    },
+    onError: (error: Error) => {
+      toast.error(`AI generation failed: ${error.message}`);
+      setIsGeneratingFromAI(false);
+    },
+  });
+
+  // Mutation for disabling failing patterns
+  const disableFailingMutation = useMutation({
+    mutationFn: async () => {
+      setIsDisablingFailing(true);
+      
+      // Fetch patterns with high failure rate
+      const { data: patterns, error: fetchError } = await supabase
+        .from("extraction_patterns")
+        .select("id, success_count, failure_count")
+        .eq("is_active", true);
+
+      if (fetchError) throw fetchError;
+
+      const toDisable = patterns?.filter(p => {
+        const total = (p.success_count || 0) + (p.failure_count || 0);
+        return total > 10 && (p.failure_count || 0) > (p.success_count || 0) * 2;
+      }) || [];
+
+      if (toDisable.length === 0) {
+        return { disabled: 0 };
+      }
+
+      const ids = toDisable.map(p => p.id);
+      const { error: updateError } = await supabase
+        .from("extraction_patterns")
+        .update({ is_active: false })
+        .in("id", ids);
+
+      if (updateError) throw updateError;
+
+      return { disabled: toDisable.length };
+    },
+    onSuccess: (data) => {
+      if (data.disabled > 0) {
+        toast.success(`Disabled ${data.disabled} failing patterns`);
+      } else {
+        toast.info("No failing patterns found to disable");
+      }
+      queryClient.invalidateQueries({ queryKey: ["extraction-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["learning-stats"] });
+      setIsDisablingFailing(false);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to disable patterns: ${error.message}`);
+      setIsDisablingFailing(false);
     },
   });
 
@@ -157,7 +256,7 @@ export const PatternLearner = () => {
             Pattern Learning Engine
           </CardTitle>
           <CardDescription>
-            Automatically learn extraction patterns from manual corrections made in the Review Queue
+            Automatically learn extraction patterns from manual corrections and AI ground truth
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -177,6 +276,22 @@ export const PatternLearner = () => {
             </div>
             <div className="text-center p-3 bg-muted rounded-md">
               <div className="text-2xl font-bold text-primary">
+                {learningStats?.groundTruthCount || 0}
+              </div>
+              <div className="text-xs text-muted-foreground">Ground Truth Records</div>
+            </div>
+            <div className="text-center p-3 bg-muted rounded-md">
+              <div className="text-2xl font-bold text-primary">
+                {learningStats?.pendingSuggestions || 0}
+              </div>
+              <div className="text-xs text-muted-foreground">Pending Suggestions</div>
+            </div>
+          </div>
+
+          {/* Additional Stats Row */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 bg-muted rounded-md">
+              <div className="text-2xl font-bold text-primary">
                 {learningStats?.defaultPatterns || 0}
               </div>
               <div className="text-xs text-muted-foreground">Default Patterns</div>
@@ -186,6 +301,12 @@ export const PatternLearner = () => {
                 {learningStats?.avgConfidence || "0.00"}
               </div>
               <div className="text-xs text-muted-foreground">Avg Confidence</div>
+            </div>
+            <div className="text-center p-3 bg-muted rounded-md">
+              <div className={`text-2xl font-bold ${(learningStats?.failingPatterns || 0) > 0 ? 'text-destructive' : 'text-primary'}`}>
+                {learningStats?.failingPatterns || 0}
+              </div>
+              <div className="text-xs text-muted-foreground">Failing Patterns</div>
             </div>
           </div>
 
@@ -210,71 +331,146 @@ export const PatternLearner = () => {
             </p>
           )}
 
-          {/* No Corrections Alert */}
-          {!correctionsLoading && !hasCorrections && (
-            <Alert>
-              <HelpCircle className="h-4 w-4" />
-              <AlertTitle>No corrections recorded yet</AlertTitle>
-              <AlertDescription className="text-sm">
-                The learning engine needs manual corrections to learn new patterns. To generate corrections:
-                <ol className="list-decimal list-inside mt-2 space-y-1 text-xs">
-                  <li>Go to the <strong>Review</strong> tab</li>
-                  <li>Edit event fields (time, date, venue, price) when extraction is wrong</li>
-                  <li>Save your corrections - they'll be logged automatically</li>
-                  <li>Return here after making at least 3 corrections for a field type</li>
-                </ol>
-              </AlertDescription>
-            </Alert>
-          )}
+          <Separator />
 
-          {/* Not Enough Corrections Warning */}
-          {hasCorrections && !hasMinimumCorrections && (
-            <Alert variant="default">
-              <Info className="h-4 w-4" />
-              <AlertTitle>Need more corrections</AlertTitle>
-              <AlertDescription className="text-sm">
-                You have {recentCorrections?.length} correction(s), but the learning engine needs at least 3 
-                corrections per field type to generate reliable patterns. Keep correcting events in the Review Queue!
-              </AlertDescription>
-            </Alert>
-          )}
+          {/* AI Pattern Generation Section */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              AI Pattern Generation
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Generate regex patterns automatically using AI from {learningStats?.groundTruthCount || 0} ground truth records 
+              and {learningStats?.pendingSuggestions || 0} pending suggestions.
+            </p>
+            <Button
+              onClick={() => generateFromAIMutation.mutate()}
+              disabled={isGeneratingFromAI || ((learningStats?.groundTruthCount || 0) + (learningStats?.pendingSuggestions || 0) < 3)}
+              className="w-full"
+              variant="secondary"
+            >
+              {isGeneratingFromAI ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating Patterns with AI...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  🤖 Generate Patterns from AI
+                </>
+              )}
+            </Button>
+          </div>
 
-          {/* Progress Bar */}
-          {isLearning && (
-            <div className="space-y-2">
-              <Progress value={progress} />
-              <p className="text-sm text-muted-foreground text-center">
-                {progress < 30 && "Analyzing corrections..."}
-                {progress >= 30 && progress < 60 && "Generating patterns..."}
-                {progress >= 60 && progress < 80 && "Validating patterns..."}
-                {progress >= 80 && "Saving learned patterns..."}
-              </p>
+          <Separator />
+
+          {/* Disable Failing Patterns Section */}
+          {(learningStats?.failingPatterns || 0) > 0 && (
+            <div className="space-y-3">
+              <Alert variant="destructive">
+                <Ban className="h-4 w-4" />
+                <AlertTitle>Failing Patterns Detected</AlertTitle>
+                <AlertDescription className="text-sm">
+                  {learningStats?.failingPatterns} pattern(s) have {'>'}66% failure rate and should be disabled.
+                </AlertDescription>
+              </Alert>
+              <Button
+                onClick={() => disableFailingMutation.mutate()}
+                disabled={isDisablingFailing}
+                variant="destructive"
+                className="w-full"
+              >
+                {isDisablingFailing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Disabling Patterns...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="mr-2 h-4 w-4" />
+                    Disable Failing Patterns
+                  </>
+                )}
+              </Button>
             </div>
           )}
 
-          {/* Learn Button */}
-          <Button
-            onClick={() => learnPatternsMutation.mutate()}
-            disabled={isLearning || !hasMinimumCorrections}
-            className="w-full"
-          >
-            {isLearning ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Learning Patterns...
-              </>
-            ) : (
-              <>
-                <TrendingUp className="mr-2 h-4 w-4" />
-                Learn from Recent Corrections
-              </>
-            )}
-          </Button>
+          <Separator />
 
-          <p className="text-xs text-muted-foreground">
-            This will analyze the last 100 manual corrections and generate new extraction
-            patterns that can improve automatic data extraction. Patterns are validated before being added.
-          </p>
+          {/* Learn from Corrections Section */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <Database className="h-4 w-4" />
+              Learn from Manual Corrections
+            </h4>
+
+            {/* No Corrections Alert */}
+            {!correctionsLoading && !hasCorrections && (
+              <Alert>
+                <HelpCircle className="h-4 w-4" />
+                <AlertTitle>No corrections recorded yet</AlertTitle>
+                <AlertDescription className="text-sm">
+                  The learning engine needs manual corrections to learn new patterns. To generate corrections:
+                  <ol className="list-decimal list-inside mt-2 space-y-1 text-xs">
+                    <li>Go to the <strong>Review</strong> tab</li>
+                    <li>Edit event fields (time, date, venue, price) when extraction is wrong</li>
+                    <li>Save your corrections - they'll be logged automatically</li>
+                    <li>Return here after making at least 3 corrections for a field type</li>
+                  </ol>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Not Enough Corrections Warning */}
+            {hasCorrections && !hasMinimumCorrections && (
+              <Alert variant="default">
+                <Info className="h-4 w-4" />
+                <AlertTitle>Need more corrections</AlertTitle>
+                <AlertDescription className="text-sm">
+                  You have {recentCorrections?.length} correction(s), but the learning engine needs at least 3 
+                  corrections per field type to generate reliable patterns. Keep correcting events in the Review Queue!
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Progress Bar */}
+            {isLearning && (
+              <div className="space-y-2">
+                <Progress value={progress} />
+                <p className="text-sm text-muted-foreground text-center">
+                  {progress < 30 && "Analyzing corrections..."}
+                  {progress >= 30 && progress < 60 && "Generating patterns..."}
+                  {progress >= 60 && progress < 80 && "Validating patterns..."}
+                  {progress >= 80 && "Saving learned patterns..."}
+                </p>
+              </div>
+            )}
+
+            {/* Learn Button */}
+            <Button
+              onClick={() => learnPatternsMutation.mutate()}
+              disabled={isLearning || !hasMinimumCorrections}
+              className="w-full"
+            >
+              {isLearning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Learning Patterns...
+                </>
+              ) : (
+                <>
+                  <TrendingUp className="mr-2 h-4 w-4" />
+                  Learn from Recent Corrections
+                </>
+              )}
+            </Button>
+
+            <p className="text-xs text-muted-foreground">
+              This will analyze the last 100 manual corrections and generate new extraction
+              patterns that can improve automatic data extraction. Patterns are validated before being added.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

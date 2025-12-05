@@ -242,7 +242,7 @@ export async function trainPatternsFromComparison(
       // Fetch current counts
       const { data: pattern, error: fetchError } = await supabase
         .from('extraction_patterns')
-        .select('success_count, failure_count')
+        .select('id, success_count, failure_count, is_active')
         .eq('id', update.patternId)
         .single();
 
@@ -251,16 +251,37 @@ export async function trainPatternsFromComparison(
         continue;
       }
 
-      const newCount = update.success
+      const newSuccessCount = update.success
         ? (pattern.success_count || 0) + 1
+        : (pattern.success_count || 0);
+      const newFailureCount = update.success
+        ? (pattern.failure_count || 0)
         : (pattern.failure_count || 0) + 1;
+
+      const totalAttempts = newSuccessCount + newFailureCount;
+      
+      // Auto-disable patterns with >66% failure rate after 10+ attempts
+      const shouldDisable = pattern.is_active && 
+        totalAttempts > 10 && 
+        newFailureCount > newSuccessCount * 2;
+
+      const updateData: Record<string, number | string | boolean> = {
+        [column]: update.success ? newSuccessCount : newFailureCount,
+        last_used_at: new Date().toISOString(),
+      };
+
+      if (shouldDisable) {
+        updateData.is_active = false;
+        console.log(
+          `[PatternTrainer] Auto-disabled failing pattern ${pattern.id} ` +
+          `(${newSuccessCount} successes, ${newFailureCount} failures, ` +
+          `${((newFailureCount / totalAttempts) * 100).toFixed(1)}% failure rate)`
+        );
+      }
 
       const { error: updateError } = await supabase
         .from('extraction_patterns')
-        .update({
-          [column]: newCount,
-          last_used_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', update.patternId);
 
       if (updateError) {

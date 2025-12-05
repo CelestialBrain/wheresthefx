@@ -122,12 +122,38 @@ export const PatternManager = () => {
     return "text-orange-600";
   };
 
+  // Get pattern health color based on success/failure rate
+  const getPatternHealthColor = (successCount: number, failureCount: number): string => {
+    const total = successCount + failureCount;
+    if (total < 5) return ""; // Not enough data
+    const successRate = successCount / total;
+    if (successRate >= 0.7) return "border-l-4 border-l-green-500";
+    if (successRate >= 0.5) return "border-l-4 border-l-yellow-500";
+    return "border-l-4 border-l-red-500";
+  };
+
+  // Get success rate as percentage string
+  const getSuccessRateDisplay = (successCount: number, failureCount: number): string | null => {
+    const total = successCount + failureCount;
+    if (total < 5) return null;
+    const successRate = (successCount / total) * 100;
+    return `${successRate.toFixed(0)}%`;
+  };
+
+  // Get badge variant based on success rate percentage
+  const getSuccessRateVariant = (successRate: number): "default" | "secondary" | "destructive" => {
+    if (successRate >= 70) return "default";
+    if (successRate >= 50) return "secondary";
+    return "destructive";
+  };
+
   const checkRegexValidity = (regex: string): { valid: boolean; error?: string } => {
     try {
       new RegExp(regex, "gi");
       return { valid: true };
-    } catch (e: any) {
-      return { valid: false, error: e.message };
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : "Unknown error";
+      return { valid: false, error: errorMessage };
     }
   };
 
@@ -171,23 +197,33 @@ export const PatternManager = () => {
           <div className="grid gap-3">
             {filteredPatterns?.map((pattern) => {
               const regexCheck = checkRegexValidity(pattern.pattern_regex);
+              const healthColor = getPatternHealthColor(pattern.success_count || 0, pattern.failure_count || 0);
+              const successRate = getSuccessRateDisplay(pattern.success_count || 0, pattern.failure_count || 0);
               
               return (
-                <Card key={pattern.id} className={!regexCheck.valid ? "border-destructive" : ""}>
+                <Card key={pattern.id} className={`${!regexCheck.valid ? "border-destructive" : ""} ${healthColor}`}>
                   <CardContent className="p-4 md:p-6">
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
                       <div className="flex-1 space-y-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="outline" className="text-xs">{pattern.pattern_type}</Badge>
                           <Badge
-                            variant={pattern.source === "default" ? "secondary" : "default"}
+                            variant={pattern.source === "default" ? "secondary" : pattern.source === "ai_learned" ? "default" : "outline"}
                             className="text-xs"
                           >
-                            {pattern.source}
+                            {pattern.source === "ai_learned" ? "🤖 AI" : pattern.source}
                           </Badge>
                           <span className={`text-xs md:text-sm font-semibold ${getConfidenceColor(Number(pattern.confidence_score))}`}>
                             {(Number(pattern.confidence_score) * 100).toFixed(0)}% confidence
                           </span>
+                          {successRate && (
+                            <Badge 
+                              variant={getSuccessRateVariant(Number(successRate.replace('%', '')))}
+                              className="text-xs"
+                            >
+                              {successRate} success
+                            </Badge>
+                          )}
                           {!regexCheck.valid && (
                             <Badge variant="destructive" className="text-xs">
                               <AlertTriangle className="h-3 w-3 mr-1" />
