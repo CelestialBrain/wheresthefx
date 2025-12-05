@@ -725,6 +725,20 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     let isGitHubIngest = false;
 
+    // Constant-time comparison to prevent timing attacks
+    const safeCompare = (a: string, b: string): boolean => {
+      if (a.length !== b.length) {
+        // Still do a comparison to prevent timing information leak on length difference
+        const dummy = new TextEncoder().encode(a);
+        const dummyB = new TextEncoder().encode(a);
+        crypto.subtle.timingSafeEqual(dummy, dummyB);
+        return false;
+      }
+      const aBytes = new TextEncoder().encode(a);
+      const bBytes = new TextEncoder().encode(b);
+      return crypto.subtle.timingSafeEqual(aBytes, bBytes);
+    };
+
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.replace('Bearer ', '');
       
@@ -735,7 +749,7 @@ Deno.serve(async (req) => {
         });
       }
       
-      if (token !== githubIngestToken) {
+      if (!safeCompare(token, githubIngestToken)) {
         return new Response(JSON.stringify({ error: 'Invalid token' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
