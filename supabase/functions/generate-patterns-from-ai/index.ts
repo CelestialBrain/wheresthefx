@@ -317,14 +317,14 @@ Deno.serve(async (req) => {
         // Fetch captions for these posts
         const { data: posts } = await supabase
           .from('instagram_posts')
-          .select('id, caption')
-          .in('id', postIds.slice(0, 50)); // Limit to avoid huge queries
+          .select('post_id, caption')
+          .in('post_id', postIds.slice(0, 50)); // Limit to avoid huge queries
 
         const captionMap = new Map<string, string>();
         if (posts) {
           for (const post of posts) {
-            if (post.caption) {
-              captionMap.set(post.id, post.caption);
+            if (post.caption && post.post_id) {
+              captionMap.set(post.post_id, post.caption);
             }
           }
         }
