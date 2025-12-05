@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
 import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
+import { CATEGORY_LABELS, CATEGORY_COLORS } from "@/constants/categoryColors";
 
 export interface InstagramPost {
   id: string;
@@ -33,6 +34,7 @@ export interface InstagramPost {
   location_lat?: number | null;
   location_lng?: number | null;
   published_event_id?: string | null;
+  category?: string | null;
   instagram_accounts: {
     username: string;
     display_name: string | null;
@@ -316,7 +318,15 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
             >
               <ExternalLink className="h-3 w-3" />
             </Button>
-            {post.is_event && (
+            {post.is_event && post.category && CATEGORY_LABELS[post.category] && (
+              <Badge 
+                className="text-[10px] px-1.5 py-1 leading-none rounded-sm text-white"
+                style={{ backgroundColor: CATEGORY_COLORS[post.category] || '#9E9E9E' }}
+              >
+                {CATEGORY_LABELS[post.category]}
+              </Badge>
+            )}
+            {post.is_event && !post.category && (
               <Badge variant="default" className="text-[10px] px-1.5 py-1 leading-none rounded-sm">
                 Event
               </Badge>

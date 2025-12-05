@@ -111,6 +111,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                 signup_url: event.signup_url,
                 is_event: true,
                 published_event_id: event.id,
+                category: event.category,
                 instagram_accounts: {
                   username: event.instagram_account_username || event.instagram_accounts?.username || 'unknown',
                   display_name: null,
