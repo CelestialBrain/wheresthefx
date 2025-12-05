@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square, Eraser, Github, ExternalLink, AlertCircle, Upload } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square, Eraser, Github, ExternalLink, AlertCircle, Upload, CheckCheck } from "lucide-react";
 import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
@@ -53,6 +53,7 @@ const Admin = () => {
   const [isStopping, setIsStopping] = useState(false);
   const [isBulkPublishing, setIsBulkPublishing] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [isAutoApproving, setIsAutoApproving] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -526,6 +527,56 @@ const Admin = () => {
     }
   };
 
+  const autoApproveEvents = async () => {
+    try {
+      setIsAutoApproving(true);
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Find events that meet auto-approval criteria
+      const { data: eventsToApprove, error: fetchError } = await supabase
+        .from("instagram_posts")
+        .select("id")
+        .eq("is_event", true)
+        .eq("needs_review", true)
+        .not("event_title", "is", null)
+        .not("event_date", "is", null)
+        .not("location_lat", "is", null)
+        .gte("event_date", today);
+
+      if (fetchError) throw fetchError;
+
+      if (!eventsToApprove || eventsToApprove.length === 0) {
+        toast({
+          title: "No Events to Auto-Approve",
+          description: "No events meet the criteria (title, future date, coordinates)",
+        });
+        return;
+      }
+
+      // Update all matching events
+      const { error: updateError } = await supabase
+        .from("instagram_posts")
+        .update({ needs_review: false })
+        .in("id", eventsToApprove.map(e => e.id));
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Events Auto-Approved!",
+        description: `Approved ${eventsToApprove.length} events with complete data`,
+      });
+
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to auto-approve events",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAutoApproving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
@@ -758,6 +809,29 @@ const Admin = () => {
                 >
                   <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                   {isLoading ? "Processing..." : "Backfill Images"}
+                </Button>
+              </div>
+            </CardHeader>
+          </Card>
+
+          {/* Auto-Approve Events */}
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-base md:text-lg">Auto-Approve Events</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Approve events with title, future date, and coordinates
+                  </p>
+                </div>
+                <Button
+                  onClick={autoApproveEvents}
+                  disabled={isAutoApproving}
+                  variant="outline"
+                  className="w-full md:w-auto"
+                >
+                  <CheckCheck className={`h-4 w-4 mr-2 ${isAutoApproving ? "animate-pulse" : ""}`} />
+                  {isAutoApproving ? "Approving..." : "Auto-Approve"}
                 </Button>
               </div>
             </CardHeader>
