@@ -12,7 +12,7 @@ const DELAY_BETWEEN_BATCHES_MS = 2000;
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
 // Results tracking
 const results = {
