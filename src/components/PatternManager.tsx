@@ -92,12 +92,18 @@ export const PatternManager = () => {
     },
   });
 
-  const testPattern = (pattern: string): { matches: string[]; error: string | null } => {
+  const testPattern = (patternRegex: string, description: string | null): { matches: string[]; error: string | null } => {
+    console.log('---');
+    console.log('Pattern:', description);
+    console.log('Regex string:', patternRegex);
     try {
-      const regex = new RegExp(pattern, "gi");
+      const regex = new RegExp(patternRegex, "gi");
+      console.log('Regex object:', regex);
       const matches = testText.match(regex);
+      console.log('Matches:', matches);
       return { matches: matches || [], error: null };
     } catch (error: any) {
+      console.error('Regex error:', error.message);
       return { matches: [], error: error.message || "Invalid regex" };
     }
   };
@@ -108,7 +114,7 @@ export const PatternManager = () => {
     return patterns
       .filter(p => p.is_active)
       .map(pattern => {
-        const { matches, error } = testPattern(pattern.pattern_regex);
+        const { matches, error } = testPattern(pattern.pattern_regex, pattern.pattern_description);
         return {
           patternId: pattern.id,
           patternType: pattern.pattern_type,
