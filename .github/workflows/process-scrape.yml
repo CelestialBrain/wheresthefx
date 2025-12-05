@@ -21,6 +21,7 @@ permissions:
 env:
   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+  GITHUB_INGEST_TOKEN: ${{ secrets.GITHUB_INGEST_TOKEN }}
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   APIFY_API_KEY: ${{ secrets.APIFY_API_KEY }}
 
@@ -59,14 +60,10 @@ jobs:
         working-directory: scripts
         run: node update-run-status.js "${{ steps.inputs.outputs.run_id }}" "processing" "GitHub Actions started"
 
-      - name: Fetch Apify dataset
-        working-directory: scripts
-        run: node fetch-dataset.js "${{ steps.inputs.outputs.dataset_id }}"
-
-      - name: Process posts
+      - name: Process scrape with Gemini Vision
         id: process
         working-directory: scripts
-        run: node process-posts.js
+        run: node process-scrape.js "${{ steps.inputs.outputs.dataset_id }}"
 
       - name: Update scrape run status (completed)
         if: success()
