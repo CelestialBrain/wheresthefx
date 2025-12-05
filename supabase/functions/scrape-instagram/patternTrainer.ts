@@ -120,21 +120,29 @@ export async function saveGroundTruth(
   }
 
   if (records.length === 0) {
+    console.log(`[PatternTrainer] No fields to save for post ${postId} (confidence: ${confidence})`);
     return;
   }
 
+  // Log what we're about to insert for debugging
+  console.log(`[PatternTrainer] Attempting to save ${records.length} ground truth records for post ${postId}`);
+  console.log(`[PatternTrainer] Records:`, JSON.stringify(records, null, 2));
+
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('extraction_ground_truth')
-      .insert(records);
+      .insert(records)
+      .select();
 
     if (error) {
-      console.error('Failed to save ground truth:', error.message);
+      console.error(`[PatternTrainer] Failed to save ground truth for ${postId}:`, error.message);
+      console.error(`[PatternTrainer] Error details:`, JSON.stringify(error, null, 2));
     } else {
-      console.log(`[PatternTrainer] Saved ${records.length} ground truth records for post ${postId}`);
+      console.log(`[PatternTrainer] ✅ Saved ${records.length} ground truth records for post ${postId}`);
+      console.log(`[PatternTrainer] Inserted data:`, JSON.stringify(data, null, 2));
     }
   } catch (err) {
-    console.error('Error saving ground truth:', err);
+    console.error('[PatternTrainer] Exception saving ground truth:', err);
   }
 }
 
@@ -265,18 +273,24 @@ export async function trainPatternsFromComparison(
 
   // Queue pattern suggestions
   if (patternSuggestions.length > 0) {
+    console.log(`[PatternTrainer] Attempting to queue ${patternSuggestions.length} pattern suggestions`);
+    console.log(`[PatternTrainer] Suggestions:`, JSON.stringify(patternSuggestions, null, 2));
+    
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('pattern_suggestions')
-        .insert(patternSuggestions);
+        .insert(patternSuggestions)
+        .select();
 
       if (error) {
-        console.error('Failed to queue pattern suggestions:', error.message);
+        console.error(`[PatternTrainer] Failed to queue pattern suggestions:`, error.message);
+        console.error(`[PatternTrainer] Error details:`, JSON.stringify(error, null, 2));
       } else {
-        console.log(`[PatternTrainer] Queued ${patternSuggestions.length} pattern suggestions for post ${postId}`);
+        console.log(`[PatternTrainer] ✅ Queued ${patternSuggestions.length} pattern suggestions for post ${postId}`);
+        console.log(`[PatternTrainer] Inserted suggestions:`, JSON.stringify(data, null, 2));
       }
     } catch (err) {
-      console.error('Error queuing pattern suggestions:', err);
+      console.error('[PatternTrainer] Exception queuing pattern suggestions:', err);
     }
   }
 
