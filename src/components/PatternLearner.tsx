@@ -372,7 +372,7 @@ export const PatternLearner = () => {
                 <Ban className="h-4 w-4" />
                 <AlertTitle>Failing Patterns Detected</AlertTitle>
                 <AlertDescription className="text-sm">
-                  {learningStats?.failingPatterns} pattern(s) have &gt;66% failure rate and should be disabled.
+                  {learningStats?.failingPatterns} pattern(s) have {'>'}66% failure rate and should be disabled.
                 </AlertDescription>
               </Alert>
               <Button

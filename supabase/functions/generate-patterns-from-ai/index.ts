@@ -455,7 +455,7 @@ Deno.serve(async (req) => {
           pattern_regex: generated.regex,
           pattern_description: generated.description,
           confidence_score: Math.min(validation.successRate, generated.confidence),
-          source: 'learned', // Using 'learned' as it's in the allowed values
+          source: 'ai_learned', // AI-generated from ground truth and suggestions
           is_active: true, // Enable immediately since it passed validation
           priority: 120, // Medium-high priority (default patterns are 100-150)
           success_count: validation.successCount,

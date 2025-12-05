@@ -140,6 +140,13 @@ export const PatternManager = () => {
     return `${successRate.toFixed(0)}%`;
   };
 
+  // Get badge variant based on success rate percentage
+  const getSuccessRateVariant = (successRate: number): "default" | "secondary" | "destructive" => {
+    if (successRate >= 70) return "default";
+    if (successRate >= 50) return "secondary";
+    return "destructive";
+  };
+
   const checkRegexValidity = (regex: string): { valid: boolean; error?: string } => {
     try {
       new RegExp(regex, "gi");
@@ -211,7 +218,7 @@ export const PatternManager = () => {
                           </span>
                           {successRate && (
                             <Badge 
-                              variant={Number(successRate.replace('%', '')) >= 70 ? "default" : Number(successRate.replace('%', '')) >= 50 ? "secondary" : "destructive"}
+                              variant={getSuccessRateVariant(Number(successRate.replace('%', '')))}
                               className="text-xs"
                             >
                               {successRate} success
