@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { CATEGORY_LABELS, CATEGORY_COLORS } from "@/constants/categoryColors";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ interface Post {
   is_event: boolean;
   instagram_account: { username: string } | null;
   extraction_method: string | null;
+  category: string | null;
 }
 
 const extractionMethodLabels: Record<string, { label: string; icon: string }> = {
@@ -395,6 +397,17 @@ export function ConsolidatedReviewQueue() {
                               {post.extraction_method && extractionMethodLabels[post.extraction_method] && (
                                 <Badge variant="outline" className="text-xs">
                                   {extractionMethodLabels[post.extraction_method].icon} {extractionMethodLabels[post.extraction_method].label}
+                                </Badge>
+                              )}
+                              {post.category && (
+                                <Badge 
+                                  style={{ 
+                                    backgroundColor: CATEGORY_COLORS[post.category] || '#9E9E9E',
+                                    color: post.category === 'food' ? '#333' : '#fff'
+                                  }}
+                                  className="text-xs"
+                                >
+                                  {CATEGORY_LABELS[post.category] || post.category}
                                 </Badge>
                               )}
                             </div>
