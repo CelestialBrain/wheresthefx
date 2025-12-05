@@ -717,15 +717,185 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const apifyApiKeySecret = Deno.env.get('APIFY_API_KEY');
+    const githubIngestToken = Deno.env.get('GITHUB_INGEST_TOKEN');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Check for GitHub ingest token authentication
+    const authHeader = req.headers.get('Authorization');
+    let isGitHubIngest = false;
+
+    // Constant-time comparison to prevent timing attacks
+    const safeCompare = (a: string, b: string): boolean => {
+      // For security, we always perform a comparison even if lengths differ
+      // This prevents timing attacks based on length checking
+      const aBytes = new TextEncoder().encode(a);
+      const bBytes = new TextEncoder().encode(b);
+      
+      // If lengths differ, compare 'a' against itself to take constant time,
+      // then return false. This prevents length-based timing leaks.
+      if (aBytes.length !== bBytes.length) {
+        crypto.subtle.timingSafeEqual(aBytes, aBytes);
+        return false;
+      }
+      
+      return crypto.subtle.timingSafeEqual(aBytes, bBytes);
+    };
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      
+      if (!githubIngestToken) {
+        return new Response(JSON.stringify({ error: 'GITHUB_INGEST_TOKEN not configured' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      if (!safeCompare(token, githubIngestToken)) {
+        return new Response(JSON.stringify({ error: 'Invalid token' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      console.log('GitHub ingest token validated');
+      isGitHubIngest = true;
+    }
+
     // Parse request body
-    let body: { datasetId?: string; automated?: boolean; forceImport?: boolean } = {};
+    let body: { datasetId?: string; automated?: boolean; forceImport?: boolean; mode?: string; posts?: unknown[] } = {};
     try {
       body = await req.json();
     } catch {
       // No body provided
+    }
+
+    // Handle ping for connection testing
+    if (body.mode === 'ping') {
+      return new Response(JSON.stringify({ success: true, message: 'pong' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Handle batch ingest from GitHub Actions
+    if (body.mode === 'ingest' && Array.isArray(body.posts)) {
+      if (!isGitHubIngest) {
+        return new Response(JSON.stringify({ error: 'Ingest mode requires valid GITHUB_INGEST_TOKEN' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log(`Ingesting batch of ${body.posts.length} posts from GitHub Actions`);
+      
+      let saved = 0;
+      let failed = 0;
+      
+      interface IngestPost {
+        postId: string;
+        shortCode?: string;
+        caption?: string;
+        imageUrl?: string;
+        ownerUsername?: string;
+        timestamp?: string;
+        locationName?: string;
+        aiExtraction?: {
+          isEvent?: boolean;
+          eventTitle?: string;
+          eventDate?: string;
+          eventTime?: string;
+          venueName?: string;
+          venueAddress?: string;
+          price?: number;
+          isFree?: boolean;
+          category?: string;
+          ocrText?: string;
+          confidence?: number;
+        };
+      }
+
+      for (const post of body.posts as IngestPost[]) {
+        try {
+          // Get or create Instagram account
+          let accountId: string | null = null;
+          let defaultCategory: string | null = null;
+          
+          if (post.ownerUsername) {
+            const { data: account } = await supabase
+              .from('instagram_accounts')
+              .select('id, default_category')
+              .eq('username', post.ownerUsername.toLowerCase())
+              .maybeSingle();
+            
+            if (account) {
+              accountId = account.id;
+              defaultCategory = account.default_category;
+            } else {
+              // Create new account
+              const { data: newAccount } = await supabase
+                .from('instagram_accounts')
+                .insert({
+                  username: post.ownerUsername.toLowerCase(),
+                  is_active: true,
+                  last_scraped_at: new Date().toISOString(),
+                })
+                .select('id')
+                .single();
+              
+              if (newAccount) {
+                accountId = newAccount.id;
+              }
+            }
+          }
+          
+          // Use account's default_category if AI didn't detect one
+          const category = post.aiExtraction?.category || defaultCategory || 'other';
+          
+          // Upsert the post
+          const { error } = await supabase.from('instagram_posts').upsert({
+            post_id: post.postId,
+            short_code: post.shortCode,
+            instagram_account_id: accountId,
+            caption: post.caption,
+            image_url: post.imageUrl,
+            posted_at: post.timestamp,
+            location_name: post.locationName || post.aiExtraction?.venueName,
+            location_address: post.aiExtraction?.venueAddress,
+            is_event: post.aiExtraction?.isEvent || false,
+            event_title: post.aiExtraction?.eventTitle,
+            event_date: post.aiExtraction?.eventDate,
+            event_time: post.aiExtraction?.eventTime,
+            price: post.aiExtraction?.price || 0,
+            is_free: post.aiExtraction?.isFree ?? true,
+            category: category,
+            ocr_text: post.aiExtraction?.ocrText,
+            ocr_confidence: post.aiExtraction?.confidence,
+            ocr_processed: true,
+            extraction_method: 'github_actions_gemini_vision',
+            needs_review: post.aiExtraction?.isEvent || false,
+          }, { onConflict: 'post_id' });
+          
+          if (error) {
+            console.error(`Failed to save ${post.postId}:`, error.message);
+            failed++;
+          } else {
+            saved++;
+          }
+        } catch (err) {
+          console.error(`Error processing ${post.postId}:`, err);
+          failed++;
+        }
+      }
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        saved, 
+        failed,
+        total: body.posts.length 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     const rawDatasetInput = body.datasetId;
