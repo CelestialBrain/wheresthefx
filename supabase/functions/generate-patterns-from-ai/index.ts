@@ -281,7 +281,8 @@ Deno.serve(async (req) => {
         for (const suggestion of suggestions as PatternSuggestion[]) {
           if (!suggestion.sample_text || !suggestion.expected_value) continue;
           
-          const patternType = suggestion.pattern_type;
+          // Normalize pattern type (e.g., event_date -> date, event_time -> time)
+          const patternType = fieldNameToPatternType(suggestion.pattern_type);
           if (!samplesByType.has(patternType)) {
             samplesByType.set(patternType, []);
           }
