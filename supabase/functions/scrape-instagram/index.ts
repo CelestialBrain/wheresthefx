@@ -784,6 +784,38 @@ Deno.serve(async (req) => {
     
     // Initialize logger
     const logger = new ScraperLogger(supabase, runId!);
+    
+    // HEARTBEAT MECHANISM: Update last_heartbeat every 30 seconds to detect stuck runs
+    const HEARTBEAT_INTERVAL_MS = 30000;
+    let heartbeatInterval: number | undefined;
+    
+    const updateHeartbeat = async () => {
+      if (runId) {
+        try {
+          await supabase
+            .from('scrape_runs')
+            .update({ last_heartbeat: new Date().toISOString() })
+            .eq('id', runId);
+        } catch (err) {
+          console.error('Failed to update heartbeat:', err);
+        }
+      }
+    };
+    
+    // Start heartbeat interval
+    if (runId) {
+      heartbeatInterval = setInterval(updateHeartbeat, HEARTBEAT_INTERVAL_MS) as unknown as number;
+      // Send initial heartbeat
+      await updateHeartbeat();
+    }
+    
+    // Helper to stop heartbeat and cleanup
+    const stopHeartbeat = () => {
+      if (heartbeatInterval !== undefined) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = undefined;
+      }
+    };
     await logger.info('fetch', `Starting scrape run: ${runType}`, { datasetId, runType });
 
     let totalScrapedPosts = 0;
@@ -864,8 +896,54 @@ Deno.serve(async (req) => {
         duration_ms: fetchDuration 
       });
 
+      // BATCH PROCESSING: Process posts in smaller batches with progress updates
+      const BATCH_SIZE = 10;
+      let processedCount = 0;
+      const totalItems = apifyData.length;
+
       // Process each item
       for (const item of apifyData) {
+        // Update progress every BATCH_SIZE items
+        if (processedCount > 0 && processedCount % BATCH_SIZE === 0) {
+          console.log(`Progress: ${processedCount}/${totalItems} items processed`);
+          // Update heartbeat and progress
+          if (runId) {
+            await supabase
+              .from('scrape_runs')
+              .update({ 
+                last_heartbeat: new Date().toISOString(),
+                posts_added: totalScrapedPosts,
+                posts_updated: totalUpdatedPosts,
+              })
+              .eq('id', runId);
+          }
+          
+          // Check if run was cancelled
+          const { data: runStatus } = await supabase
+            .from('scrape_runs')
+            .select('status')
+            .eq('id', runId)
+            .single();
+          
+          if (runStatus?.status === 'cancelled') {
+            console.log('Scrape run was cancelled by admin');
+            stopHeartbeat();
+            await logger.info('skip', 'Run cancelled by admin', { processedCount, totalItems });
+            await logger.close();
+            return new Response(
+              JSON.stringify({ 
+                message: 'Scrape cancelled',
+                processedCount,
+                totalItems,
+                newPostsAdded: totalScrapedPosts,
+                postsUpdated: totalUpdatedPosts,
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+        processedCount++;
+
         // Skip error items
         if (item.error || item.errorDescription) {
           totalSkipped++;
@@ -2034,6 +2112,10 @@ Deno.serve(async (req) => {
     if (totalFailed > 0) {
       console.log('Failure reasons:', failureReasons);
     }
+
+    // Stop heartbeat before completing
+    stopHeartbeat();
+    await logger.close();
 
     // Update scrape run record
     if (runId) {

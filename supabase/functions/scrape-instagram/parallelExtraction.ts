@@ -202,14 +202,26 @@ async function extractWithRegex(
 }
 
 /**
- * Call AI extraction edge function
+ * Default timeout for AI extraction calls (30 seconds)
+ */
+const AI_EXTRACTION_TIMEOUT_MS = 30000;
+
+/**
+ * Call AI extraction edge function with timeout
  */
 async function extractWithAI(
   input: AIExtractionInput,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  timeoutMs: number = AI_EXTRACTION_TIMEOUT_MS
 ): Promise<ExtractionResult | null> {
   try {
-    const { data, error } = await supabase.functions.invoke('ai-extract-event', {
+    // Create a promise that rejects after timeout
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`AI extraction timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+
+    // Race between the actual call and timeout
+    const extractionPromise = supabase.functions.invoke('ai-extract-event', {
       body: {
         caption: input.caption,
         imageUrl: input.imageUrl,
@@ -221,6 +233,8 @@ async function extractWithAI(
         useOCR: input.useOCR,
       },
     });
+
+    const { data, error } = await Promise.race([extractionPromise, timeoutPromise]);
 
     if (error) {
       console.error(`AI extraction failed for ${input.postId}:`, error.message);
@@ -249,7 +263,8 @@ async function extractWithAI(
       reasoning: ai.reasoning,
     };
   } catch (err) {
-    console.error(`AI extraction error for ${input.postId}:`, err);
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`AI extraction error for ${input.postId}: ${errorMsg}`);
     return null;
   }
 }

@@ -1251,6 +1251,7 @@ export type Database = {
           dataset_id: string | null
           error_message: string | null
           id: string
+          last_heartbeat: string | null
           posts_added: number
           posts_updated: number
           run_type: Database["public"]["Enums"]["scrape_run_type"]
@@ -1263,6 +1264,7 @@ export type Database = {
           dataset_id?: string | null
           error_message?: string | null
           id?: string
+          last_heartbeat?: string | null
           posts_added?: number
           posts_updated?: number
           run_type: Database["public"]["Enums"]["scrape_run_type"]
@@ -1275,6 +1277,7 @@ export type Database = {
           dataset_id?: string | null
           error_message?: string | null
           id?: string
+          last_heartbeat?: string | null
           posts_added?: number
           posts_updated?: number
           run_type?: Database["public"]["Enums"]["scrape_run_type"]
