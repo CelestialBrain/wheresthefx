@@ -717,7 +717,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const apifyApiKeySecret = Deno.env.get('APIFY_API_KEY');
-    const githubIngestToken = Deno.env.get('GITHUB_INGEST_TOKEN');
+    const dataIngestToken = Deno.env.get('DATA_INGEST_TOKEN');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -745,21 +745,21 @@ Deno.serve(async (req) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.replace('Bearer ', '');
       
-      if (!githubIngestToken) {
-        return new Response(JSON.stringify({ error: 'GITHUB_INGEST_TOKEN not configured' }), {
+      if (!dataIngestToken) {
+        return new Response(JSON.stringify({ error: 'DATA_INGEST_TOKEN not configured' }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
       
-      if (!safeCompare(token, githubIngestToken)) {
+      if (!safeCompare(token, dataIngestToken)) {
         return new Response(JSON.stringify({ error: 'Invalid token' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
       
-      console.log('GitHub ingest token validated');
+      console.log('Data ingest token validated');
       isGitHubIngest = true;
     }
 
@@ -781,7 +781,7 @@ Deno.serve(async (req) => {
     // Handle batch ingest from GitHub Actions
     if (body.mode === 'ingest' && Array.isArray(body.posts)) {
       if (!isGitHubIngest) {
-        return new Response(JSON.stringify({ error: 'Ingest mode requires valid GITHUB_INGEST_TOKEN' }), {
+        return new Response(JSON.stringify({ error: 'Ingest mode requires valid DATA_INGEST_TOKEN' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
