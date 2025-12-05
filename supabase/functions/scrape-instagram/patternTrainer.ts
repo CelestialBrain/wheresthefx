@@ -11,27 +11,6 @@ import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
 import { MergedExtractionResult, valuesMatch } from './parallelExtraction.ts';
 
 /**
- * Ground truth record for training data
- */
-interface GroundTruthRecord {
-  post_id: string;
-  field_name: string;
-  raw_text: string;
-  correct_value: string;
-  ai_confidence: number;
-}
-
-/**
- * Pattern suggestion for AI-generated patterns queue
- */
-interface PatternSuggestion {
-  pattern_type: string;
-  raw_text: string;
-  correct_value: string;
-  status: 'pending';
-}
-
-/**
  * Minimum confidence threshold for saving ground truth
  */
 const MIN_CONFIDENCE_FOR_GROUND_TRUTH = 0.7;
@@ -75,7 +54,11 @@ function extractRelevantSnippet(text: string, value: string, windowSize: number 
 /**
  * Save high-confidence AI results to extraction_ground_truth table
  * 
- * This provides training data for pattern learning.
+ * DB Schema:
+ * - post_id: uuid
+ * - field_name: text
+ * - ground_truth_value: text (NOT correct_value)
+ * - source: text (default 'admin_correction')
  * 
  * @param postId Post ID
  * @param caption Raw caption text
@@ -94,45 +77,44 @@ export async function saveGroundTruth(
     return;
   }
 
-  const records: GroundTruthRecord[] = [];
+  const records: Array<{
+    post_id: string;
+    field_name: string;
+    ground_truth_value: string;
+    source: string;
+  }> = [];
 
   // Save each field where AI provided a value
   const fieldsToSave: Array<{
     name: string;
     value: string | number | null | undefined;
-    fieldType: 'date' | 'time' | 'venue' | 'price' | 'url' | 'text';
   }> = [
-    { name: 'eventDate', value: mergedResult.eventDate, fieldType: 'date' },
-    { name: 'eventEndDate', value: mergedResult.eventEndDate, fieldType: 'date' },
-    { name: 'eventTime', value: mergedResult.eventTime, fieldType: 'time' },
-    { name: 'endTime', value: mergedResult.endTime, fieldType: 'time' },
-    { name: 'locationName', value: mergedResult.locationName, fieldType: 'venue' },
-    { name: 'signupUrl', value: mergedResult.signupUrl, fieldType: 'url' },
+    { name: 'eventDate', value: mergedResult.eventDate },
+    { name: 'eventEndDate', value: mergedResult.eventEndDate },
+    { name: 'eventTime', value: mergedResult.eventTime },
+    { name: 'endTime', value: mergedResult.endTime },
+    { name: 'locationName', value: mergedResult.locationName },
+    { name: 'signupUrl', value: mergedResult.signupUrl },
   ];
 
   // Handle price separately (numeric)
   if (mergedResult.price !== null && mergedResult.price !== undefined) {
-    const priceSnippet = extractRelevantSnippet(caption, String(mergedResult.price));
     records.push({
       post_id: postId,
       field_name: 'price',
-      raw_text: priceSnippet,
-      correct_value: String(mergedResult.price),
-      ai_confidence: confidence,
+      ground_truth_value: String(mergedResult.price),
+      source: 'ai_high_confidence',
     });
   }
 
   // Add string fields
   for (const field of fieldsToSave) {
     if (field.value !== null && field.value !== undefined && field.value !== '') {
-      const valueStr = String(field.value);
-      const snippet = extractRelevantSnippet(caption, valueStr);
       records.push({
         post_id: postId,
         field_name: field.name,
-        raw_text: snippet,
-        correct_value: valueStr,
-        ai_confidence: confidence,
+        ground_truth_value: String(field.value),
+        source: 'ai_high_confidence',
       });
     }
   }
@@ -149,7 +131,7 @@ export async function saveGroundTruth(
     if (error) {
       console.error('Failed to save ground truth:', error.message);
     } else {
-      console.log(`Saved ${records.length} ground truth records for post ${postId}`);
+      console.log(`[PatternTrainer] Saved ${records.length} ground truth records for post ${postId}`);
     }
   } catch (err) {
     console.error('Error saving ground truth:', err);
@@ -162,6 +144,13 @@ export async function saveGroundTruth(
  * - If regex matched AI → increment pattern success_count
  * - If regex was wrong → increment pattern failure_count
  * - If no pattern but AI found value → queue pattern suggestion
+ * 
+ * DB Schema for pattern_suggestions:
+ * - pattern_type: text
+ * - suggested_regex: text (required - use placeholder)
+ * - sample_text: text (NOT raw_text)
+ * - expected_value: text (NOT correct_value)
+ * - status: text (default 'pending')
  * 
  * @param postId Post ID
  * @param caption Raw caption text
@@ -180,7 +169,13 @@ export async function trainPatternsFromComparison(
     return;
   }
 
-  const patternSuggestions: PatternSuggestion[] = [];
+  const patternSuggestions: Array<{
+    pattern_type: string;
+    suggested_regex: string;
+    sample_text: string;
+    expected_value: string;
+    status: string;
+  }> = [];
   const patternUpdates: Array<{ patternId: string; success: boolean }> = [];
 
   // Define fields to analyze
@@ -211,8 +206,7 @@ export async function trainPatternsFromComparison(
         // Pattern matched AI result - success
         patternUpdates.push({ patternId, success: true });
       } else if (conflict) {
-        // Pattern conflicted with AI - check which one was "right"
-        // For training purposes, we trust AI with high confidence
+        // Pattern conflicted with AI - failure
         patternUpdates.push({ patternId, success: false });
       }
     } else if (source === 'ai' && finalValue !== null && finalValue !== undefined) {
@@ -223,8 +217,9 @@ export async function trainPatternsFromComparison(
       
       patternSuggestions.push({
         pattern_type: patternType,
-        raw_text: snippet,
-        correct_value: String(finalValue),
+        suggested_regex: 'NEEDS_GENERATION', // Placeholder - will be reviewed by admin
+        sample_text: snippet,
+        expected_value: String(finalValue),
         status: 'pending',
       });
     }
@@ -236,7 +231,7 @@ export async function trainPatternsFromComparison(
       // Increment success or failure count
       const column = update.success ? 'success_count' : 'failure_count';
       
-      // Use RPC for atomic increment, or fall back to read-update
+      // Fetch current counts
       const { data: pattern, error: fetchError } = await supabase
         .from('extraction_patterns')
         .select('success_count, failure_count')
@@ -278,7 +273,7 @@ export async function trainPatternsFromComparison(
       if (error) {
         console.error('Failed to queue pattern suggestions:', error.message);
       } else {
-        console.log(`Queued ${patternSuggestions.length} pattern suggestions for post ${postId}`);
+        console.log(`[PatternTrainer] Queued ${patternSuggestions.length} pattern suggestions for post ${postId}`);
       }
     } catch (err) {
       console.error('Error queuing pattern suggestions:', err);
@@ -290,7 +285,7 @@ export async function trainPatternsFromComparison(
   
   if (patternUpdates.length > 0 || patternSuggestions.length > 0) {
     console.log(
-      `Pattern training for ${postId}: ` +
+      `[PatternTrainer] Training for ${postId}: ` +
       `${successUpdates} successes, ${failureUpdates} failures, ` +
       `${patternSuggestions.length} suggestions`
     );

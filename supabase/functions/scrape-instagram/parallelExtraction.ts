@@ -368,8 +368,12 @@ export function mergeResults(
   return merged;
 }
 
+// Import pattern trainer functions
+import { saveGroundTruth, trainPatternsFromComparison } from './patternTrainer.ts';
+
 /**
  * Run both regex and AI extraction in parallel, then merge results
+ * Also triggers pattern training when AI confidence is high.
  * 
  * @param caption Post caption text
  * @param locationHint Instagram location tag
@@ -405,7 +409,18 @@ export async function extractInParallel(
   // Merge results
   const merged = mergeResults(regexResult, aiResult);
 
-  console.log(`Parallel extraction for ${postId}: source=${merged.overallSource}, conflicts=${merged.conflicts.length}`);
+  console.log(`[ParallelExtraction] ${postId}: source=${merged.overallSource}, conflicts=${merged.conflicts.length}`);
+
+  // PATTERN TRAINING: Save ground truth and train patterns from high-confidence AI results
+  // This runs asynchronously to not block extraction
+  if (aiResult && (merged.confidence ?? 0) >= 0.7) {
+    Promise.all([
+      saveGroundTruth(postId, caption, merged, supabase),
+      trainPatternsFromComparison(postId, caption, merged, supabase),
+    ]).catch(err => {
+      console.error(`[ParallelExtraction] Pattern training error for ${postId}:`, err);
+    });
+  }
 
   return merged;
 }
