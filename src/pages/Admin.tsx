@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square, Eraser } from "lucide-react";
 import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
@@ -51,6 +51,7 @@ const Admin = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -190,9 +191,51 @@ const Admin = () => {
     }
   };
 
+  const cleanupStuckScrapes = async () => {
+    try {
+      setIsCleaning(true);
+      
+      const { data, error } = await supabase.functions.invoke("cleanup-stuck-scrapes", {
+        body: { timeoutMinutes: 5 },
+      });
+
+      if (error) throw error;
+
+      if (data.cleaned > 0) {
+        toast({
+          title: "Cleanup Complete",
+          description: `Marked ${data.cleaned} stuck scrape(s) as failed`,
+        });
+      } else {
+        toast({
+          title: "No Stuck Scrapes",
+          description: "No stuck scrapes found to clean up",
+        });
+      }
+
+      fetchScrapeRuns();
+      return data;
+    } catch (error: any) {
+      toast({
+        title: "Cleanup Failed",
+        description: error.message || "Failed to cleanup stuck scrapes",
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   const triggerScraping = async (isDatasetImport: boolean = false) => {
     try {
       setIsScraping(true);
+      
+      // First, cleanup any stuck scrapes before starting a new one
+      console.log("[Admin] Cleaning up stuck scrapes before starting new scrape...");
+      await supabase.functions.invoke("cleanup-stuck-scrapes", {
+        body: { timeoutMinutes: 5 },
+      });
       
       const body = isDatasetImport && datasetId.trim() 
         ? { datasetId: datasetId.trim() } 
@@ -464,7 +507,7 @@ const Admin = () => {
                       <p className="text-xs text-red-600 mt-2">{lastRun.error_message}</p>
                     )}
                   </div>
-                  <div className="flex gap-2 w-full md:w-auto">
+                  <div className="flex gap-2 w-full md:w-auto flex-wrap">
                     {lastRun.status === 'running' && (
                       <Button 
                         variant="destructive" 
@@ -477,6 +520,16 @@ const Admin = () => {
                         {isStopping ? "Stopping..." : "Stop Scrape"}
                       </Button>
                     )}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={cleanupStuckScrapes}
+                      disabled={isCleaning}
+                      className="w-full md:w-auto"
+                    >
+                      <Eraser className="h-4 w-4 mr-2" />
+                      {isCleaning ? "Cleaning..." : "Cleanup Stuck"}
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => setShowHistory(!showHistory)} className="w-full md:w-auto">
                       {showHistory ? 'Hide' : 'View'} History
                     </Button>
