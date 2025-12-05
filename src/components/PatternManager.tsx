@@ -48,16 +48,32 @@ export const PatternManager = () => {
 
   const togglePatternMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("extraction_patterns")
         .update({ is_active: !isActive })
-        .eq("id", id);
+        .eq("id", id)
+        .select()
+        .single();
 
       if (error) throw error;
+      
+      if (!data) {
+        throw new Error("Failed to update pattern - no data returned");
+      }
+      
+      if (data.is_active === isActive) {
+        throw new Error("Pattern toggle failed - value unchanged");
+      }
+      
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["extraction-patterns"] });
-      toast.success("Pattern updated");
+      toast.success(`Pattern ${data.is_active ? 'enabled' : 'disabled'}`);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update pattern");
+      queryClient.invalidateQueries({ queryKey: ["extraction-patterns"] });
     },
   });
 
