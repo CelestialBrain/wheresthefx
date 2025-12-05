@@ -340,7 +340,9 @@ export function mergeResults(
   merged.locationAddress = mergeField('locationAddress', regexResult.locationAddress, aiResult.locationAddress, 'text');
   merged.signupUrl = mergeField('signupUrl', regexResult.signupUrl, aiResult.signupUrl, 'url');
   merged.price = mergeField('price', regexResult.price, aiResult.price, 'price');
-  merged.isFree = mergeField('isFree', regexResult.isFree, aiResult.isFree, 'text');
+  
+  // Handle isFree separately since it's a boolean (not in sources type)
+  merged.isFree = aiResult.isFree ?? regexResult.isFree ?? true;
 
   // Determine isEvent - prefer AI if it made a determination
   merged.isEvent = aiResult.isEvent ?? regexResult.isEvent ?? false;
