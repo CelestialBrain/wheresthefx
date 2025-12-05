@@ -8,8 +8,6 @@
     "test": "node test-connection.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
-    "@supabase/supabase-js": "^2.47.0",
-    "apify-client": "^2.9.0"
+    "@google/generative-ai": "^0.21.0"
   }
 }
