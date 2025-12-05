@@ -419,6 +419,44 @@ export type Database = {
           },
         ]
       }
+      extraction_ground_truth: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          field_name: string
+          ground_truth_value: string
+          id: string
+          post_id: string | null
+          source: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          field_name: string
+          ground_truth_value: string
+          id?: string
+          post_id?: string | null
+          source?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          field_name?: string
+          ground_truth_value?: string
+          id?: string
+          post_id?: string | null
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extraction_ground_truth_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       extraction_patterns: {
         Row: {
           confidence_score: number | null
@@ -919,6 +957,42 @@ export type Database = {
           ocr_confidence?: number | null
           ocr_text?: string | null
           use_count?: number | null
+        }
+        Relationships: []
+      }
+      pattern_suggestions: {
+        Row: {
+          created_at: string | null
+          expected_value: string | null
+          id: string
+          pattern_type: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          sample_text: string | null
+          status: string | null
+          suggested_regex: string
+        }
+        Insert: {
+          created_at?: string | null
+          expected_value?: string | null
+          id?: string
+          pattern_type: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sample_text?: string | null
+          status?: string | null
+          suggested_regex: string
+        }
+        Update: {
+          created_at?: string | null
+          expected_value?: string | null
+          id?: string
+          pattern_type?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sample_text?: string | null
+          status?: string | null
+          suggested_regex?: string
         }
         Relationships: []
       }
