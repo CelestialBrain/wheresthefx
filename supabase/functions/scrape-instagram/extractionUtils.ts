@@ -785,7 +785,8 @@ export async function extractTime(
   if (supabase) {
     // Create usage logger if ScraperLogger is provided
     const usageLogger = logger ? createPatternUsageLogger(logger) : undefined;
-    const learned = await extractWithLearnedPatterns(supabase, text, 'event_time', usageLogger);
+    // NOTE: Database stores patterns as 'time', not 'event_time'
+    const learned = await extractWithLearnedPatterns(supabase, text, 'time', usageLogger);
     if (learned.value) {
       // Validate the learned pattern result
       return validateAndCleanTimes(learned.value, null, learned.patternId);
@@ -982,7 +983,8 @@ export async function extractDate(
 ): Promise<{ eventDate: string | null; eventEndDate: string | null; patternId?: string | null }> {
   // Try learned patterns first if supabase client provided
   if (supabase) {
-    const learned = await extractWithLearnedPatterns(supabase, text, 'event_date');
+    // NOTE: Database stores patterns as 'date', not 'event_date'
+    const learned = await extractWithLearnedPatterns(supabase, text, 'date');
     if (learned.value) {
       return {
         eventDate: learned.value,
