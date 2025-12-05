@@ -819,6 +819,7 @@ Deno.serve(async (req) => {
       let eventsDetected = 0;
       let geocoded = 0;
       let withImages = 0;
+      let imagesStored = 0;
       const categoryBreakdown: Record<string, number> = {};
       const accountsProcessed = new Set<string>();
       
@@ -1031,6 +1032,66 @@ Deno.serve(async (req) => {
           
           // === END KNOWLEDGE BASE INTEGRATION ===
           
+          // === AUTO-DOWNLOAD IMAGE ===
+          let storedImageUrl: string | null = null;
+          const imageUrl = post.imageUrl;
+          
+          if (imageUrl) {
+            try {
+              await ingestLogger?.info('image', `Downloading image for ${post.postId}...`, { postId: post.postId });
+              
+              const imageResponse = await fetch(imageUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+              });
+              
+              if (imageResponse.ok) {
+                const imageBlob = await imageResponse.blob();
+                const arrayBuffer = await imageBlob.arrayBuffer();
+                
+                const fileName = `instagram-posts/${post.postId}.jpg`;
+                
+                const { error: uploadError } = await supabase.storage
+                  .from('event-images')
+                  .upload(fileName, arrayBuffer, {
+                    contentType: 'image/jpeg',
+                    upsert: true,
+                  });
+                
+                if (!uploadError) {
+                  const { data: urlData } = supabase.storage
+                    .from('event-images')
+                    .getPublicUrl(fileName);
+                  
+                  storedImageUrl = urlData.publicUrl;
+                  imagesStored++;
+                  
+                  await ingestLogger?.success('image', `Image stored: ${post.postId}`, {
+                    postId: post.postId,
+                    fileName,
+                  });
+                } else {
+                  await ingestLogger?.warn('image', `Upload failed: ${post.postId}`, {
+                    postId: post.postId,
+                    error: uploadError.message,
+                  });
+                }
+              } else {
+                await ingestLogger?.warn('image', `Download failed (HTTP ${imageResponse.status}): ${post.postId}`, {
+                  postId: post.postId,
+                  status: imageResponse.status,
+                });
+              }
+            } catch (imgError) {
+              await ingestLogger?.warn('image', `Image error: ${post.postId}`, {
+                postId: post.postId,
+                error: imgError instanceof Error ? imgError.message : 'Unknown error',
+              });
+            }
+          }
+          // === END AUTO-DOWNLOAD IMAGE ===
+          
           // Upsert the post with enriched data
           const { error } = await supabase.from('instagram_posts').upsert({
             post_id: post.postId,
@@ -1038,6 +1099,7 @@ Deno.serve(async (req) => {
             instagram_account_id: accountId,
             caption: post.caption,
             image_url: post.imageUrl,
+            stored_image_url: storedImageUrl,
             posted_at: post.timestamp || new Date().toISOString(),
             location_name: canonicalVenue,
             location_address: post.aiExtraction?.venueAddress,
@@ -1090,6 +1152,7 @@ Deno.serve(async (req) => {
         eventsDetected,
         geocoded,
         withImages,
+        imagesStored,
         accountsProcessed: accountsProcessed.size,
         categoryBreakdown,
       };
@@ -1109,7 +1172,7 @@ Deno.serve(async (req) => {
         }).eq('id', ingestRunId);
       }
       
-      console.log(`[GH-INGEST] Complete: ${saved} saved, ${failed} failed, ${eventsDetected} events, ${geocoded} geocoded`);
+      console.log(`[GH-INGEST] Complete: ${saved} saved, ${failed} failed, ${eventsDetected} events, ${geocoded} geocoded, ${imagesStored} images stored`);
       
       return new Response(JSON.stringify({ 
         success: true, 
@@ -1119,6 +1182,7 @@ Deno.serve(async (req) => {
         eventsDetected,
         geocoded,
         withImages,
+        imagesStored,
         accountsProcessed: accountsProcessed.size,
         categoryBreakdown,
         runId: ingestRunId,
