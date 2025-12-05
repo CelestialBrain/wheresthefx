@@ -788,10 +788,39 @@ Deno.serve(async (req) => {
         });
       }
 
-      console.log(`Ingesting batch of ${body.posts.length} posts from GitHub Actions`);
+      console.log(`[GH-INGEST] Starting batch ingest of ${body.posts.length} posts from GitHub Actions`);
+      
+      // Create scrape_run record for tracking
+      const { data: ingestRun, error: runError } = await supabase
+        .from('scrape_runs')
+        .insert({
+          run_type: 'github_actions_ingest',
+          status: 'running',
+          dataset_id: body.datasetId || null,
+        })
+        .select()
+        .single();
+      
+      const ingestRunId = ingestRun?.id;
+      if (runError) {
+        console.error('[GH-INGEST] Failed to create scrape_run:', runError);
+      }
+      
+      // Initialize logger for ingest
+      const ingestLogger = ingestRunId ? new ScraperLogger(supabase, ingestRunId) : null;
+      
+      await ingestLogger?.info('fetch', `GitHub Actions ingest started`, { 
+        totalPosts: body.posts.length,
+        datasetId: body.datasetId || 'unknown',
+      });
       
       let saved = 0;
       let failed = 0;
+      let eventsDetected = 0;
+      let geocoded = 0;
+      let withImages = 0;
+      const categoryBreakdown: Record<string, number> = {};
+      const accountsProcessed = new Set<string>();
       
       interface IngestPost {
         postId: string;
@@ -819,6 +848,34 @@ Deno.serve(async (req) => {
 
       for (const post of body.posts as IngestPost[]) {
         try {
+          if (post.ownerUsername) {
+            accountsProcessed.add(post.ownerUsername.toLowerCase());
+          }
+          
+          // Log AI extraction data
+          await ingestLogger?.log({
+            post_id: post.postId,
+            log_level: 'info',
+            stage: 'extraction',
+            message: `AI extraction: ${post.aiExtraction?.isEvent ? 'EVENT' : 'NOT_EVENT'}`,
+            data: {
+              eventTitle: post.aiExtraction?.eventTitle || null,
+              eventDate: post.aiExtraction?.eventDate || null,
+              eventTime: post.aiExtraction?.eventTime || null,
+              venueName: post.aiExtraction?.venueName || null,
+              category: post.aiExtraction?.category || null,
+              confidence: post.aiExtraction?.confidence || null,
+              ocrTextPreview: post.aiExtraction?.ocrText?.substring(0, 200) || null,
+            },
+          });
+          
+          if (post.aiExtraction?.isEvent) eventsDetected++;
+          if (post.imageUrl) withImages++;
+          
+          // Track category
+          const postCategory = post.aiExtraction?.category || 'other';
+          categoryBreakdown[postCategory] = (categoryBreakdown[postCategory] || 0) + 1;
+          
           // Get or create Instagram account
           let accountId: string | null = null;
           let defaultCategory: string | null = null;
@@ -847,6 +904,7 @@ Deno.serve(async (req) => {
               
               if (newAccount) {
                 accountId = newAccount.id;
+                await ingestLogger?.info('save', `Created new account: @${post.ownerUsername}`, { postId: post.postId });
               }
             }
           }
@@ -861,6 +919,7 @@ Deno.serve(async (req) => {
           let canonicalVenue: string | null = rawVenueName || null;
           let locationLat: number | null = null;
           let locationLng: number | null = null;
+          let geocodeSource: string | null = null;
           
           if (rawVenueName) {
             // 2. Canonicalize venue name (apply aliases, clean up)
@@ -876,22 +935,37 @@ Deno.serve(async (req) => {
             if (cachedVenue) {
               locationLat = cachedVenue.lat;
               locationLng = cachedVenue.lng;
-              console.log(`  📍 NCR cache hit: ${searchName} → (${locationLat}, ${locationLng})`);
+              geocodeSource = 'ncr_cache_exact';
+              
+              await ingestLogger?.success('geocache', `NCR cache hit (exact): ${searchName}`, {
+                postId: post.postId,
+                venue: rawVenueName,
+                lat: cachedVenue.lat,
+                lng: cachedVenue.lng,
+                city: cachedVenue.city,
+              });
             } else {
               // 4. Try fuzzy match in NCR cache
               const fuzzyMatch = fuzzyMatchVenue(searchName, 0.7);
               if (fuzzyMatch) {
                 locationLat = fuzzyMatch.lat;
                 locationLng = fuzzyMatch.lng;
-                console.log(`  📍 NCR fuzzy match: ${searchName} → ${fuzzyMatch.matchedName}`);
+                geocodeSource = 'ncr_cache_fuzzy';
+                
+                await ingestLogger?.success('geocache', `NCR cache hit (fuzzy): ${searchName} → ${fuzzyMatch.matchedName}`, {
+                  postId: post.postId,
+                  venue: rawVenueName,
+                  matchedName: fuzzyMatch.matchedName,
+                  lat: fuzzyMatch.lat,
+                  lng: fuzzyMatch.lng,
+                  city: fuzzyMatch.city,
+                });
               }
             }
             
             // 5. If still no coordinates, check known_venues table
-            // Note: Fetches all venues (small table) for flexible matching - same pattern as dataset import mode
             if (!locationLat && canonicalVenue) {
               try {
-                // Remove SQL wildcard chars to prevent injection when building search term
                 const searchTerm = canonicalVenue.toLowerCase().replace(/[%_]/g, '');
                 const { data: venues } = await supabase
                   .from('known_venues')
@@ -922,15 +996,38 @@ Deno.serve(async (req) => {
                   if (matchedVenue?.lat && matchedVenue?.lng) {
                     locationLat = matchedVenue.lat;
                     locationLng = matchedVenue.lng;
-                    canonicalVenue = matchedVenue.name; // Use canonical name from DB
-                    console.log(`  📍 Known venue match: ${searchName} → ${matchedVenue.name}`);
+                    canonicalVenue = matchedVenue.name;
+                    geocodeSource = 'known_venues_db';
+                    
+                    await ingestLogger?.success('geocache', `Known venue match: ${searchName} → ${matchedVenue.name}`, {
+                      postId: post.postId,
+                      venue: rawVenueName,
+                      matchedName: matchedVenue.name,
+                      lat: matchedVenue.lat,
+                      lng: matchedVenue.lng,
+                      city: matchedVenue.city,
+                    });
                   }
                 }
               } catch (dbError) {
-                console.error(`  ⚠️ Known venues lookup failed:`, dbError);
+                await ingestLogger?.warn('geocache', `Known venues lookup failed`, {
+                  postId: post.postId,
+                  venue: rawVenueName,
+                  error: dbError instanceof Error ? dbError.message : 'Unknown error',
+                });
               }
             }
+            
+            // Log if no geocode match found
+            if (!locationLat && rawVenueName) {
+              await ingestLogger?.warn('geocache', `No venue match found: ${rawVenueName}`, {
+                postId: post.postId,
+                searchedVenue: canonicalVenue || rawVenueName,
+              });
+            }
           }
+          
+          if (locationLat && locationLng) geocoded++;
           
           // === END KNOWLEDGE BASE INTEGRATION ===
           
@@ -942,10 +1039,10 @@ Deno.serve(async (req) => {
             caption: post.caption,
             image_url: post.imageUrl,
             posted_at: post.timestamp || new Date().toISOString(),
-            location_name: canonicalVenue,  // Use canonicalized name
+            location_name: canonicalVenue,
             location_address: post.aiExtraction?.venueAddress,
-            location_lat: locationLat,      // From geocache/known_venues
-            location_lng: locationLng,      // From geocache/known_venues
+            location_lat: locationLat,
+            location_lng: locationLng,
             is_event: post.aiExtraction?.isEvent || false,
             event_title: post.aiExtraction?.eventTitle,
             event_date: post.aiExtraction?.eventDate,
@@ -962,22 +1059,69 @@ Deno.serve(async (req) => {
           }, { onConflict: 'post_id' });
           
           if (error) {
-            console.error(`Failed to save ${post.postId}:`, error.message);
+            await ingestLogger?.error('save', `Failed to save post ${post.postId}`, { postId: post.postId }, { 
+              error: error.message,
+              code: error.code,
+            });
             failed++;
           } else {
+            await ingestLogger?.success('save', `Saved post ${post.postId}`, {
+              postId: post.postId,
+              isEvent: post.aiExtraction?.isEvent || false,
+              hasCoordinates: !!(locationLat && locationLng),
+              geocodeSource,
+              category,
+            });
             saved++;
           }
         } catch (err) {
-          console.error(`Error processing ${post.postId}:`, err);
+          await ingestLogger?.error('save', `Error processing ${post.postId}`, { postId: post.postId }, {
+            error: err instanceof Error ? err.message : 'Unknown error',
+          });
           failed++;
         }
       }
+      
+      // Log summary
+      const summary = {
+        total: body.posts.length,
+        saved,
+        failed,
+        eventsDetected,
+        geocoded,
+        withImages,
+        accountsProcessed: accountsProcessed.size,
+        categoryBreakdown,
+      };
+      
+      await ingestLogger?.success('fetch', `GitHub Actions ingest complete`, summary);
+      await ingestLogger?.close();
+      
+      // Update scrape_run record
+      if (ingestRunId) {
+        await supabase.from('scrape_runs').update({
+          status: failed === body.posts.length ? 'failed' : 'completed',
+          posts_added: saved,
+          posts_updated: 0,
+          accounts_found: accountsProcessed.size,
+          completed_at: new Date().toISOString(),
+          error_message: failed > 0 ? `${failed} posts failed to save` : null,
+        }).eq('id', ingestRunId);
+      }
+      
+      console.log(`[GH-INGEST] Complete: ${saved} saved, ${failed} failed, ${eventsDetected} events, ${geocoded} geocoded`);
       
       return new Response(JSON.stringify({ 
         success: true, 
         saved, 
         failed,
-        total: body.posts.length 
+        total: body.posts.length,
+        eventsDetected,
+        geocoded,
+        withImages,
+        accountsProcessed: accountsProcessed.size,
+        categoryBreakdown,
+        runId: ingestRunId,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
