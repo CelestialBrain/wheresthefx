@@ -1,27 +1,28 @@
-import { ApifyClient } from 'apify-client';
 import fs from 'fs';
 import path from 'path';
 
-const APIFY_API_KEY = process.env.APIFY_API_KEY;
-const datasetId = process.argv[2];
+const datasetUrl = process.argv[2];
 
-if (!datasetId) {
-  console.error('❌ Dataset ID required');
-  process.exit(1);
-}
-
-if (!APIFY_API_KEY) {
-  console.error('❌ APIFY_API_KEY not set');
+if (!datasetUrl) {
+  console.error('❌ Dataset URL required');
+  console.error('Usage: node fetch-dataset.js <dataset_url>');
+  console.error('Example: node fetch-dataset.js "https://api.apify.com/v2/datasets/ABC123/items?format=json"');
   process.exit(1);
 }
 
 async function main() {
-  console.log(`📥 Fetching dataset: ${datasetId}`);
+  console.log(`📥 Fetching dataset from URL: ${datasetUrl}`);
   
-  const client = new ApifyClient({ token: APIFY_API_KEY });
-  const dataset = client.dataset(datasetId);
+  const response = await fetch(datasetUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
+  }
   
-  const { items } = await dataset.listItems();
+  const items = await response.json();
+  
+  if (!Array.isArray(items)) {
+    throw new Error('Dataset did not return an array');
+  }
   
   console.log(`✅ Fetched ${items.length} posts`);
   
@@ -35,7 +36,7 @@ async function main() {
   
   const metaPath = path.join(dataDir, 'metadata.json');
   fs.writeFileSync(metaPath, JSON.stringify({
-    datasetId,
+    datasetUrl,
     totalPosts: items.length,
     fetchedAt: new Date().toISOString(),
   }, null, 2));
