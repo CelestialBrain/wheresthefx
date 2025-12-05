@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square, Eraser } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Instagram, ClipboardList, MapPin, FolderKanban, Eye, TrendingUp, Database, Square, Eraser, Github, ExternalLink, AlertCircle } from "lucide-react";
 import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
 import { PublishedEventsManager } from "@/components/PublishedEventsManager";
 import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
@@ -471,6 +471,53 @@ const Admin = () => {
                 </Button>
               </div>
             </CardHeader>
+          </Card>
+
+          {/* GitHub Actions Scraper */}
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Github className="w-5 h-5" />
+                <h3 className="font-semibold text-base md:text-lg">GitHub Actions Scraper</h3>
+                <Badge variant="secondary">For Large Datasets</Badge>
+              </div>
+              <p className="text-xs md:text-sm text-muted-foreground">
+                Process 300+ posts without timeout using Gemini Vision OCR
+              </p>
+            </CardHeader>
+            <CardContent className="p-4 md:p-6 pt-0 space-y-4">
+              <div className="bg-muted p-4 rounded-lg space-y-3">
+                <p className="text-sm font-medium">How to use:</p>
+                <ol className="text-sm space-y-2 list-decimal list-inside text-muted-foreground">
+                  <li>Run your Apify Instagram scrape</li>
+                  <li>Copy the <strong>dataset URL</strong></li>
+                  <li>Click the button below to open GitHub Actions</li>
+                  <li>Click "Run workflow" → Paste URL → Run</li>
+                  <li>Wait 30-60 minutes for processing</li>
+                </ol>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button asChild>
+                  <a 
+                    href="https://github.com/CelestialBrain/wheresthefx/actions/workflows/process-scrape.yml" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Github className="w-4 h-4 mr-2" />
+                    Run GitHub Actions
+                    <ExternalLink className="w-3 h-3 ml-2" />
+                  </a>
+                </Button>
+              </div>
+              
+              <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  <strong>Tip:</strong> Use this for datasets with 15+ posts. The regular scraper times out on large datasets.
+                </p>
+              </div>
+            </CardContent>
           </Card>
           
           {/* Last Scrape Status */}

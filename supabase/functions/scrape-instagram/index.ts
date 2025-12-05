@@ -727,19 +727,20 @@ Deno.serve(async (req) => {
 
     // Constant-time comparison to prevent timing attacks
     const safeCompare = (a: string, b: string): boolean => {
-      // For security, we always perform a comparison even if lengths differ
-      // This prevents timing attacks based on length checking
+      // Constant-time comparison to prevent timing attacks
       const aBytes = new TextEncoder().encode(a);
       const bBytes = new TextEncoder().encode(b);
       
-      // If lengths differ, compare 'a' against itself to take constant time,
-      // then return false. This prevents length-based timing leaks.
       if (aBytes.length !== bBytes.length) {
-        crypto.subtle.timingSafeEqual(aBytes, aBytes);
         return false;
       }
       
-      return crypto.subtle.timingSafeEqual(aBytes, bBytes);
+      // XOR all bytes and accumulate differences
+      let result = 0;
+      for (let i = 0; i < aBytes.length; i++) {
+        result |= aBytes[i] ^ bBytes[i];
+      }
+      return result === 0;
     };
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -805,6 +806,7 @@ Deno.serve(async (req) => {
           eventTitle?: string;
           eventDate?: string;
           eventTime?: string;
+          endTime?: string;
           venueName?: string;
           venueAddress?: string;
           price?: number;
@@ -855,17 +857,18 @@ Deno.serve(async (req) => {
           // Upsert the post
           const { error } = await supabase.from('instagram_posts').upsert({
             post_id: post.postId,
-            short_code: post.shortCode,
+            post_url: `https://www.instagram.com/p/${post.shortCode || post.postId}/`,
             instagram_account_id: accountId,
             caption: post.caption,
             image_url: post.imageUrl,
-            posted_at: post.timestamp,
+            posted_at: post.timestamp || new Date().toISOString(),
             location_name: post.locationName || post.aiExtraction?.venueName,
             location_address: post.aiExtraction?.venueAddress,
             is_event: post.aiExtraction?.isEvent || false,
             event_title: post.aiExtraction?.eventTitle,
             event_date: post.aiExtraction?.eventDate,
             event_time: post.aiExtraction?.eventTime,
+            end_time: post.aiExtraction?.endTime,
             price: post.aiExtraction?.price || 0,
             is_free: post.aiExtraction?.isFree ?? true,
             category: category,

@@ -48,7 +48,17 @@ interface Post {
   needs_review: boolean;
   is_event: boolean;
   instagram_account: { username: string } | null;
+  extraction_method: string | null;
 }
+
+const extractionMethodLabels: Record<string, { label: string; icon: string }> = {
+  'regex': { label: 'Regex', icon: '⚡' },
+  'ai': { label: 'AI', icon: '🤖' },
+  'ai_corrected': { label: 'AI Fixed', icon: '🔧' },
+  'ocr_ai': { label: 'OCR+AI', icon: '👁️' },
+  'vision': { label: 'Vision', icon: '📷' },
+  'github_actions_gemini_vision': { label: 'GitHub', icon: '🐙' },
+};
 
 const ITEMS_PER_PAGE = 20;
 
@@ -356,6 +366,11 @@ export function ConsolidatedReviewQueue() {
                               <PriorityBadge priority={post.priority} />
                               {post.instagram_account && (
                                 <Badge variant="outline" className="text-xs">@{post.instagram_account.username}</Badge>
+                              )}
+                              {post.extraction_method && extractionMethodLabels[post.extraction_method] && (
+                                <Badge variant="outline" className="text-xs">
+                                  {extractionMethodLabels[post.extraction_method].icon} {extractionMethodLabels[post.extraction_method].label}
+                                </Badge>
                               )}
                             </div>
                           </div>
