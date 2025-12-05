@@ -23,6 +23,9 @@ import {
   VENUE_ALIASES,
   // isEvent classification helpers
   hasTemporalEventIndicators,
+  // Recurring schedule detection
+  isRecurringSchedulePost,
+  hasExplicitDate,
 } from "./extractionUtils.ts";
 
 // ============================================================
@@ -723,4 +726,96 @@ Deno.test("Location cleanup - should handle real world messy location", () => {
   assertEquals(cleaned!.includes("December"), false);
   assertEquals(cleaned!.includes("am"), false);
   assertEquals(cleaned!.includes("pm"), false);
+});
+
+// ============================================================
+// RECURRING SCHEDULE DETECTION TESTS
+// ============================================================
+
+Deno.test("hasExplicitDate - should detect month + day patterns", () => {
+  // Full month names
+  assertEquals(hasExplicitDate("Join us December 5"), true);
+  assertEquals(hasExplicitDate("Event on January 10th"), true);
+  assertEquals(hasExplicitDate("March 15, 2025"), true);
+  
+  // Abbreviated month names
+  assertEquals(hasExplicitDate("Dec 5"), true);
+  assertEquals(hasExplicitDate("Jan 10th"), true);
+  assertEquals(hasExplicitDate("Nov. 29"), true);
+  
+  // Day + month order
+  assertEquals(hasExplicitDate("5 December"), true);
+  assertEquals(hasExplicitDate("10th January"), true);
+});
+
+Deno.test("hasExplicitDate - should detect numeric date patterns", () => {
+  assertEquals(hasExplicitDate("Event on 12/25"), true);
+  assertEquals(hasExplicitDate("Date: 12-25-2025"), true);
+  assertEquals(hasExplicitDate("ISO: 2025-01-15"), true);
+});
+
+Deno.test("hasExplicitDate - should NOT detect without explicit date", () => {
+  assertEquals(hasExplicitDate("Every Friday"), false);
+  assertEquals(hasExplicitDate("Open daily"), false);
+  assertEquals(hasExplicitDate("Mon to Sat"), false);
+  assertEquals(hasExplicitDate("Weekly event"), false);
+  assertEquals(hasExplicitDate("Tonight at the venue"), false);
+  // Should NOT match time formats
+  assertEquals(hasExplicitDate("Event at 6:30"), false);
+  assertEquals(hasExplicitDate("Doors open 8:00pm"), false);
+  assertEquals(hasExplicitDate("Show starts 9:45"), false);
+});
+
+Deno.test("isRecurringSchedulePost - should detect venue operating hours", () => {
+  // Day range patterns (operating hours)
+  assertEquals(isRecurringSchedulePost("6PM — Tues to Sat"), true);
+  assertEquals(isRecurringSchedulePost("Open Mon-Fri 9am-5pm"), true);
+  assertEquals(isRecurringSchedulePost("Serving Mon to Sun"), true);
+  
+  // "Every [day]" without specific date
+  assertEquals(isRecurringSchedulePost("Every Friday we have live music"), true);
+  assertEquals(isRecurringSchedulePost("Every Saturday night"), true);
+  assertEquals(isRecurringSchedulePost("Every weekend at the bar"), true);
+  
+  // Daily/open patterns
+  assertEquals(isRecurringSchedulePost("Open daily 10AM-10PM"), true);
+  assertEquals(isRecurringSchedulePost("Open everyday for brunch"), true);
+  
+  // Weekly recurring
+  assertEquals(isRecurringSchedulePost("Weekly DJ nights"), true);
+});
+
+Deno.test("isRecurringSchedulePost - should NOT flag one-time events with dates", () => {
+  // Has recurring language BUT also has specific date = one-time event
+  assertEquals(isRecurringSchedulePost("Every Friday! Join us December 5th"), false);
+  assertEquals(isRecurringSchedulePost("Weekly special on Jan 10"), false);
+  assertEquals(isRecurringSchedulePost("Open Mon-Sat, Grand Opening Dec 15"), false);
+});
+
+Deno.test("isRecurringSchedulePost - should NOT flag regular events", () => {
+  // Normal event posts without recurring patterns
+  assertEquals(isRecurringSchedulePost("Join us tonight for live music!"), false);
+  assertEquals(isRecurringSchedulePost("Party this Saturday at 9pm"), false);
+  assertEquals(isRecurringSchedulePost("Concert Dec 5 at the venue"), false);
+  assertEquals(isRecurringSchedulePost("Market happening Nov 29-30"), false);
+});
+
+Deno.test("isRecurringSchedulePost - real world examples from problem statement", () => {
+  // Example from problem statement: venue operating hours (NOT an event)
+  const radiusCaption = "Be in the loop, only at Radius Katipunan. 📌 3F / 318 Katipunan Avenue, Quezon City 💃🏼 6PM — Tues to Sat";
+  assertEquals(isRecurringSchedulePost(radiusCaption), true);
+  
+  // One-time event with "tomorrow" is NOT recurring
+  const reverbCaption = "Tomorrow night, Reverb is taking over the Red Room";
+  assertEquals(isRecurringSchedulePost(reverbCaption), false);
+});
+
+Deno.test("isRecurringSchedulePost - edge cases", () => {
+  // Empty or minimal text
+  assertEquals(isRecurringSchedulePost(""), false);
+  assertEquals(isRecurringSchedulePost("Party!"), false);
+  
+  // Just day names without recurring context
+  assertEquals(isRecurringSchedulePost("See you Saturday"), false);
+  assertEquals(isRecurringSchedulePost("Friday night special"), false);
 });

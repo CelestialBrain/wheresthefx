@@ -497,6 +497,81 @@ export function isVendorPost(text: string): boolean {
   return isVendorPostStrict(text);
 }
 
+// ============================================================
+// RECURRING SCHEDULE DETECTION
+// ============================================================
+
+/**
+ * Patterns that indicate recurring/repeating schedules (NOT one-time events)
+ * These indicate operating hours or weekly recurring activities
+ */
+const recurringPatterns = [
+  // Day range patterns: "Mon-Sat", "Tues to Sun", "Mon — Fri"
+  /\b(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)(day)?\s*[-–—to]+\s*(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)(day)?\b/i,
+  // "Every [day]" without specific date: "Every Friday night", "Every weekend"
+  /\bevery\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|day|weekend|night)\b/i,
+  // Open daily/everyday patterns
+  /\bopen\s+(daily|everyday|24\/7)\b/i,
+  // Weekly recurring
+  /\bweekly\b/i,
+  // Operating hours with day range: "6PM — Tues to Sat" (time followed by day range)
+  /\b\d{1,2}\s*(am|pm)\s*[-–—]\s*(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)(day)?\s*(to|[-–—])\s*(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)(day)?\b/i,
+];
+
+/**
+ * Check if text contains an explicit date (not relative)
+ * e.g., "Dec 5", "January 10", "12/25", "2025-01-15"
+ */
+export function hasExplicitDate(text: string): boolean {
+  // Month + Day patterns: "Dec 5", "January 10th", "5 December"
+  const monthDayPattern = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\s*\.?\s*\d{1,2}(?:st|nd|rd|th)?/i;
+  const dayMonthPattern = /\b\d{1,2}(?:st|nd|rd|th)?\s+(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)/i;
+  
+  // Numeric date patterns with month validation (1-12 for month, 1-31 for day)
+  // Matches: "12/25", "12-25-2025", "1/5", but not times like "6:30"
+  // Requires the first number to be 1-12 (month) and second to be 1-31 (day)
+  const numericDatePattern = /\b(0?[1-9]|1[0-2])[/-](0?[1-9]|[12]\d|3[01])([/-]\d{2,4})?\b/;
+  
+  // ISO format: "2025-01-15"
+  const isoPattern = /\b\d{4}-\d{2}-\d{2}\b/;
+  
+  return monthDayPattern.test(text) || 
+         dayMonthPattern.test(text) || 
+         numericDatePattern.test(text) || 
+         isoPattern.test(text);
+}
+
+/**
+ * Detect posts that describe recurring schedules or venue operating hours
+ * These are NOT events - they describe regular business operations
+ * 
+ * Examples:
+ * - "6PM — Tues to Sat" → recurring hours, NOT an event
+ * - "Every Friday we have live music" → recurring, no specific date
+ * - "Open daily 10AM-10PM" → operating hours
+ * - "Visit us at our new location" → promo, not event
+ * 
+ * Returns true if the text looks like recurring schedule/promo (should NOT be classified as event)
+ */
+export function isRecurringSchedulePost(text: string): boolean {
+  // Check for recurring patterns
+  const hasRecurringPattern = recurringPatterns.some(p => p.test(text));
+  
+  // If no recurring pattern found, it's not a recurring schedule post
+  if (!hasRecurringPattern) {
+    return false;
+  }
+  
+  // Check if there's also a specific date mentioned
+  // If there IS a specific date, this might be a one-time event despite recurring language
+  const hasSpecificDate = hasExplicitDate(text);
+  
+  // It's a recurring schedule post if:
+  // - Has recurring patterns (e.g., "Tues to Sat", "Every Friday")
+  // - AND does NOT have a specific date (e.g., "Dec 5", "January 10")
+  return hasRecurringPattern && !hasSpecificDate;
+}
+
 /**
  * Creates a PatternUsageLogger that logs to a ScraperLogger.
  * Used to hook learned-pattern activity into the scraper_logs table.

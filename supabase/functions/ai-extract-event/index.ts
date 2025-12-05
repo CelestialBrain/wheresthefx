@@ -198,12 +198,36 @@ VENUE/LOCATION:
 - Handle Instagram handles: "@radius_katipunan" → "Radius Katipunan"
 - Split venue and address when possible
 
+VENUE EXTRACTION PRIORITY:
+1. Physical address from image text (e.g., "5857 Alfonso, Poblacion, Makati")
+2. Venue/establishment name from image (e.g., "Red Room", "Radius")
+3. 📍 or 📌 emoji followed by location name
+4. "at [Place Name]" or "sa [Place Name]" patterns
+5. Instagram location tag if provided
+
+DO NOT use as venue:
+- @mentions - these are usually artists, DJs, or other accounts
+- Generic words after "with" or "featuring" - these are performers
+- Account username of the post
+
 PRICE FORMATS TO RECOGNIZE:
 - "₱500", "P500", "Php500", "PHP 500" → 500
 - "500 pesos", "500php" → 500
 - "₱300-500" or "₱300 to ₱500" → 300 (use minimum/presale)
 - "₱300 presale / ₱500 door" → 300 (use presale price)
 - "FREE", "LIBRE", "Walang bayad", "No cover" → isFree: true, price: null
+
+NOT AN EVENT - Set isEvent: false if:
+- Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
+- Says "Every [day]" without a specific date: "Every Friday night"
+- Generic promo language with no specific date: "Visit us", "Come check out", "Be in the loop"
+- Has day range schedule (Mon-Sat, Tues to Sun) but no specific event date
+- Describes regular venue operations, not a unique event
+
+Examples of NOT events:
+- "Open 6PM — Tues to Sat" → recurring hours, NOT an event
+- "Every Friday we have live music" → recurring, no specific date
+- "Visit us at our new location" → promo, not event
 
 FILIPINO DATE/TIME WORDS:
 - Date: "bukas" = tomorrow, "mamaya" = later today, "ngayon" = today
@@ -436,10 +460,34 @@ LOCATION EXTRACTION:
 - "@radius_katipunan" → "Radius Katipunan"
 - Split: "Xin Chào - 4344 Valdez St." → locationName: "Xin Chào", locationAddress: "4344 Valdez St."
 
+VENUE EXTRACTION PRIORITY:
+1. Physical address (e.g., "5857 Alfonso, Poblacion, Makati")
+2. Venue/establishment name (e.g., "Red Room", "Radius")
+3. 📍 or 📌 emoji followed by location name
+4. "at [Place Name]" or "sa [Place Name]" patterns
+5. Instagram location tag if provided
+
+DO NOT use as venue:
+- @mentions - these are usually artists, DJs, or other accounts
+- Generic words after "with" or "featuring" - these are performers
+- Account username of the post
+
 PRICE FORMATS:
 - "₱500", "P500", "Php500", "PHP 500" → 500
 - "₱300-500" → 300 (use minimum/presale)
 - "FREE", "LIBRE", "Walang bayad" → isFree: true, price: null
+
+NOT AN EVENT - Set isEvent: false if:
+- Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
+- Says "Every [day]" without a specific date: "Every Friday night"
+- Generic promo language with no specific date: "Visit us", "Come check out", "Be in the loop"
+- Has day range schedule (Mon-Sat, Tues to Sun) but no specific event date
+- Describes regular venue operations, not a unique event
+
+Examples of NOT events:
+- "Open 6PM — Tues to Sat" → recurring hours, NOT an event
+- "Every Friday we have live music" → recurring, no specific date
+- "Visit us at our new location" → promo, not event
 
 FILIPINO LANGUAGE:
 - Date: "bukas"=tomorrow, "mamaya"=later today, "ngayon"=today
@@ -571,10 +619,34 @@ LOCATION EXTRACTION:
 - STOP extraction at: dates, times, hashtags, sponsor text, @mentions
 - "@radius_katipunan" → "Radius Katipunan"
 
+VENUE EXTRACTION PRIORITY:
+1. Physical address from image text (e.g., "5857 Alfonso, Poblacion, Makati")
+2. Venue/establishment name from image (e.g., "Red Room", "Radius")
+3. 📍 or 📌 emoji followed by location name
+4. "at [Place Name]" or "sa [Place Name]" patterns
+5. Instagram location tag if provided
+
+DO NOT use as venue:
+- @mentions - these are usually artists, DJs, or other accounts
+- Generic words after "with" or "featuring" - these are performers
+- Account username of the post
+
 PRICE FORMATS:
 - "₱500", "P500", "Php500", "PHP 500" → 500
 - "₱300-500" → 300 (use minimum/presale)
 - "FREE", "LIBRE", "Walang bayad" → isFree: true, price: null
+
+NOT AN EVENT - Set isEvent: false if:
+- Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
+- Says "Every [day]" without a specific date: "Every Friday night"
+- Generic promo language with no specific date: "Visit us", "Come check out", "Be in the loop"
+- Has day range schedule (Mon-Sat, Tues to Sun) but no specific event date
+- Describes regular venue operations, not a unique event
+
+Examples of NOT events:
+- "Open 6PM — Tues to Sat" → recurring hours, NOT an event
+- "Every Friday we have live music" → recurring, no specific date
+- "Visit us at our new location" → promo, not event
 
 FILIPINO LANGUAGE:
 - Date: "bukas"=tomorrow, "mamaya"=later today, "ngayon"=today
