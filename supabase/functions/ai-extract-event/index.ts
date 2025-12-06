@@ -383,6 +383,27 @@ function buildExtractionPrompt(
 TODAY'S DATE: ${today}
 ${postDate ? `POST TIMESTAMP: ${postDate}` : ''}
 
+CRITICAL VALIDATION RULES:
+1. eventDate MUST be on or after today (${today})
+2. eventDate MUST be within 6 months of today  
+3. eventDate year MUST be ${currentYear} or ${currentYear + 1}
+4. If you see past dates, check if it's a recurring event - calculate the NEXT occurrence
+5. DO NOT extract phone numbers as prices (e.g., 09171234567 is NOT a price)
+6. DO NOT extract years as times (e.g., 2025 is NOT a time)
+7. Prices in Philippines are typically ₱100-₱5000 for events
+
+CONFIDENCE GUIDELINES:
+- Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible
+- Set confidence 0.7-0.89 if most fields are clear but some are inferred
+- Set confidence 0.5-0.69 if you're making educated guesses
+- Set confidence < 0.5 if you're very uncertain
+
+COMMON MISTAKES TO AVOID:
+- "@photographer_name" is NOT a venue - it's a credit/mention
+- "DM for reservations" numbers are NOT prices
+- Sponsor logos/handles are NOT venue names
+- "Every Saturday" means recurring - extract the NEXT Saturday from ${today}
+
 CAPTION TO ANALYZE:
 """
 ${cleanedCaption}

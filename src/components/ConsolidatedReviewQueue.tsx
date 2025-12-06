@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { AlertCircle, Loader, CheckCircle, Trash, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertCircle, Loader, CheckCircle, Trash, ChevronLeft, ChevronRight, CheckCheck, AlertTriangle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { PostWithEventEditor } from "./PostWithEventEditor";
 import { ClientOCRProcessor } from "./ClientOCRProcessor";
@@ -19,7 +19,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -39,6 +38,8 @@ interface Post {
   end_time: string | null;
   location_name: string | null;
   location_address: string | null;
+  location_lat: number | null;
+  location_lng: number | null;
   price: number | null;
   is_free: boolean;
   signup_url: string | null;
@@ -51,6 +52,10 @@ interface Post {
   instagram_account: { username: string } | null;
   extraction_method: string | null;
   category: string | null;
+  ai_confidence: number | null;
+  review_tier: string | null;
+  validation_warnings: string[] | null;
+  is_duplicate: boolean | null;
 }
 
 const extractionMethodLabels: Record<string, { label: string; icon: string }> = {
@@ -70,7 +75,8 @@ const calculatePriority = (post: Post): number => {
   if (post.event_date) score += 30;
   if (post.event_time) score += 20;
   if (post.location_name) score += 20;
-  if (post.ocr_confidence) score += post.ocr_confidence * 10;
+  if (post.ai_confidence) score += post.ai_confidence * 10;
+  if (post.location_lat && post.location_lng) score += 10;
   
   // Reduce priority for posts with OCR errors
   if (post.ocr_error_count > 0) score -= post.ocr_error_count * 5;
@@ -79,13 +85,15 @@ const calculatePriority = (post: Post): number => {
 };
 
 const calculateCompleteness = (post: Post): number => {
-  const fields = ['event_title', 'event_date', 'event_time', 'location_name', 'location_address'];
+  const fields = ['event_title', 'event_date', 'event_time', 'location_name', 'location_lat'];
   const filled = fields.filter(f => post[f as keyof Post]).length;
   return (filled / fields.length) * 100;
 };
 
+type TierTab = 'ready' | 'quick' | 'full' | 'rejected';
+
 export function ConsolidatedReviewQueue() {
-  const [filterTab, setFilterTab] = useState<"all" | "needs_data" | "ocr_pending" | "ready">("all");
+  const [tierTab, setTierTab] = useState<TierTab>("ready");
   const [currentPage, setCurrentPage] = useState(0);
   const [rejectionReason, setRejectionReason] = useState<string>("");
   const [fieldIssues, setFieldIssues] = useState<Record<string, boolean>>({});
@@ -94,9 +102,38 @@ export function ConsolidatedReviewQueue() {
   const [hidePastEvents, setHidePastEvents] = useState(true);
   const queryClient = useQueryClient();
 
-  // Fetch all posts needing attention
+  // Fetch tier counts
+  const { data: tierCounts } = useQuery({
+    queryKey: ["review-tier-counts", hidePastEvents],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      
+      let query = supabase
+        .from("instagram_posts")
+        .select("review_tier, event_date")
+        .eq("is_event", true);
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      const counts = { ready: 0, quick: 0, full: 0, rejected: 0 };
+      data?.forEach(post => {
+        // Filter past events if toggle is on
+        if (hidePastEvents && post.event_date && post.event_date < today) {
+          return;
+        }
+        if (post.review_tier && counts.hasOwnProperty(post.review_tier)) {
+          counts[post.review_tier as TierTab]++;
+        }
+      });
+      return counts;
+    }
+  });
+
+  // Fetch posts for current tier
   const { data: allPosts, isLoading } = useQuery({
-    queryKey: ["consolidated-review-queue", currentPage, filterTab, hidePastEvents],
+    queryKey: ["consolidated-review-queue", currentPage, tierTab, hidePastEvents],
     queryFn: async () => {
       let query = supabase
         .from("instagram_posts")
@@ -104,19 +141,8 @@ export function ConsolidatedReviewQueue() {
           *,
           instagram_account:instagram_accounts(username)
         `)
-        .or('ocr_processed.eq.false,needs_review.eq.true,and(ocr_processed.eq.true,is_event.eq.true)');
-
-      // Apply filter based on active tab
-      if (filterTab === 'needs_data') {
-        query = query.or('event_title.is.null,event_date.is.null,location_name.is.null');
-      } else if (filterTab === 'ocr_pending') {
-        query = query.eq('ocr_processed', false);
-      } else if (filterTab === 'ready') {
-        query = query
-          .eq('ocr_processed', true)
-          .eq('is_event', true)
-          .not('event_title', 'is', null);
-      }
+        .eq("is_event", true)
+        .eq("review_tier", tierTab);
 
       const { data, error } = await query.order("created_at", { ascending: false });
       
@@ -176,6 +202,45 @@ export function ConsolidatedReviewQueue() {
     }
   });
 
+  // Batch publish mutation for Ready tier
+  const batchPublishMutation = useMutation({
+    mutationFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Get all ready tier posts with future dates
+      const { data: readyPosts, error: fetchError } = await supabase
+        .from("instagram_posts")
+        .select("id")
+        .eq("review_tier", "ready")
+        .eq("is_event", true)
+        .gte("event_date", today);
+      
+      if (fetchError) throw fetchError;
+      if (!readyPosts || readyPosts.length === 0) {
+        throw new Error("No posts to publish");
+      }
+      
+      // Publish each post
+      let published = 0;
+      for (const post of readyPosts) {
+        const { error } = await supabase.functions.invoke("publish-event", {
+          body: { postId: post.id }
+        });
+        if (!error) published++;
+      }
+      
+      return { published, total: readyPosts.length };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["consolidated-review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["review-tier-counts"] });
+      toast.success(`Published ${data.published}/${data.total} events!`);
+    },
+    onError: (error) => {
+      toast.error("Batch publish failed: " + error.message);
+    }
+  });
+
   // Reject with learning mutation
   const rejectMutation = useMutation({
     mutationFn: async ({ post, reason, fields, notes }: { 
@@ -228,6 +293,7 @@ export function ConsolidatedReviewQueue() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["consolidated-review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["review-tier-counts"] });
       toast.success("Post rejected. Feedback logged for learning.");
       setPostToReject(null);
       setRejectionReason("");
@@ -249,6 +315,7 @@ export function ConsolidatedReviewQueue() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["consolidated-review-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["review-tier-counts"] });
       toast.success("Event published successfully!");
     },
     onError: (error) => {
@@ -263,16 +330,33 @@ export function ConsolidatedReviewQueue() {
 
   const totalPages = Math.ceil((allPosts?.length || 0) / ITEMS_PER_PAGE);
 
-  const PriorityBadge = ({ priority }: { priority: number }) => {
-    if (priority >= 70) return <Badge className="bg-destructive">High Priority</Badge>;
-    if (priority >= 40) return <Badge className="bg-yellow-500">Medium</Badge>;
-    return <Badge variant="outline">Low Priority</Badge>;
+  const TierBadge = ({ tier }: { tier: string | null }) => {
+    switch (tier) {
+      case 'ready':
+        return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" />Ready</Badge>;
+      case 'quick':
+        return <Badge className="bg-yellow-500"><AlertTriangle className="w-3 h-3 mr-1" />Quick</Badge>;
+      case 'full':
+        return <Badge className="bg-orange-500"><AlertCircle className="w-3 h-3 mr-1" />Full</Badge>;
+      case 'rejected':
+        return <Badge className="bg-destructive"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
+      default:
+        return <Badge variant="outline">Unknown</Badge>;
+    }
   };
 
-  const StatusBadge = ({ post }: { post: Post }) => {
-    if (!post.ocr_processed) return <Badge variant="secondary"><Loader className="w-3 h-3 mr-1" />OCR Pending</Badge>;
-    if (post.needs_review || !post.event_title) return <Badge variant="outline"><AlertCircle className="w-3 h-3 mr-1" />Needs Review</Badge>;
-    return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" />Ready</Badge>;
+  const ValidationWarnings = ({ warnings }: { warnings: string[] | null }) => {
+    if (!warnings || warnings.length === 0) return null;
+    
+    return (
+      <div className="flex flex-wrap gap-1 mt-2">
+        {warnings.map((warning, i) => (
+          <Badge key={i} variant="outline" className="text-xs text-orange-600 border-orange-300">
+            ⚠️ {warning.replace(/_/g, ' ')}
+          </Badge>
+        ))}
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -301,45 +385,94 @@ export function ConsolidatedReviewQueue() {
         </Card>
       )}
 
-      {/* Main Review Queue */}
+      {/* Main Review Queue with Tier Tabs */}
       <Card>
         <CardHeader className="p-4 md:p-6">
-          <h2 className="text-lg md:text-xl font-bold">Review Queue</h2>
-          <p className="text-xs md:text-sm text-muted-foreground mt-1">
-            Unified queue for all posts needing attention
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-lg md:text-xl font-bold">Review Queue</h2>
+              <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                Tiered review system - Ready posts can be batch published
+              </p>
+            </div>
+            {tierTab === 'ready' && (tierCounts?.ready || 0) > 0 && (
+              <Button 
+                onClick={() => batchPublishMutation.mutate()}
+                disabled={batchPublishMutation.isPending}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCheck className="w-4 h-4 mr-2" />
+                {batchPublishMutation.isPending ? "Publishing..." : `Publish All Ready (${tierCounts?.ready || 0})`}
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-4 md:p-6 pt-0">
-          <Tabs value={filterTab} onValueChange={(v) => {
-            setFilterTab(v as typeof filterTab);
+          <Tabs value={tierTab} onValueChange={(v) => {
+            setTierTab(v as TierTab);
             setCurrentPage(0);
           }}>
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 gap-1">
-              <TabsTrigger value="all" className="text-xs md:text-sm">
-                All ({allPosts?.length || 0})
-              </TabsTrigger>
-              <TabsTrigger value="needs_data" className="flex items-center gap-1 text-xs md:text-sm">
-                <AlertCircle className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="hidden sm:inline">Needs Data</span>
-                <span className="sm:hidden">Data</span>
-              </TabsTrigger>
-              <TabsTrigger value="ocr_pending" className="flex items-center gap-1 text-xs md:text-sm">
-                <Loader className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="hidden sm:inline">OCR</span>
-                <span className="sm:hidden">OCR</span>
-              </TabsTrigger>
+            <TabsList className="grid w-full grid-cols-4 gap-1">
               <TabsTrigger value="ready" className="flex items-center gap-1 text-xs md:text-sm">
                 <CheckCircle className="w-3 h-3 md:w-4 md:h-4" />
-                <span>Ready</span>
+                <span className="hidden sm:inline">Ready</span>
+                {(tierCounts?.ready || 0) > 0 && (
+                  <Badge className="ml-1 bg-green-500 text-xs">{tierCounts?.ready}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="quick" className="flex items-center gap-1 text-xs md:text-sm">
+                <AlertTriangle className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Quick</span>
+                {(tierCounts?.quick || 0) > 0 && (
+                  <Badge className="ml-1 bg-yellow-500 text-xs">{tierCounts?.quick}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="full" className="flex items-center gap-1 text-xs md:text-sm">
+                <AlertCircle className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Full</span>
+                {(tierCounts?.full || 0) > 0 && (
+                  <Badge className="ml-1 bg-orange-500 text-xs">{tierCounts?.full}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="rejected" className="flex items-center gap-1 text-xs md:text-sm">
+                <XCircle className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="hidden sm:inline">Rejected</span>
+                {(tierCounts?.rejected || 0) > 0 && (
+                  <Badge className="ml-1 bg-destructive text-xs">{tierCounts?.rejected}</Badge>
+                )}
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value={filterTab} className="space-y-3 md:space-y-4 mt-4 md:mt-6">
+            {/* Tier descriptions */}
+            <div className="mt-4 p-3 rounded-lg bg-muted/50 text-sm">
+              {tierTab === 'ready' && (
+                <p className="text-green-700 dark:text-green-400">
+                  ✅ <strong>Ready to Publish:</strong> High confidence events with all fields + geocoded. Can be batch published.
+                </p>
+              )}
+              {tierTab === 'quick' && (
+                <p className="text-yellow-700 dark:text-yellow-400">
+                  ⚡ <strong>Quick Review:</strong> Good confidence - just verify the highlighted fields.
+                </p>
+              )}
+              {tierTab === 'full' && (
+                <p className="text-orange-700 dark:text-orange-400">
+                  🔍 <strong>Full Review:</strong> These need manual data entry or verification.
+                </p>
+              )}
+              {tierTab === 'rejected' && (
+                <p className="text-destructive">
+                  ❌ <strong>Rejected:</strong> Low confidence or too many validation issues. Review or delete.
+                </p>
+              )}
+            </div>
+
+            <TabsContent value={tierTab} className="space-y-3 md:space-y-4 mt-4 md:mt-6">
               {/* Filter and pagination controls */}
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
                 <div className="flex items-center gap-4">
                   <p className="text-xs md:text-sm text-muted-foreground">
-                    Showing {currentPage * ITEMS_PER_PAGE + 1}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, allPosts?.length || 0)} of {allPosts?.length || 0}
+                    Showing {Math.min(currentPage * ITEMS_PER_PAGE + 1, allPosts?.length || 0)}-{Math.min((currentPage + 1) * ITEMS_PER_PAGE, allPosts?.length || 0)} of {allPosts?.length || 0}
                   </p>
                   <div className="flex items-center gap-2">
                     <Checkbox 
@@ -389,8 +522,7 @@ export function ConsolidatedReviewQueue() {
                           {/* Header with badges */}
                           <div className="flex items-center justify-between flex-wrap gap-2">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <StatusBadge post={post} />
-                              <PriorityBadge priority={post.priority} />
+                              <TierBadge tier={post.review_tier} />
                               {post.instagram_account && (
                                 <Badge variant="outline" className="text-xs">@{post.instagram_account.username}</Badge>
                               )}
@@ -410,8 +542,19 @@ export function ConsolidatedReviewQueue() {
                                   {CATEGORY_LABELS[post.category] || post.category}
                                 </Badge>
                               )}
+                              {post.ai_confidence && (
+                                <Badge variant="outline" className="text-xs">
+                                  AI: {(post.ai_confidence * 100).toFixed(0)}%
+                                </Badge>
+                              )}
+                              {post.is_duplicate && (
+                                <Badge variant="destructive" className="text-xs">Duplicate</Badge>
+                              )}
                             </div>
                           </div>
+
+                          {/* Validation Warnings */}
+                          <ValidationWarnings warnings={post.validation_warnings} />
 
                           {/* Completeness meter */}
                           <div className="space-y-1">
@@ -449,6 +592,7 @@ export function ConsolidatedReviewQueue() {
                             onCancel={() => setPostToReject(post)}
                             onCreateEvent={() => {
                               queryClient.invalidateQueries({ queryKey: ["consolidated-review-queue"] });
+                              queryClient.invalidateQueries({ queryKey: ["review-tier-counts"] });
                             }}
                           />
                         </div>
@@ -460,7 +604,7 @@ export function ConsolidatedReviewQueue() {
                 <div className="text-center py-12">
                   <CheckCircle className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-lg font-medium">All caught up!</p>
-                  <p className="text-sm text-muted-foreground">No posts in this category</p>
+                  <p className="text-sm text-muted-foreground">No posts in this tier</p>
                 </div>
               )}
             </TabsContent>

@@ -23,6 +23,7 @@ import { lookupNCRVenue, fuzzyMatchVenue } from './ncrGeoCache.ts';
 import { fetchWithRetry, fetchWithTimeout } from './retryUtils.ts';
 import { saveGroundTruth, trainPatternsFromComparison } from './patternTrainer.ts';
 import { extractInParallel, mergeResults, MergedExtractionResult } from './parallelExtraction.ts';
+import { validateExtractedData, assignReviewTier, checkForDuplicate, logValidationWarnings } from './validationUtils.ts';
 
 /*
  * DATABASE SCHEMA NOTES:
@@ -1140,8 +1141,44 @@ Deno.serve(async (req) => {
           }
           // === END AUTO-DOWNLOAD IMAGE ===
           
-          // Upsert the post with enriched data
-          const { error } = await supabase.from('instagram_posts').upsert({
+          // === VALIDATION LAYER ===
+          const validation = validateExtractedData({
+            eventDate: post.aiExtraction?.eventDate,
+            eventEndDate: null,
+            eventTime: post.aiExtraction?.eventTime,
+            endTime: post.aiExtraction?.endTime,
+            locationName: canonicalVenue,
+            price: post.aiExtraction?.price,
+            caption: post.caption,
+          });
+          
+          // Check for duplicates
+          const duplicateCheck = await checkForDuplicate(
+            supabase,
+            validation.correctedData.locationName,
+            validation.correctedData.eventDate,
+            validation.correctedData.eventTime,
+            post.aiExtraction?.eventTitle || null
+          );
+          
+          // Assign review tier
+          const tierAssignment = assignReviewTier(
+            post.aiExtraction?.confidence,
+            post.aiExtraction?.confidence,
+            'github_actions_gemini_vision',
+            validation.warnings,
+            !!validation.correctedData.eventDate,
+            !!validation.correctedData.eventTime,
+            !!validation.correctedData.locationName,
+            !!(locationLat && locationLng),
+            !!(locationLat && locationLng) // isKnownVenue = has coordinates
+          );
+          
+          // If duplicate, force to rejected tier
+          const finalTier = duplicateCheck.isDuplicate ? 'rejected' : tierAssignment.tier;
+          
+          // Upsert the post with enriched data + validation fields
+          const { error, data: upsertedPost } = await supabase.from('instagram_posts').upsert({
             post_id: post.postId,
             post_url: `https://www.instagram.com/p/${post.shortCode || post.postId}/`,
             instagram_account_id: accountId,
@@ -1149,24 +1186,29 @@ Deno.serve(async (req) => {
             image_url: post.imageUrl,
             stored_image_url: storedImageUrl,
             posted_at: post.timestamp || new Date().toISOString(),
-            location_name: canonicalVenue,
+            location_name: validation.correctedData.locationName,
             location_address: post.aiExtraction?.venueAddress,
             location_lat: locationLat,
             location_lng: locationLng,
             is_event: post.aiExtraction?.isEvent || false,
             event_title: post.aiExtraction?.eventTitle,
-            event_date: post.aiExtraction?.eventDate,
-            event_time: post.aiExtraction?.eventTime,
-            end_time: post.aiExtraction?.endTime,
-            price: post.aiExtraction?.price || 0,
+            event_date: validation.correctedData.eventDate,
+            event_time: validation.correctedData.eventTime,
+            end_time: validation.correctedData.endTime,
+            price: validation.correctedData.price || 0,
             is_free: post.aiExtraction?.isFree ?? true,
             category: category,
             ocr_text: post.aiExtraction?.ocrText,
-            ocr_confidence: post.aiExtraction?.confidence,
+            ai_confidence: post.aiExtraction?.confidence,
             ocr_processed: true,
             extraction_method: 'github_actions_gemini_vision',
             needs_review: post.aiExtraction?.isEvent || false,
-          }, { onConflict: 'post_id' });
+            // New validation fields
+            review_tier: finalTier,
+            validation_warnings: validation.warnings,
+            is_duplicate: duplicateCheck.isDuplicate,
+            duplicate_of: duplicateCheck.duplicateOfId,
+          }, { onConflict: 'post_id' }).select('id').single();
           
           if (error) {
             await ingestLogger?.error('save', `Failed to save post ${post.postId}`, { postId: post.postId }, { 

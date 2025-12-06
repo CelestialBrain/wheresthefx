@@ -39,45 +39,87 @@ async function extractWithGeminiVision(imageUrl, caption) {
     const imageBuffer = await imageResponse.arrayBuffer();
     const base64Image = Buffer.from(imageBuffer).toString('base64');
     
-    const prompt = `Analyze this Instagram event poster image AND the caption.
+    // Get today's date for context
+    const today = new Date().toISOString().split('T')[0];
+    const currentYear = new Date().getFullYear();
+    
+    const prompt = `You are an expert at extracting event information from Filipino Instagram event posters.
 
-Caption: ${caption || '(no caption)'}
+TODAY'S DATE: ${today}
 
-Extract ALL text visible in the image, then determine:
-1. Is this an event announcement? (true/false)
-2. Event title
-3. Event date (YYYY-MM-DD format)
-4. Event time (HH:MM 24hr format)
-5. Venue name
-6. Venue address
-7. Ticket price (number, 0 if free)
-8. Category: nightlife, music, art_culture, markets, food, workshops, community, comedy, or other
+INSTAGRAM CAPTION:
+"""
+${caption || '(no caption)'}
+"""
 
-IMPORTANT: Many Filipino event posters use stylized text. Look carefully for:
-- Dates in format "DEC 15", "December 15", "12/15"
-- Times like "8PM", "9:00 PM", "DOORS OPEN 7PM"
-- Venue names often at bottom of poster
-- Prices like "₱500", "PHP 500", "FREE ENTRY"
+Extract ALL text visible in the image, then determine if this is an event announcement.
 
-CRITICAL: Include a "reasoning" field explaining WHY this is or isn't an event.
-For events: explain what indicators (date, time, venue, event-type words) you found.
-For non-events: explain what made you classify it as not an event (product promo, general announcement, etc.)
+CRITICAL VALIDATION RULES:
+1. eventDate MUST be on or after today (${today})
+2. eventDate MUST be within 6 months of today
+3. eventDate year MUST be ${currentYear} or ${currentYear + 1}
+4. If you see past dates, check if it's a recurring event - if so, calculate the NEXT occurrence
+5. DO NOT extract phone numbers as prices (e.g., 09171234567 is NOT a price)
+6. DO NOT extract years as times (e.g., 2025 is NOT a time)
+7. Times should be in HH:MM format (24-hour)
+8. Prices in Philippines are typically ₱100-₱5000 for events
+
+CONFIDENCE GUIDELINES:
+- Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible
+- Set confidence 0.7-0.89 if most fields are clear but some are inferred
+- Set confidence 0.5-0.69 if you're making educated guesses
+- Set confidence < 0.5 if you're very uncertain
+
+DATE EXTRACTION:
+- Look for: "DEC 15", "December 15", "12/15", "Dec 6-7" (multi-day)
+- For relative dates ("tomorrow", "this Friday"), calculate from today: ${today}
+- If month has passed this year, assume next year (e.g., "Jan 5" in December → ${currentYear + 1}-01-05)
+
+TIME EXTRACTION:
+- Look for: "8PM", "9:00 PM", "DOORS OPEN 7PM", "21:00"
+- TIME AMBIGUITY - Infer AM/PM from context:
+  * Bar/club/party/concert: 8, 9, 10 → PM (20:00, 21:00, 22:00)
+  * Market/fair/yoga/run: 7, 8, 9 → AM (07:00, 08:00, 09:00)
+
+VENUE/LOCATION:
+- Look for venue names, addresses, 📍 symbols
+- DO NOT use @mentions as venues (those are usually performers/sponsors)
+- DO NOT use the posting account username as venue
+
+PRICE:
+- "₱500", "P500", "Php500", "PHP 500" → 500
+- "₱300-500" → 300 (use minimum/presale)
+- "FREE", "LIBRE", "Walang bayad" → isFree: true, price: 0
+
+NOT AN EVENT - Set isEvent: false if:
+- Contains operating hours: "6PM — Tues to Sat", "Open Mon-Fri"
+- Says "Every [day]" without a specific date
+- Generic promo: "Visit us", "Come check out", "Be in the loop"
+- Describes regular venue operations, not a unique event
+
+COMMON MISTAKES TO AVOID:
+- "@photographer_name" is NOT a venue
+- "DM for reservations" numbers are NOT prices
+- Sponsor logos/handles are NOT venue names
+
+Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
 
 Respond in JSON only:
 {
   "ocrText": "all text extracted from image",
   "isEvent": true,
   "eventTitle": "...",
-  "eventDate": "2025-12-15",
-  "eventTime": "20:00",
-  "endTime": null,
-  "venueName": "...",
-  "venueAddress": "...",
+  "eventDate": "YYYY-MM-DD",
+  "eventEndDate": "YYYY-MM-DD or null for multi-day",
+  "eventTime": "HH:MM",
+  "endTime": "HH:MM or null",
+  "venueName": "venue name only",
+  "venueAddress": "full address if visible",
   "price": 0,
   "isFree": true,
   "category": "nightlife",
   "confidence": 0.85,
-  "reasoning": "This is an event because I found a specific date (Dec 15), time (8PM), venue (Club XYZ), and event-type language (party, join us)."
+  "reasoning": "Explain what indicators you found (date, time, venue, event-type words) or why this is NOT an event."
 }`;
 
     const result = await model.generateContent([
