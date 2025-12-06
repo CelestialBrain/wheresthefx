@@ -53,6 +53,19 @@ interface AIExtractionResult {
     fromCaption: string[];
     fromImage: string[];
   };
+  // Event update tracking fields
+  isUpdate?: boolean;
+  updateType?: 'reschedule' | 'cancel' | 'venue_change' | 'time_change' | null;
+  originalDate?: string | null;
+  reason?: string | null;
+  // Availability status
+  availabilityStatus?: 'available' | 'sold_out' | 'waitlist' | 'limited' | 'few_left';
+  // Price range support
+  priceMin?: number | null;
+  priceMax?: number | null;
+  priceNotes?: string | null;
+  // Location status
+  locationStatus?: 'confirmed' | 'tba' | 'secret' | 'dm_for_details';
 }
 
 /**
@@ -217,6 +230,29 @@ PRICE FORMATS TO RECOGNIZE:
 - "₱300 presale / ₱500 door" → 300 (use presale price)
 - "FREE", "LIBRE", "Walang bayad", "No cover" → isFree: true, price: null
 
+PRICE EXTRACTION (enhanced):
+- Single price: "₱500" → price: 500, priceMin: 500, priceMax: 500
+- Range: "₱500-1000" → priceMin: 500, priceMax: 1000
+- Tiers: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
+- Conditional: "Free before 10PM, ₱300 after" → priceMin: 0, priceMax: 300, priceNotes: "Free before 10PM"
+
+DETECT EVENT UPDATES:
+- If caption contains "RESCHEDULED", "MOVED TO", "NEW DATE", "CHANGE OF DATE" → set isUpdate: true, updateType: 'reschedule'
+- If caption contains "CANCELLED", "POSTPONED", "SUSPENDED", "CALLED OFF" → set isUpdate: true, updateType: 'cancel'
+- If caption mentions weather (typhoon, bagyo, storm, flood, baha) + date change → set reason: 'weather'
+- If caption mentions "venue change", "new location" → set isUpdate: true, updateType: 'venue_change'
+- Extract originalDate when rescheduling is detected (the old date being changed from)
+
+DETECT AVAILABILITY:
+- "SOLD OUT", "fully booked", "no more slots" → availabilityStatus: 'sold_out'
+- "waitlist only", "join waitlist" → availabilityStatus: 'waitlist'
+- "limited slots", "few tickets left", "almost full" → availabilityStatus: 'limited'
+
+LOCATION STATUS:
+- "secret location", "undisclosed" → locationStatus: 'secret'
+- "location TBA", "venue TBD" → locationStatus: 'tba'
+- "DM for address", "message for location" → locationStatus: 'dm_for_details'
+
 NOT AN EVENT - Set isEvent: false if:
 - Missing ANY of: specific date + venue + invitation language
 - Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
@@ -274,11 +310,20 @@ Return ONLY valid JSON (no markdown, no code blocks):
   "locationName": "venue name only - no dates, times, or descriptions",
   "locationAddress": "full address if visible",
   "price": number or null (use minimum/presale price),
+  "priceMin": number or null,
+  "priceMax": number or null,
+  "priceNotes": string or null,
   "isFree": boolean,
   "signupUrl": "URL if visible or null",
   "isEvent": boolean,
   "confidence": 0.0 to 1.0,
-  "reasoning": "describe what you found in the image"
+  "reasoning": "describe what you found in the image",
+  "isUpdate": boolean,
+  "updateType": "reschedule" | "cancel" | "venue_change" | "time_change" | null,
+  "originalDate": "YYYY-MM-DD" or null,
+  "reason": string or null,
+  "availabilityStatus": "available" | "sold_out" | "waitlist" | "limited" | "few_left" or null,
+  "locationStatus": "confirmed" | "tba" | "secret" | "dm_for_details" or null
 }`;
 
   const response = await fetch(
@@ -510,6 +555,29 @@ PRICE FORMATS:
 - "₱300-500" → 300 (use minimum/presale)
 - "FREE", "LIBRE", "Walang bayad" → isFree: true, price: null
 
+PRICE EXTRACTION (enhanced):
+- Single price: "₱500" → price: 500, priceMin: 500, priceMax: 500
+- Range: "₱500-1000" → priceMin: 500, priceMax: 1000
+- Tiers: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
+- Conditional: "Free before 10PM, ₱300 after" → priceMin: 0, priceMax: 300, priceNotes: "Free before 10PM"
+
+DETECT EVENT UPDATES:
+- If caption contains "RESCHEDULED", "MOVED TO", "NEW DATE", "CHANGE OF DATE" → set isUpdate: true, updateType: 'reschedule'
+- If caption contains "CANCELLED", "POSTPONED", "SUSPENDED", "CALLED OFF" → set isUpdate: true, updateType: 'cancel'
+- If caption mentions weather (typhoon, bagyo, storm, flood, baha) + date change → set reason: 'weather'
+- If caption mentions "venue change", "new location" → set isUpdate: true, updateType: 'venue_change'
+- Extract originalDate when rescheduling is detected (the old date being changed from)
+
+DETECT AVAILABILITY:
+- "SOLD OUT", "fully booked", "no more slots" → availabilityStatus: 'sold_out'
+- "waitlist only", "join waitlist" → availabilityStatus: 'waitlist'
+- "limited slots", "few tickets left", "almost full" → availabilityStatus: 'limited'
+
+LOCATION STATUS:
+- "secret location", "undisclosed" → locationStatus: 'secret'
+- "location TBA", "venue TBD" → locationStatus: 'tba'
+- "DM for address", "message for location" → locationStatus: 'dm_for_details'
+
 NOT AN EVENT - Set isEvent: false if:
 - Missing ANY of: specific date + venue + invitation language
 - Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
@@ -560,7 +628,16 @@ Return a valid JSON object with these exact fields:
   "additionalDates": [{"date": "YYYY-MM-DD", "venue": string, "time": "HH:MM:SS"}] or null,
   "isFree": boolean or null,
   "price": number or null (in PHP, use minimum/presale),
-  "signupUrl": string or null
+  "priceMin": number or null,
+  "priceMax": number or null,
+  "priceNotes": string or null,
+  "signupUrl": string or null,
+  "isUpdate": boolean,
+  "updateType": "reschedule" | "cancel" | "venue_change" | "time_change" | null,
+  "originalDate": "YYYY-MM-DD" or null,
+  "reason": string or null,
+  "availabilityStatus": "available" | "sold_out" | "waitlist" | "limited" | "few_left" or null,
+  "locationStatus": "confirmed" | "tba" | "secret" | "dm_for_details" or null
 }`;
 
   return prompt;
@@ -681,6 +758,29 @@ PRICE FORMATS:
 - "₱300-500" → 300 (use minimum/presale)
 - "FREE", "LIBRE", "Walang bayad" → isFree: true, price: null
 
+PRICE EXTRACTION (enhanced):
+- Single price: "₱500" → price: 500, priceMin: 500, priceMax: 500
+- Range: "₱500-1000" → priceMin: 500, priceMax: 1000
+- Tiers: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
+- Conditional: "Free before 10PM, ₱300 after" → priceMin: 0, priceMax: 300, priceNotes: "Free before 10PM"
+
+DETECT EVENT UPDATES:
+- If caption contains "RESCHEDULED", "MOVED TO", "NEW DATE", "CHANGE OF DATE" → set isUpdate: true, updateType: 'reschedule'
+- If caption contains "CANCELLED", "POSTPONED", "SUSPENDED", "CALLED OFF" → set isUpdate: true, updateType: 'cancel'
+- If caption mentions weather (typhoon, bagyo, storm, flood, baha) + date change → set reason: 'weather'
+- If caption mentions "venue change", "new location" → set isUpdate: true, updateType: 'venue_change'
+- Extract originalDate when rescheduling is detected (the old date being changed from)
+
+DETECT AVAILABILITY:
+- "SOLD OUT", "fully booked", "no more slots" → availabilityStatus: 'sold_out'
+- "waitlist only", "join waitlist" → availabilityStatus: 'waitlist'
+- "limited slots", "few tickets left", "almost full" → availabilityStatus: 'limited'
+
+LOCATION STATUS:
+- "secret location", "undisclosed" → locationStatus: 'secret'
+- "location TBA", "venue TBD" → locationStatus: 'tba'
+- "DM for address", "message for location" → locationStatus: 'dm_for_details'
+
 NOT AN EVENT - Set isEvent: false if:
 - Missing ANY of: specific date + venue + invitation language
 - Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
@@ -720,6 +820,9 @@ Return ONLY valid JSON (no markdown, no code blocks):
   "locationName": "venue name only - no dates, times, or descriptions",
   "locationAddress": "full address if found, or null",
   "price": number or null (use minimum/presale),
+  "priceMin": number or null,
+  "priceMax": number or null,
+  "priceNotes": string or null,
   "isFree": boolean,
   "signupUrl": "URL if found or null",
   "isEvent": boolean,
@@ -728,7 +831,13 @@ Return ONLY valid JSON (no markdown, no code blocks):
   "sourceBreakdown": {
     "fromCaption": ["fields found in caption"],
     "fromImage": ["fields found in image OCR"]
-  }
+  },
+  "isUpdate": boolean,
+  "updateType": "reschedule" | "cancel" | "venue_change" | "time_change" | null,
+  "originalDate": "YYYY-MM-DD" or null,
+  "reason": string or null,
+  "availabilityStatus": "available" | "sold_out" | "waitlist" | "limited" | "few_left" or null,
+  "locationStatus": "confirmed" | "tba" | "secret" | "dm_for_details" or null
 }`;
 
   return prompt;

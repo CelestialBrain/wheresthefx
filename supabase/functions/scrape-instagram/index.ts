@@ -128,6 +128,29 @@ function extractUsernameFromUrl(url: string): string | undefined {
   return username || undefined;
 }
 
+/**
+ * Calculate source authority score for deduplication
+ * Higher authority sources are preferred when merging duplicate events
+ */
+function getSourceAuthority(ownerUsername: string, venueHandles: Set<string>): number {
+  const username = ownerUsername.toLowerCase();
+  
+  // Venue official account (highest authority)
+  if (venueHandles.has(username)) return 100;
+  
+  // Known event organizer patterns
+  if (/events?|productions?|presents?|collective/i.test(username)) return 80;
+  
+  // Artist/performer accounts
+  if (/band|music|dj|artist/i.test(username)) return 60;
+  
+  // Media/promo accounts
+  if (/blog|media|promo|ph$/i.test(username)) return 40;
+  
+  // Default
+  return 50;
+}
+
 // ============================================================
 // AI EXTRACTION TYPES AND HELPER
 // ============================================================
@@ -1596,6 +1619,29 @@ Deno.serve(async (req) => {
       let processedCount = 0;
       const totalItems = apifyData.length;
 
+      // Build set of venue Instagram handles for source authority scoring
+      const venueHandles = new Set<string>();
+      try {
+        const { data: venues } = await supabase
+          .from('known_venues')
+          .select('instagram_handle')
+          .not('instagram_handle', 'is', null);
+        
+        if (venues) {
+          venues.forEach(v => {
+            if (v.instagram_handle) {
+              // Normalize handle (remove @ if present)
+              const handle = v.instagram_handle.toLowerCase().replace(/^@/, '');
+              venueHandles.add(handle);
+            }
+          });
+          console.log(`Loaded ${venueHandles.size} venue handles for authority scoring`);
+        }
+      } catch (error) {
+        console.warn('Failed to load venue handles:', error);
+        // Continue without venue handles - will use default authority scores
+      }
+
       // Process each item
       for (const item of apifyData) {
         // Update progress every BATCH_SIZE items
@@ -1672,6 +1718,9 @@ Deno.serve(async (req) => {
         const likesCount = (item.likesCount === -1 || !item.likesCount) ? 0 : item.likesCount;
         const commentsCount = item.commentsCount || 0;
         const postedAt = item.timestamp;
+        
+        // Calculate source authority for deduplication
+        const sourceAuthority = getSourceAuthority(username, venueHandles);
         
         if (!postedAt) {
           totalSkipped++;
@@ -2199,7 +2248,7 @@ Deno.serve(async (req) => {
 
           const { data: similarEvents } = await supabase
             .from('instagram_posts')
-            .select('id, post_id, event_title, likes_count')
+            .select('id, post_id, event_title, likes_count, source_authority, instagram_account_id')
             .eq('location_name', eventInfo.locationName)
             .gte('event_date', dayBefore.toISOString().split('T')[0])
             .lte('event_date', dayAfter.toISOString().split('T')[0])
@@ -2243,9 +2292,25 @@ Deno.serve(async (req) => {
                     console.log(`Added post ${postId} to existing event group`);
                   }
                 } else {
-                  // Create new group with the higher engagement post as primary
-                  const primaryId = likesCount > similar.likes_count ? postId : similar.post_id;
-                  const mergedId = likesCount > similar.likes_count ? similar.post_id : postId;
+                  // Create new group with higher authority source as primary
+                  // Use source_authority first, then likes_count as tiebreaker
+                  const currentAuthority = sourceAuthority || 50;
+                  const similarAuthority = similar.source_authority || 50;
+                  
+                  let primaryId: string;
+                  let mergedId: string;
+                  
+                  if (currentAuthority > similarAuthority) {
+                    primaryId = postId;
+                    mergedId = similar.post_id;
+                  } else if (currentAuthority < similarAuthority) {
+                    primaryId = similar.post_id;
+                    mergedId = postId;
+                  } else {
+                    // Same authority, use likes as tiebreaker
+                    primaryId = likesCount > similar.likes_count ? postId : similar.post_id;
+                    mergedId = likesCount > similar.likes_count ? similar.post_id : postId;
+                  }
                   
                   await supabase
                     .from('event_groups')
@@ -2253,7 +2318,8 @@ Deno.serve(async (req) => {
                       primary_post_id: primaryId,
                       merged_post_ids: [mergedId]
                     });
-                  console.log(`Created new event group for posts ${primaryId} and ${mergedId}`);
+                  console.log(`Created new event group: primary=${primaryId} (authority=${primaryId === postId ? currentAuthority : similarAuthority}), merged=${mergedId} (authority=${mergedId === postId ? currentAuthority : similarAuthority})`);
+                }
                 }
               }
             }
@@ -2384,6 +2450,8 @@ Deno.serve(async (req) => {
           // OCR extraction fields
           ocr_text: eventInfo.ocrTextExtracted || null,
           ocr_confidence: eventInfo.ocrConfidence || null,
+          // Source authority for deduplication
+          source_authority: sourceAuthority,
         };
         
         // Add additional images from carousel if available
