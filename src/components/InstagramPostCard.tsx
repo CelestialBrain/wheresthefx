@@ -10,6 +10,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
 import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
 import { CATEGORY_LABELS, CATEGORY_COLORS } from "@/constants/categoryColors";
+import { EventStatusBadge, EventStatus } from "./EventStatusBadge";
+import { AvailabilityBadge, AvailabilityStatus } from "./AvailabilityBadge";
+import { PriceDisplay } from "./PriceDisplay";
 
 export interface InstagramPost {
   id: string;
@@ -35,6 +38,15 @@ export interface InstagramPost {
   location_lng?: number | null;
   published_event_id?: string | null;
   category?: string | null;
+  // Event lifecycle fields
+  event_status?: string | null;
+  availability_status?: string | null;
+  // Price fields
+  is_free?: boolean;
+  price?: number | null;
+  price_min?: number | null;
+  price_max?: number | null;
+  price_notes?: string | null;
   instagram_accounts: {
     username: string;
     display_name: string | null;
@@ -53,6 +65,7 @@ interface InstagramPostCardProps {
 export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved }: InstagramPostCardProps) => {
   const [savedEvents, setSavedEvents] = useState<Set<string>>(isSaved ? new Set([post.id]) : new Set());
   const queryClient = useQueryClient();
+  const isCancelled = post.event_status === 'cancelled';
 
   // Initialize saved state from existing saved events
   useEffect(() => {
@@ -192,7 +205,7 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
 
   return (
     <Card 
-      className="p-3 hover:shadow-md transition-shadow cursor-pointer border-border/50"
+      className={`p-3 hover:shadow-md transition-shadow cursor-pointer border-border/50 ${isCancelled ? 'opacity-60 grayscale' : ''}`}
       style={{ contentVisibility: "auto", containIntrinsicSize: "auto 200px" }}
     >
       {/* Top Row: Image + Username/Title */}
@@ -237,9 +250,17 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
             )}
           </div>
           
-          <h3 className="font-semibold text-sm leading-tight line-clamp-2">
+          <h3 className={`font-semibold text-sm leading-tight line-clamp-2 ${isCancelled ? 'line-through' : ''}`}>
             {post.event_title || post.caption?.split('\n')[0] || 'Instagram Post'}
           </h3>
+          
+          {/* Status badges */}
+          {post.is_event && (post.event_status !== 'confirmed' || post.availability_status !== 'available') && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              <EventStatusBadge status={post.event_status as EventStatus} size="sm" />
+              <AvailabilityBadge status={post.availability_status as AvailabilityStatus} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -268,6 +289,18 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
               </span>
             )}
           </div>
+        )}
+
+        {/* Price */}
+        {post.is_event && (
+          <PriceDisplay
+            isFree={post.is_free ?? false}
+            price={post.price}
+            priceMin={post.price_min}
+            priceMax={post.price_max}
+            priceNotes={post.price_notes}
+            size="sm"
+          />
         )}
 
         {/* Bottom Row: Engagement + Link/Event Badge + Save */}
