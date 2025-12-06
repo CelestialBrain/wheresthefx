@@ -1241,6 +1241,45 @@ Deno.serve(async (req) => {
               validationWarnings: validation.warnings.length,
             });
             saved++;
+            
+            // Pattern training for GitHub Actions ingested posts
+            if (post.aiExtraction && (post.aiExtraction.confidence ?? 0) >= 0.7) {
+              try {
+                const mergedResult: MergedExtractionResult = {
+                  eventTitle: post.aiExtraction.eventTitle || null,
+                  eventDate: validation.correctedData.eventDate || null,
+                  eventEndDate: (post.aiExtraction as any)?.eventEndDate || null,
+                  eventTime: validation.correctedData.eventTime || null,
+                  endTime: validation.correctedData.endTime || null,
+                  locationName: validation.correctedData.locationName || null,
+                  locationAddress: post.aiExtraction.venueAddress || null,
+                  signupUrl: null,
+                  price: validation.correctedData.price ?? null,
+                  isFree: post.aiExtraction.isFree ?? null,
+                  isEvent: post.aiExtraction.isEvent ?? false,
+                  confidence: post.aiExtraction.confidence,
+                  reasoning: (post.aiExtraction as any).reasoning || null,
+                  sources: {
+                    eventDate: 'ai',
+                    eventTime: 'ai',
+                    locationName: 'ai',
+                    price: 'ai',
+                    signupUrl: undefined,
+                  },
+                  conflicts: [],
+                  overallSource: 'ai_only',
+                };
+                
+                await saveGroundTruth(post.postId, post.caption || '', mergedResult, supabase);
+                
+                await ingestLogger?.info('save', `Saved ground truth for ${post.postId}`, {
+                  confidence: post.aiExtraction.confidence,
+                  fieldsCount: Object.values(mergedResult).filter(v => v !== null && v !== undefined).length,
+                });
+              } catch (trainErr) {
+                console.warn(`[GH-INGEST] Pattern training failed for ${post.postId}:`, trainErr);
+              }
+            }
           }
         } catch (err) {
           await ingestLogger?.error('save', `Error processing ${post.postId}`, { postId: post.postId }, {
