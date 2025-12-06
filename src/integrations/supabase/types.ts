@@ -642,6 +642,7 @@ export type Database = {
           is_duplicate: boolean | null
           is_event: boolean | null
           is_free: boolean
+          is_recurring: boolean | null
           likes_count: number | null
           location_address: string | null
           location_lat: number | null
@@ -664,6 +665,7 @@ export type Database = {
           price_max: number | null
           price_min: number | null
           price_notes: string | null
+          recurrence_pattern: string | null
           review_tier: string | null
           signup_url: string | null
           stored_image_url: string | null
@@ -671,6 +673,7 @@ export type Database = {
           topic_confidence: number | null
           topic_label: string | null
           updated_at: string
+          urgency_score: number | null
           validation_warnings: string[] | null
         }
         Insert: {
@@ -700,6 +703,7 @@ export type Database = {
           is_duplicate?: boolean | null
           is_event?: boolean | null
           is_free?: boolean
+          is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
           location_lat?: number | null
@@ -722,6 +726,7 @@ export type Database = {
           price_max?: number | null
           price_min?: number | null
           price_notes?: string | null
+          recurrence_pattern?: string | null
           review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
@@ -729,6 +734,7 @@ export type Database = {
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
+          urgency_score?: number | null
           validation_warnings?: string[] | null
         }
         Update: {
@@ -758,6 +764,7 @@ export type Database = {
           is_duplicate?: boolean | null
           is_event?: boolean | null
           is_free?: boolean
+          is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
           location_lat?: number | null
@@ -780,6 +787,7 @@ export type Database = {
           price_max?: number | null
           price_min?: number | null
           price_notes?: string | null
+          recurrence_pattern?: string | null
           review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
@@ -787,6 +795,7 @@ export type Database = {
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
+          urgency_score?: number | null
           validation_warnings?: string[] | null
         }
         Relationships: [
@@ -1200,18 +1209,21 @@ export type Database = {
           instagram_post_url: string | null
           is_featured: boolean | null
           is_free: boolean
+          is_recurring: boolean | null
           likes_count: number | null
           location_address: string | null
           location_lat: number
           location_lng: number
           location_name: string
           price: number | null
+          recurrence_pattern: string | null
           signup_url: string | null
           source_event_id: string | null
           source_post_id: string | null
           stored_image_url: string | null
           topic_label: string | null
           updated_at: string
+          urgency_score: number | null
           verified: boolean | null
         }
         Insert: {
@@ -1232,18 +1244,21 @@ export type Database = {
           instagram_post_url?: string | null
           is_featured?: boolean | null
           is_free?: boolean
+          is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
           location_lat: number
           location_lng: number
           location_name: string
           price?: number | null
+          recurrence_pattern?: string | null
           signup_url?: string | null
           source_event_id?: string | null
           source_post_id?: string | null
           stored_image_url?: string | null
           topic_label?: string | null
           updated_at?: string
+          urgency_score?: number | null
           verified?: boolean | null
         }
         Update: {
@@ -1264,18 +1279,21 @@ export type Database = {
           instagram_post_url?: string | null
           is_featured?: boolean | null
           is_free?: boolean
+          is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
           location_lat?: number
           location_lng?: number
           location_name?: string
           price?: number | null
+          recurrence_pattern?: string | null
           signup_url?: string | null
           source_event_id?: string | null
           source_post_id?: string | null
           stored_image_url?: string | null
           topic_label?: string | null
           updated_at?: string
+          urgency_score?: number | null
           verified?: boolean | null
         }
         Relationships: [

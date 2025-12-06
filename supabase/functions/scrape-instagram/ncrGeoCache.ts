@@ -492,6 +492,423 @@ export const NCR_VENUE_GEOCACHE: Record<string, VenueData> = {
     lng: 121.0476,
     city: 'Muntinlupa'
   },
+
+  // ============================================================
+  // POBLACION MAKATI BARS & CLUBS
+  // ============================================================
+  'ugly duck': {
+    lat: 14.5649,
+    lng: 121.0295,
+    city: 'Makati',
+    fullName: 'Ugly Duck Poblacion'
+  },
+  'ugly duck poblacion': {
+    lat: 14.5649,
+    lng: 121.0295,
+    city: 'Makati'
+  },
+  'apotheka': {
+    lat: 14.5651,
+    lng: 121.0297,
+    city: 'Makati',
+    fullName: 'Apotheka Bar'
+  },
+  'bar ix': {
+    lat: 14.5653,
+    lng: 121.0299,
+    city: 'Makati',
+    fullName: 'BAR IX'
+  },
+  'bar 9': {
+    lat: 14.5653,
+    lng: 121.0299,
+    city: 'Makati',
+    fullName: 'BAR IX'
+  },
+  'whisky park': {
+    lat: 14.5655,
+    lng: 121.0301,
+    city: 'Makati',
+    fullName: 'Whisky Park'
+  },
+  'whiskey park': {
+    lat: 14.5655,
+    lng: 121.0301,
+    city: 'Makati',
+    fullName: 'Whisky Park'
+  },
+  'limbo': {
+    lat: 14.5539,
+    lng: 121.0489,
+    city: 'Makati',
+    fullName: 'Limbo Bar & Lounge'
+  },
+  'limbo bar': {
+    lat: 14.5539,
+    lng: 121.0489,
+    city: 'Makati',
+    fullName: 'Limbo Bar & Lounge'
+  },
+  'black market': {
+    lat: 14.5641,
+    lng: 121.0277,
+    city: 'Makati',
+    fullName: 'Black Market Poblacion'
+  },
+  'z hostel': {
+    lat: 14.5643,
+    lng: 121.0279,
+    city: 'Makati',
+    fullName: 'Z Hostel Rooftop'
+  },
+  'z hostel rooftop': {
+    lat: 14.5643,
+    lng: 121.0279,
+    city: 'Makati'
+  },
+  'draft gastropub': {
+    lat: 14.5645,
+    lng: 121.0281,
+    city: 'Makati'
+  },
+  'single origin': {
+    lat: 14.5647,
+    lng: 121.0283,
+    city: 'Makati',
+    fullName: 'Single Origin Coffee'
+  },
+  'finders keepers': {
+    lat: 14.5548,
+    lng: 121.0296,
+    city: 'Makati',
+    fullName: 'Finders Keepers Poblacion'
+  },
+  'tambai': {
+    lat: 14.5550,
+    lng: 121.0298,
+    city: 'Makati',
+    fullName: 'Tambai Bar'
+  },
+  '20:20': {
+    lat: 14.5552,
+    lng: 121.0300,
+    city: 'Makati',
+    fullName: '20:20 Bar'
+  },
+  'heyday': {
+    lat: 14.5637,
+    lng: 121.0309,
+    city: 'Makati',
+    fullName: 'Heyday Cafe'
+  },
+  'heyday cafe': {
+    lat: 14.5637,
+    lng: 121.0309,
+    city: 'Makati'
+  },
+  'jess and pats': {
+    lat: 14.5639,
+    lng: 121.0311,
+    city: 'Makati'
+  },
+  'nokal': {
+    lat: 14.5641,
+    lng: 121.0313,
+    city: 'Makati',
+    fullName: 'NoKal MNL'
+  },
+  'commune': {
+    lat: 14.5643,
+    lng: 121.0315,
+    city: 'Makati',
+    fullName: 'Commune Cafe'
+  },
+  'early night': {
+    lat: 14.5645,
+    lng: 121.0317,
+    city: 'Makati',
+    fullName: 'Early Night Bar'
+  },
+
+  // ============================================================
+  // LIVE MUSIC VENUES
+  // ============================================================
+  'route 196': {
+    lat: 14.6369,
+    lng: 121.0789,
+    city: 'Quezon City',
+    fullName: 'Route 196 Katipunan'
+  },
+  'route196': {
+    lat: 14.6369,
+    lng: 121.0789,
+    city: 'Quezon City',
+    fullName: 'Route 196 Katipunan'
+  },
+  'saguijo': {
+    lat: 14.5636,
+    lng: 121.0321,
+    city: 'Makati',
+    fullName: 'SaGuijo Cafe + Bar'
+  },
+  'saguijo cafe': {
+    lat: 14.5636,
+    lng: 121.0321,
+    city: 'Makati',
+    fullName: 'SaGuijo Cafe + Bar'
+  },
+  'b-side': {
+    lat: 14.5520,
+    lng: 121.0230,
+    city: 'Makati',
+    fullName: 'B-Side'
+  },
+  'bside': {
+    lat: 14.5520,
+    lng: 121.0230,
+    city: 'Makati',
+    fullName: 'B-Side'
+  },
+  '70s bistro': {
+    lat: 14.6281,
+    lng: 121.0469,
+    city: 'Quezon City',
+    fullName: '70s Bistro Anonas'
+  },
+  '123 block': {
+    lat: 14.5734,
+    lng: 121.0523,
+    city: 'Mandaluyong',
+    fullName: '123 Block Events'
+  },
+  'balcony': {
+    lat: 14.5533,
+    lng: 121.0485,
+    city: 'Makati',
+    fullName: 'Balcony Music House'
+  },
+  'balcony music house': {
+    lat: 14.5533,
+    lng: 121.0485,
+    city: 'Makati'
+  },
+  '19 east': {
+    lat: 14.4879,
+    lng: 121.0314,
+    city: 'Paranaque',
+    fullName: '19 East'
+  },
+  '19east': {
+    lat: 14.4879,
+    lng: 121.0314,
+    city: 'Paranaque',
+    fullName: '19 East'
+  },
+
+  // ============================================================
+  // ART SPACES & GALLERIES
+  // ============================================================
+  'gravity art space': {
+    lat: 14.5576,
+    lng: 120.9875,
+    city: 'Manila'
+  },
+  'spruce gallery': {
+    lat: 14.6019,
+    lng: 121.0367,
+    city: 'San Juan'
+  },
+  'cine adarna': {
+    lat: 14.6545,
+    lng: 121.0668,
+    city: 'Quezon City',
+    fullName: 'UP Cine Adarna'
+  },
+  'cinema 76': {
+    lat: 14.5994,
+    lng: 121.0338,
+    city: 'San Juan'
+  },
+  'pineapple lab': {
+    lat: 14.6188,
+    lng: 121.0515,
+    city: 'Quezon City'
+  },
+  'vinyl on vinyl': {
+    lat: 14.5532,
+    lng: 121.0185,
+    city: 'Makati',
+    fullName: 'Vinyl on Vinyl Gallery'
+  },
+  'underground gallery': {
+    lat: 14.5509,
+    lng: 121.0472,
+    city: 'Taguig'
+  },
+  '1335mabini': {
+    lat: 14.5715,
+    lng: 120.9856,
+    city: 'Manila',
+    fullName: '1335 Mabini Gallery'
+  },
+  '1335 mabini': {
+    lat: 14.5715,
+    lng: 120.9856,
+    city: 'Manila'
+  },
+
+  // ============================================================
+  // BGC NIGHTLIFE
+  // ============================================================
+  'social house': {
+    lat: 14.5533,
+    lng: 121.0483,
+    city: 'Taguig',
+    fullName: 'Social House BGC'
+  },
+  'social house bgc': {
+    lat: 14.5533,
+    lng: 121.0483,
+    city: 'Taguig'
+  },
+  'the palace pool club': {
+    lat: 14.5535,
+    lng: 121.0485,
+    city: 'Taguig'
+  },
+  'palace pool club': {
+    lat: 14.5535,
+    lng: 121.0485,
+    city: 'Taguig',
+    fullName: 'The Palace Pool Club'
+  },
+  'valkyrie': {
+    lat: 14.5537,
+    lng: 121.0487,
+    city: 'Taguig',
+    fullName: 'Valkyrie BGC'
+  },
+  'revel': {
+    lat: 14.5539,
+    lng: 121.0489,
+    city: 'Taguig',
+    fullName: 'Revel at The Palace'
+  },
+  'pool club': {
+    lat: 14.5541,
+    lng: 121.0491,
+    city: 'Taguig',
+    fullName: 'Pool Club BGC'
+  },
+  'bunk': {
+    lat: 14.5543,
+    lng: 121.0493,
+    city: 'Taguig',
+    fullName: 'Bunk BGC'
+  },
+  'xylo': {
+    lat: 14.5545,
+    lng: 121.0495,
+    city: 'Taguig',
+    fullName: 'XYLO at The Palace'
+  },
+
+  // ============================================================
+  // HOTELS & LARGE VENUES
+  // ============================================================
+  'okada': {
+    lat: 14.5253,
+    lng: 120.9792,
+    city: 'Paranaque',
+    fullName: 'Okada Manila'
+  },
+  'okada manila': {
+    lat: 14.5253,
+    lng: 120.9792,
+    city: 'Paranaque'
+  },
+  'solaire': {
+    lat: 14.5258,
+    lng: 120.9780,
+    city: 'Paranaque',
+    fullName: 'Solaire Resort'
+  },
+  'city of dreams': {
+    lat: 14.5260,
+    lng: 120.9795,
+    city: 'Paranaque',
+    fullName: 'City of Dreams Manila'
+  },
+  'samsung hall': {
+    lat: 14.5497,
+    lng: 121.0551,
+    city: 'Taguig',
+    fullName: 'Samsung Hall SM Aura'
+  },
+  'new frontier theater': {
+    lat: 14.6202,
+    lng: 121.0531,
+    city: 'Quezon City'
+  },
+  'moa arena': {
+    lat: 14.5359,
+    lng: 120.9826,
+    city: 'Pasay',
+    fullName: 'Mall of Asia Arena'
+  },
+  'mall of asia arena': {
+    lat: 14.5359,
+    lng: 120.9826,
+    city: 'Pasay'
+  },
+
+  // ============================================================
+  // OTHER POPULAR VENUES
+  // ============================================================
+  'vector billiards': {
+    lat: 14.5867,
+    lng: 121.0572,
+    city: 'Pasig'
+  },
+  'the fifth': {
+    lat: 14.5636,
+    lng: 121.0359,
+    city: 'Makati',
+    fullName: 'The Fifth at Rockwell'
+  },
+  '3 torre lorenzo': {
+    lat: 14.5574,
+    lng: 120.9878,
+    city: 'Manila'
+  },
+  'centris elements': {
+    lat: 14.6425,
+    lng: 121.0493,
+    city: 'Quezon City'
+  },
+  'forbestown': {
+    lat: 14.5528,
+    lng: 121.0465,
+    city: 'Taguig',
+    fullName: 'Forbestown BGC'
+  },
+  'yardstick': {
+    lat: 14.5583,
+    lng: 121.0187,
+    city: 'Makati',
+    fullName: 'Yardstick Coffee'
+  },
+  'the alley at karrivin': {
+    lat: 14.5485,
+    lng: 121.0336,
+    city: 'Makati'
+  },
+  'karrivin': {
+    lat: 14.5485,
+    lng: 121.0336,
+    city: 'Makati',
+    fullName: 'The Alley at Karrivin'
+  },
 };
 
 /**

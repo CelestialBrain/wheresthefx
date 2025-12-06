@@ -607,6 +607,26 @@ FILIPINO LANGUAGE:
 - Days: "Lunes"=Mon, "Martes"=Tue, "Miyerkules"=Wed, "Huwebes"=Thu, "Biyernes"=Fri, "Sabado"=Sat, "Linggo"=Sun
 - Time: "tanghali"=noon, "hapon"=afternoon, "gabi"=evening, "umaga"=morning
 
+CATEGORY (must be one of these EXACT values):
+- nightlife: clubs, bars, DJ sets, parties, club nights
+- music: concerts, gigs, live bands, album launches, open mic
+- art_culture: galleries, theater, film screenings, art shows, exhibits
+- markets: bazaars, pop-ups, flea markets, food markets, thrift sales
+- food: food festivals, dining events, tastings, pop-up restaurants
+- workshops: classes, seminars, skill-building, tutorials
+- community: meetups, fundraisers, volunteer events, networking
+- comedy: stand-up, improv, comedy shows
+- other: anything that doesn't fit above
+
+RECURRING EVENTS:
+- If caption says "Every Friday", "Weekly", "Monthly", "Regularly" → isRecurring: true
+- Pattern detection:
+  * "Every Friday" → recurrencePattern: "weekly:friday"
+  * "Every Saturday" → recurrencePattern: "weekly:saturday"
+  * "First Friday of every month" → recurrencePattern: "monthly:first-friday"
+  * "Biweekly on Saturdays" → recurrencePattern: "biweekly:saturday"
+- Still extract the NEXT occurrence date as eventDate
+
 OTHER RULES:
 - event_title: Extract the actual event NAME, not the first line of caption
 - If multiple venues/dates exist, put the FIRST one as primary and list others in additionalDates
@@ -637,7 +657,10 @@ Return a valid JSON object with these exact fields:
   "originalDate": "YYYY-MM-DD" or null,
   "reason": string or null,
   "availabilityStatus": "available" | "sold_out" | "waitlist" | "limited" | "few_left" or null,
-  "locationStatus": "confirmed" | "tba" | "secret" | "dm_for_details" or null
+  "locationStatus": "confirmed" | "tba" | "secret" | "dm_for_details" or null,
+  "category": "nightlife" | "music" | "art_culture" | "markets" | "food" | "workshops" | "community" | "comedy" | "other",
+  "isRecurring": boolean,
+  "recurrencePattern": string or null
 }`;
 
   return prompt;
