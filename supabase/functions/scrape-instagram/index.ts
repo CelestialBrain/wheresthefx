@@ -1249,7 +1249,7 @@ Deno.serve(async (req) => {
             event_time: validation.correctedData.eventTime,
             end_time: validation.correctedData.endTime,
             price: validation.correctedData.price || 0,
-            is_free: post.aiExtraction?.isFree ?? true,
+            is_free: post.aiExtraction?.isFree ?? false, // Default to false, not true!
             category: validation.correctedCategory || category,
             ocr_text: post.aiExtraction?.ocrText,
             ai_confidence: post.aiExtraction?.confidence,
@@ -1261,6 +1261,16 @@ Deno.serve(async (req) => {
             validation_warnings: validation.warnings,
             is_duplicate: duplicateCheck.isDuplicate,
             duplicate_of: duplicateCheck.duplicateOfId,
+            // Price range fields
+            price_min: (post.aiExtraction as any)?.priceMin ?? null,
+            price_max: (post.aiExtraction as any)?.priceMax ?? null,
+            price_notes: (post.aiExtraction as any)?.priceNotes ?? null,
+            // Event lifecycle status fields
+            event_status: (post.aiExtraction as any)?.isUpdate 
+              ? ((post.aiExtraction as any)?.updateType === 'cancel' ? 'cancelled' : 'rescheduled')
+              : ((post.aiExtraction as any)?.eventStatus ?? 'confirmed'),
+            availability_status: (post.aiExtraction as any)?.availabilityStatus ?? 'available',
+            location_status: (post.aiExtraction as any)?.locationStatus ?? 'confirmed',
           }, { onConflict: 'post_id' }).select('id').single();
           
           if (error) {
