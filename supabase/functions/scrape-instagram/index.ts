@@ -1144,12 +1144,15 @@ Deno.serve(async (req) => {
           // === VALIDATION LAYER ===
           const validation = validateExtractedData({
             eventDate: post.aiExtraction?.eventDate,
-            eventEndDate: null,
+            eventEndDate: null, // AI extraction doesn't support end date yet
             eventTime: post.aiExtraction?.eventTime,
             endTime: post.aiExtraction?.endTime,
             locationName: canonicalVenue,
             price: post.aiExtraction?.price,
             caption: post.caption,
+            eventTitle: post.aiExtraction?.eventTitle || null,
+            category: category,
+            isFree: post.aiExtraction?.isFree ?? null,
           });
           
           // Check for duplicates
@@ -1197,7 +1200,7 @@ Deno.serve(async (req) => {
             end_time: validation.correctedData.endTime,
             price: validation.correctedData.price || 0,
             is_free: post.aiExtraction?.isFree ?? true,
-            category: category,
+            category: validation.correctedCategory || category,
             ocr_text: post.aiExtraction?.ocrText,
             ai_confidence: post.aiExtraction?.confidence,
             ocr_processed: true,
@@ -1217,12 +1220,25 @@ Deno.serve(async (req) => {
             });
             failed++;
           } else {
+            // Log validation warnings to validation_logs table
+            if (validation.warnings.length > 0 && upsertedPost?.id) {
+              await logValidationWarnings(supabase, upsertedPost.id, validation.warnings, {
+                date: post.aiExtraction?.eventDate,
+                time: post.aiExtraction?.eventTime,
+                venue: canonicalVenue,
+                price: post.aiExtraction?.price,
+                title: post.aiExtraction?.eventTitle,
+                category: category,
+              });
+            }
+            
             await ingestLogger?.success('save', `Saved post ${post.postId}`, {
               postId: post.postId,
               isEvent: post.aiExtraction?.isEvent || false,
               hasCoordinates: !!(locationLat && locationLng),
               geocodeSource,
               category,
+              validationWarnings: validation.warnings.length,
             });
             saved++;
           }
