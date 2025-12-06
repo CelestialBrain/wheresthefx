@@ -218,16 +218,28 @@ PRICE FORMATS TO RECOGNIZE:
 - "FREE", "LIBRE", "Walang bayad", "No cover" → isFree: true, price: null
 
 NOT AN EVENT - Set isEvent: false if:
+- Missing ANY of: specific date + venue + invitation language
 - Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
 - Says "Every [day]" without a specific date: "Every Friday night"
 - Generic promo language with no specific date: "Visit us", "Come check out", "Be in the loop"
 - Has day range schedule (Mon-Sat, Tues to Sun) but no specific event date
 - Describes regular venue operations, not a unique event
+- Rate sheet or menu (price lists for services/drinks, not event tickets)
+- Promotional material without event details (teasers, announcements, "coming soon")
+- Teaser with "soon", "TBA", "watch this space" but no concrete date/venue
+
+EVENT_ENDED - Set isEvent: false if:
+- Event date is in the past (before ${today})
+- Post says "was", "happened", "throwback", "last night", "yesterday"
+- Post is clearly a recap or retrospective of a past event
 
 Examples of NOT events:
 - "Open 6PM — Tues to Sat" → recurring hours, NOT an event
 - "Every Friday we have live music" → recurring, no specific date
 - "Visit us at our new location" → promo, not event
+- "Drink Menu: Beer ₱100, Cocktails ₱200" → rate sheet, NOT an event
+- "Coming soon to BGC!" → teaser, no date/venue
+- "Amazing night last Saturday!" → past event, EVENT_ENDED
 
 FILIPINO DATE/TIME WORDS:
 - Date: "bukas" = tomorrow, "mamaya" = later today, "ngayon" = today
@@ -499,16 +511,28 @@ PRICE FORMATS:
 - "FREE", "LIBRE", "Walang bayad" → isFree: true, price: null
 
 NOT AN EVENT - Set isEvent: false if:
+- Missing ANY of: specific date + venue + invitation language
 - Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
 - Says "Every [day]" without a specific date: "Every Friday night"
 - Generic promo language with no specific date: "Visit us", "Come check out", "Be in the loop"
 - Has day range schedule (Mon-Sat, Tues to Sun) but no specific event date
 - Describes regular venue operations, not a unique event
+- Rate sheet or menu (price lists for services/drinks, not event tickets)
+- Promotional material without event details (teasers, announcements, "coming soon")
+- Teaser with "soon", "TBA", "watch this space" but no concrete date/venue
+
+EVENT_ENDED - Set isEvent: false if:
+- Event date is in the past (before ${today})
+- Post says "was", "happened", "throwback", "last night", "yesterday"
+- Post is clearly a recap or retrospective of a past event
 
 Examples of NOT events:
 - "Open 6PM — Tues to Sat" → recurring hours, NOT an event
 - "Every Friday we have live music" → recurring, no specific date
 - "Visit us at our new location" → promo, not event
+- "Drink Menu: Beer ₱100, Cocktails ₱200" → rate sheet, NOT an event
+- "Coming soon to BGC!" → teaser, no date/venue
+- "Amazing night last Saturday!" → past event, EVENT_ENDED
 
 FILIPINO LANGUAGE:
 - Date: "bukas"=tomorrow, "mamaya"=later today, "ngayon"=today
@@ -658,16 +682,28 @@ PRICE FORMATS:
 - "FREE", "LIBRE", "Walang bayad" → isFree: true, price: null
 
 NOT AN EVENT - Set isEvent: false if:
+- Missing ANY of: specific date + venue + invitation language
 - Contains operating hours pattern: "6PM — Tues to Sat", "Open Mon-Fri", "Daily 10AM-10PM"
 - Says "Every [day]" without a specific date: "Every Friday night"
 - Generic promo language with no specific date: "Visit us", "Come check out", "Be in the loop"
 - Has day range schedule (Mon-Sat, Tues to Sun) but no specific event date
 - Describes regular venue operations, not a unique event
+- Rate sheet or menu (price lists for services/drinks, not event tickets)
+- Promotional material without event details (teasers, announcements, "coming soon")
+- Teaser with "soon", "TBA", "watch this space" but no concrete date/venue
+
+EVENT_ENDED - Set isEvent: false if:
+- Event date is in the past (before ${today})
+- Post says "was", "happened", "throwback", "last night", "yesterday"
+- Post is clearly a recap or retrospective of a past event
 
 Examples of NOT events:
 - "Open 6PM — Tues to Sat" → recurring hours, NOT an event
 - "Every Friday we have live music" → recurring, no specific date
 - "Visit us at our new location" → promo, not event
+- "Drink Menu: Beer ₱100, Cocktails ₱200" → rate sheet, NOT an event
+- "Coming soon to BGC!" → teaser, no date/venue
+- "Amazing night last Saturday!" → past event, EVENT_ENDED
 
 FILIPINO LANGUAGE:
 - Date: "bukas"=tomorrow, "mamaya"=later today, "ngayon"=today
