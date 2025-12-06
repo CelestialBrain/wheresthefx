@@ -95,6 +95,44 @@ export type Database = {
           },
         ]
       }
+      event_dates: {
+        Row: {
+          created_at: string
+          event_date: string
+          event_time: string | null
+          id: string
+          instagram_post_id: string
+          venue_address: string | null
+          venue_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_date: string
+          event_time?: string | null
+          id?: string
+          instagram_post_id: string
+          venue_address?: string | null
+          venue_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_date?: string
+          event_time?: string | null
+          id?: string
+          instagram_post_id?: string
+          venue_address?: string | null
+          venue_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_dates_instagram_post_id_fkey"
+            columns: ["instagram_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_edit_history: {
         Row: {
           action_type: string
@@ -227,6 +265,54 @@ export type Database = {
             columns: ["reporter_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_updates: {
+        Row: {
+          detected_at: string
+          id: string
+          new_date: string | null
+          old_date: string | null
+          original_post_id: string
+          reason: string | null
+          update_post_id: string | null
+          update_type: string
+        }
+        Insert: {
+          detected_at?: string
+          id?: string
+          new_date?: string | null
+          old_date?: string | null
+          original_post_id: string
+          reason?: string | null
+          update_post_id?: string | null
+          update_type: string
+        }
+        Update: {
+          detected_at?: string
+          id?: string
+          new_date?: string | null
+          old_date?: string | null
+          original_post_id?: string
+          reason?: string | null
+          update_post_id?: string | null
+          update_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_updates_original_post_id_fkey"
+            columns: ["original_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_updates_update_post_id_fkey"
+            columns: ["update_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
             referencedColumns: ["id"]
           },
         ]
@@ -534,6 +620,7 @@ export type Database = {
           ai_confidence: number | null
           ai_extraction: Json | null
           ai_reasoning: string | null
+          availability_status: string | null
           caption: string | null
           category: string | null
           comments_count: number | null
@@ -543,6 +630,7 @@ export type Database = {
           entity_extraction_method: string | null
           event_date: string | null
           event_end_date: string | null
+          event_status: string | null
           event_time: string | null
           event_title: string | null
           extraction_method: string | null
@@ -559,6 +647,7 @@ export type Database = {
           location_lat: number | null
           location_lng: number | null
           location_name: string | null
+          location_status: string | null
           mentions: string[] | null
           needs_review: boolean | null
           ocr_confidence: number | null
@@ -572,6 +661,9 @@ export type Database = {
           post_url: string
           posted_at: string
           price: number | null
+          price_max: number | null
+          price_min: number | null
+          price_notes: string | null
           review_tier: string | null
           signup_url: string | null
           stored_image_url: string | null
@@ -586,6 +678,7 @@ export type Database = {
           ai_confidence?: number | null
           ai_extraction?: Json | null
           ai_reasoning?: string | null
+          availability_status?: string | null
           caption?: string | null
           category?: string | null
           comments_count?: number | null
@@ -595,6 +688,7 @@ export type Database = {
           entity_extraction_method?: string | null
           event_date?: string | null
           event_end_date?: string | null
+          event_status?: string | null
           event_time?: string | null
           event_title?: string | null
           extraction_method?: string | null
@@ -611,6 +705,7 @@ export type Database = {
           location_lat?: number | null
           location_lng?: number | null
           location_name?: string | null
+          location_status?: string | null
           mentions?: string[] | null
           needs_review?: boolean | null
           ocr_confidence?: number | null
@@ -624,6 +719,9 @@ export type Database = {
           post_url: string
           posted_at: string
           price?: number | null
+          price_max?: number | null
+          price_min?: number | null
+          price_notes?: string | null
           review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
@@ -638,6 +736,7 @@ export type Database = {
           ai_confidence?: number | null
           ai_extraction?: Json | null
           ai_reasoning?: string | null
+          availability_status?: string | null
           caption?: string | null
           category?: string | null
           comments_count?: number | null
@@ -647,6 +746,7 @@ export type Database = {
           entity_extraction_method?: string | null
           event_date?: string | null
           event_end_date?: string | null
+          event_status?: string | null
           event_time?: string | null
           event_title?: string | null
           extraction_method?: string | null
@@ -663,6 +763,7 @@ export type Database = {
           location_lat?: number | null
           location_lng?: number | null
           location_name?: string | null
+          location_status?: string | null
           mentions?: string[] | null
           needs_review?: boolean | null
           ocr_confidence?: number | null
@@ -676,6 +777,9 @@ export type Database = {
           post_url?: string
           posted_at?: string
           price?: number | null
+          price_max?: number | null
+          price_min?: number | null
+          price_notes?: string | null
           review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
