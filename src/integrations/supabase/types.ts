@@ -538,6 +538,7 @@ export type Database = {
           category: string | null
           comments_count: number | null
           created_at: string
+          duplicate_of: string | null
           end_time: string | null
           entity_extraction_method: string | null
           event_date: string | null
@@ -550,6 +551,7 @@ export type Database = {
           image_storage_path: string | null
           image_url: string | null
           instagram_account_id: string
+          is_duplicate: boolean | null
           is_event: boolean | null
           is_free: boolean
           likes_count: number | null
@@ -570,12 +572,14 @@ export type Database = {
           post_url: string
           posted_at: string
           price: number | null
+          review_tier: string | null
           signup_url: string | null
           stored_image_url: string | null
           tags: string[] | null
           topic_confidence: number | null
           topic_label: string | null
           updated_at: string
+          validation_warnings: string[] | null
         }
         Insert: {
           additional_images?: string[] | null
@@ -586,6 +590,7 @@ export type Database = {
           category?: string | null
           comments_count?: number | null
           created_at?: string
+          duplicate_of?: string | null
           end_time?: string | null
           entity_extraction_method?: string | null
           event_date?: string | null
@@ -598,6 +603,7 @@ export type Database = {
           image_storage_path?: string | null
           image_url?: string | null
           instagram_account_id: string
+          is_duplicate?: boolean | null
           is_event?: boolean | null
           is_free?: boolean
           likes_count?: number | null
@@ -618,12 +624,14 @@ export type Database = {
           post_url: string
           posted_at: string
           price?: number | null
+          review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
           tags?: string[] | null
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
+          validation_warnings?: string[] | null
         }
         Update: {
           additional_images?: string[] | null
@@ -634,6 +642,7 @@ export type Database = {
           category?: string | null
           comments_count?: number | null
           created_at?: string
+          duplicate_of?: string | null
           end_time?: string | null
           entity_extraction_method?: string | null
           event_date?: string | null
@@ -646,6 +655,7 @@ export type Database = {
           image_storage_path?: string | null
           image_url?: string | null
           instagram_account_id?: string
+          is_duplicate?: boolean | null
           is_event?: boolean | null
           is_free?: boolean
           likes_count?: number | null
@@ -666,14 +676,23 @@ export type Database = {
           post_url?: string
           posted_at?: string
           price?: number | null
+          review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
           tags?: string[] | null
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
+          validation_warnings?: string[] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "instagram_posts_duplicate_of_fkey"
+            columns: ["duplicate_of"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "instagram_posts_instagram_account_id_fkey"
             columns: ["instagram_account_id"]
@@ -1372,6 +1391,44 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      validation_logs: {
+        Row: {
+          corrected_value: string | null
+          created_at: string | null
+          field_name: string | null
+          id: string
+          instagram_post_id: string | null
+          original_value: string | null
+          warning_type: string
+        }
+        Insert: {
+          corrected_value?: string | null
+          created_at?: string | null
+          field_name?: string | null
+          id?: string
+          instagram_post_id?: string | null
+          original_value?: string | null
+          warning_type: string
+        }
+        Update: {
+          corrected_value?: string | null
+          created_at?: string | null
+          field_name?: string | null
+          id?: string
+          instagram_post_id?: string | null
+          original_value?: string | null
+          warning_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "validation_logs_instagram_post_id_fkey"
+            columns: ["instagram_post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
