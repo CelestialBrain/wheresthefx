@@ -96,6 +96,7 @@ serve(async (req) => {
       instagram_post_url: post.post_url,
       instagram_account_username: accountData?.username || null,
       topic_label: post.topic_label,
+      category: post.category || 'other', // Include category from source post
       likes_count: post.likes_count || 0,
       comments_count: post.comments_count || 0,
       source_post_id: postId,
