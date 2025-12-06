@@ -724,7 +724,7 @@ function inferAMPM(hour: number, text: string): 'AM' | 'PM' | null {
   
   // CRITICAL FIX: After-hours context detection for late-night times (1-5)
   // Check for after-party, late-night contexts that indicate early morning hours
-  const afterHoursPattern = /after.?party|late.?night|[1-5]\s*am|after.?hours|dawn|sunrise.?set|madaling.?araw/i;
+  const afterHoursPattern = /after.?party|late.?night|after.?hours|dawn|sunrise.?set|madaling.?araw/i;
   if (afterHoursPattern.test(text) && hour >= 1 && hour <= 5) {
     return 'AM'; // Times 1-5 in after-hours contexts are early morning, not afternoon
   }

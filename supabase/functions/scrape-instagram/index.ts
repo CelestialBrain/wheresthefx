@@ -2318,7 +2318,8 @@ Deno.serve(async (req) => {
                       primary_post_id: primaryId,
                       merged_post_ids: [mergedId]
                     });
-                  console.log(`Created new event group for posts ${primaryId} (authority: ${currentAuthority}) and ${mergedId} (authority: ${similarAuthority})`);
+                  console.log(`Created new event group: primary=${primaryId} (authority=${primaryId === postId ? currentAuthority : similarAuthority}), merged=${mergedId} (authority=${mergedId === postId ? currentAuthority : similarAuthority})`);
+                }
                 }
               }
             }
