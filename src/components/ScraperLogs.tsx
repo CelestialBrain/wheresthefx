@@ -110,25 +110,63 @@ export const ScraperLogs = () => {
     setFilteredLogs(filtered);
   };
 
-  const exportLogsAsJSON = () => {
-    const dataStr = JSON.stringify(filteredLogs, null, 2);
+  const exportLogsAsJSON = async () => {
+    // If a specific run is selected, fetch ALL logs for that run from DB
+    let logsToExport = filteredLogs;
+    
+    if (selectedRun !== 'all') {
+      toast({ title: "Fetching all logs for run...", description: "This may take a moment" });
+      
+      const { data, error } = await supabase
+        .from('scraper_logs')
+        .select('*')
+        .eq('run_id', selectedRun)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        toast({ title: "Error fetching logs", description: error.message, variant: "destructive" });
+        return;
+      }
+      logsToExport = data || [];
+    }
+    
+    const dataStr = JSON.stringify(logsToExport, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `scraper-logs-${new Date().toISOString()}.json`;
+    link.download = `scraper-logs-${selectedRun !== 'all' ? selectedRun : 'all'}-${new Date().toISOString()}.json`;
     link.click();
     URL.revokeObjectURL(url);
 
     toast({
       title: "Logs exported",
-      description: `Exported ${filteredLogs.length} log entries as JSON`,
+      description: `Exported ${logsToExport.length} log entries as JSON`,
     });
   };
 
-  const exportLogsAsCSV = () => {
+  const exportLogsAsCSV = async () => {
+    // If a specific run is selected, fetch ALL logs for that run from DB
+    let logsToExport = filteredLogs;
+    
+    if (selectedRun !== 'all') {
+      toast({ title: "Fetching all logs for run...", description: "This may take a moment" });
+      
+      const { data, error } = await supabase
+        .from('scraper_logs')
+        .select('*')
+        .eq('run_id', selectedRun)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        toast({ title: "Error fetching logs", description: error.message, variant: "destructive" });
+        return;
+      }
+      logsToExport = data || [];
+    }
+    
     const headers = ['Timestamp', 'Stage', 'Level', 'Message', 'Post ID', 'Duration (ms)', 'Data'];
-    const rows = filteredLogs.map(log => [
+    const rows = logsToExport.map(log => [
       new Date(log.created_at).toLocaleString(),
       log.stage,
       log.log_level,
@@ -147,13 +185,13 @@ export const ScraperLogs = () => {
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `scraper-logs-${new Date().toISOString()}.csv`;
+    link.download = `scraper-logs-${selectedRun !== 'all' ? selectedRun : 'all'}-${new Date().toISOString()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
 
     toast({
       title: "Logs exported",
-      description: `Exported ${filteredLogs.length} log entries as CSV`,
+      description: `Exported ${logsToExport.length} log entries as CSV`,
     });
   };
 
