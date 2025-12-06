@@ -1272,8 +1272,8 @@ Deno.serve(async (req) => {
                 const { error: datesError } = await supabase
                   .from('event_dates')
                   .upsert(additionalDatesRecords, { 
-                    onConflict: 'instagram_post_id,event_date',
-                    ignoreDuplicates: true 
+                    onConflict: 'instagram_post_id,event_date,venue_name',
+                    ignoreDuplicates: false 
                   });
                 
                 if (datesError) {

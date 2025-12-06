@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS public.event_dates (
   event_time time,
   venue_name text,
   venue_address text,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(instagram_post_id, event_date, venue_name)
 );
 
 -- Create indexes for efficient querying

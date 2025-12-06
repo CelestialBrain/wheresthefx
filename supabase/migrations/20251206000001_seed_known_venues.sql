@@ -37,7 +37,6 @@ INSERT INTO public.known_venues (name, lat, lng, address, city, aliases, instagr
   ('Fuze Republic', 14.6377, 121.0795, 'Katipunan Avenue', 'Quezon City', ARRAY['Fuze'], '@fuzerepublic'),
   
   -- BGC / Fort Bonifacio
-  ('Xylo at The Palace', 14.5508, 121.0481, '9th Avenue, BGC', 'Taguig', ARRAY['Xylo', 'XYLO'], '@xyloatthepalace'),
   ('Valkyrie', 14.5502, 121.0477, 'The Palace, BGC', 'Taguig', ARRAY['Valkyrie BGC'], '@valkyriemanila'),
   ('Encore Beach Club', 14.5522, 121.0488, 'Fort Entertainment Complex', 'Taguig', ARRAY['Encore', 'Encore BGC'], '@encorebeachclub'),
   ('The Palace Manila', 14.5508, 121.0481, '9th Avenue corner 36th Street', 'Taguig', ARRAY['Palace Manila', 'Palace'], '@thepalacemanila'),
