@@ -283,6 +283,34 @@ async function parseEventWithAI(
   }
 }
 
+/**
+ * Calculate similarity between two event titles (0-1 scale)
+ * Used to prevent merging different events at the same venue/date
+ */
+function calculateTitleSimilarity(title1: string | null, title2: string | null): number {
+  if (!title1 || !title2) return 0;
+  
+  // Normalize titles: lowercase, remove special chars, trim
+  const normalize = (s: string) => s.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 2); // Remove short words
+  
+  const words1 = normalize(title1);
+  const words2 = normalize(title2);
+  
+  if (words1.length === 0 || words2.length === 0) return 0;
+  
+  // Calculate Jaccard similarity (intersection over union)
+  const set1 = new Set(words1);
+  const set2 = new Set(words2);
+  const intersection = new Set([...set1].filter(x => set2.has(x)));
+  const union = new Set([...set1, ...set2]);
+  
+  return intersection.size / union.size;
+}
+
 // Parse and normalize date to YYYY-MM-DD format
 function parseAndNormalizeDate(dateStr: string): string | null {
   if (!dateStr) return null;
@@ -2155,6 +2183,19 @@ Deno.serve(async (req) => {
             // If this is likely a duplicate, link them in event_groups
             for (const similar of similarEvents) {
               if (similar.post_id !== postId) {
+                // Check title similarity to prevent merging different events at same venue/date
+                const titleSimilarity = calculateTitleSimilarity(eventInfo.eventTitle, similar.event_title);
+                const SIMILARITY_THRESHOLD = 0.3; // 30% word overlap required
+                
+                if (titleSimilarity < SIMILARITY_THRESHOLD) {
+                  console.log(`Skipping merge: titles too different (similarity: ${titleSimilarity.toFixed(2)})`);
+                  console.log(`  - Current: "${eventInfo.eventTitle}"`);
+                  console.log(`  - Existing: "${similar.event_title}"`);
+                  continue; // Don't merge events with different titles
+                }
+                
+                console.log(`Titles similar enough to merge (similarity: ${titleSimilarity.toFixed(2)})`);
+                
                 // Check if already in a group
                 const { data: existingGroup } = await supabase
                   .from('event_groups')
