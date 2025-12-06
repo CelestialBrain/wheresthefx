@@ -872,6 +872,7 @@ Deno.serve(async (req) => {
           category?: string;
           ocrText?: string;
           confidence?: number;
+          additionalDates?: Array<{ date: string; venue: string; time?: string }>;
         };
       }
 
@@ -1256,6 +1257,33 @@ Deno.serve(async (req) => {
                 title: post.aiExtraction?.eventTitle,
                 category: category,
               });
+            }
+            
+            // Store additional dates if provided (multi-date events)
+            if (upsertedPost?.id && post.aiExtraction?.additionalDates && post.aiExtraction.additionalDates.length > 0) {
+              try {
+                const additionalDatesRecords = post.aiExtraction.additionalDates.map(ad => ({
+                  instagram_post_id: upsertedPost.id,
+                  event_date: ad.date,
+                  event_time: ad.time || null,
+                  venue_name: ad.venue,
+                }));
+                
+                const { error: datesError } = await supabase
+                  .from('event_dates')
+                  .upsert(additionalDatesRecords, { 
+                    onConflict: 'instagram_post_id,event_date',
+                    ignoreDuplicates: true 
+                  });
+                
+                if (datesError) {
+                  console.warn(`Failed to insert additional dates for ${post.postId}:`, datesError.message);
+                } else {
+                  console.log(`Stored ${additionalDatesRecords.length} additional date(s) for ${post.postId}`);
+                }
+              } catch (datesInsertError) {
+                console.warn(`Error inserting additional dates for ${post.postId}:`, datesInsertError);
+              }
             }
             
             await ingestLogger?.success('save', `Saved post ${post.postId}`, {
