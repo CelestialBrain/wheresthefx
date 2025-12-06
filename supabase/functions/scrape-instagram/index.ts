@@ -873,22 +873,50 @@ Deno.serve(async (req) => {
             accountsProcessed.add(post.ownerUsername.toLowerCase());
           }
           
-          // Log AI extraction data
+          // ENHANCED LOGGING: Log complete AI extraction data for debugging
           await ingestLogger?.log({
             post_id: post.postId,
             log_level: 'info',
             stage: 'extraction',
             message: `AI extraction: ${post.aiExtraction?.isEvent ? 'EVENT' : 'NOT_EVENT'}`,
             data: {
+              // Core event fields
               eventTitle: post.aiExtraction?.eventTitle || null,
               eventDate: post.aiExtraction?.eventDate || null,
               eventTime: post.aiExtraction?.eventTime || null,
+              endTime: post.aiExtraction?.endTime || null,
               venueName: post.aiExtraction?.venueName || null,
+              venueAddress: post.aiExtraction?.venueAddress || null,
               category: post.aiExtraction?.category || null,
+              price: post.aiExtraction?.price || null,
+              isFree: post.aiExtraction?.isFree ?? null,
               confidence: post.aiExtraction?.confidence || null,
-              ocrTextPreview: post.aiExtraction?.ocrText?.substring(0, 200) || null,
+              // FULL CONTEXT FOR DEBUGGING
+              ocrTextFull: post.aiExtraction?.ocrText || null,  // Complete OCR text
+              captionFull: post.caption || null,                 // Original caption
+              reasoning: (post.aiExtraction as any)?.reasoning || null,  // AI reasoning
+              imageUrl: post.imageUrl || null,                   // What image was analyzed
+              ownerUsername: post.ownerUsername || null,
             },
           });
+          
+          // Log non-events explicitly for analysis
+          if (!post.aiExtraction?.isEvent) {
+            await ingestLogger?.log({
+              post_id: post.postId,
+              log_level: 'info',
+              stage: 'rejection',
+              message: 'Post classified as NOT_EVENT by AI',
+              data: {
+                reason: 'AI_CLASSIFIED_NOT_EVENT',
+                confidence: post.aiExtraction?.confidence || null,
+                reasoning: (post.aiExtraction as any)?.reasoning || null,
+                captionPreview: post.caption?.substring(0, 300) || null,
+                ocrTextPreview: post.aiExtraction?.ocrText?.substring(0, 300) || null,
+                ownerUsername: post.ownerUsername || null,
+              },
+            });
+          }
           
           if (post.aiExtraction?.isEvent) eventsDetected++;
           if (post.imageUrl) withImages++;
