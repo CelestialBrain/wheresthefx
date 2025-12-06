@@ -1080,11 +1080,18 @@ Deno.serve(async (req) => {
             try {
               await ingestLogger?.info('image', `Downloading image for ${post.postId}...`, { postId: post.postId });
               
-              const imageResponse = await fetch(imageUrl, {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-              });
+              // Add 15-second timeout to prevent hanging on failed downloads
+              const timeoutMs = 15000;
+              const imageResponse = await Promise.race([
+                fetch(imageUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                  }
+                }),
+                new Promise<Response>((_, reject) => 
+                  setTimeout(() => reject(new Error('Image download timeout after 15s')), timeoutMs)
+                )
+              ]);
               
               if (imageResponse.ok) {
                 const imageBlob = await imageResponse.blob();
