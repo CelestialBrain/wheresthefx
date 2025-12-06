@@ -31,6 +31,25 @@ export interface TierAssignment {
  */
 const VALID_CATEGORIES = ['nightlife', 'music', 'art_culture', 'markets', 'food', 'workshops', 'community', 'comedy', 'other'];
 
+// Vague venue patterns that should be rejected
+const VAGUE_VENUE_PATTERNS = [
+  /^tba$/i,
+  /^tbd$/i,
+  /^to be announced$/i,
+  /^check bio/i,
+  /^dm for/i,
+  /^message for/i,
+  /^see bio/i,
+  /^link in bio/i,
+  /^details in bio/i,
+  /^secret location/i,
+  /^undisclosed/i,
+  /^private location/i,
+  /^location tba/i,
+  /^venue tbd/i,
+  /^will announce/i,
+];
+
 export function validateExtractedData(data: {
   eventDate?: string | null;
   eventEndDate?: string | null;
@@ -135,6 +154,13 @@ export function validateExtractedData(data: {
     if (/^[\d\s\-+()]+$/.test(corrected.locationName.replace(/\s/g, ''))) {
       warnings.push('venue_looks_like_phone');
       corrected.locationName = null;
+    }
+    
+    // Check for vague venue patterns (TBA, DM for location, etc.)
+    const isVagueVenue = VAGUE_VENUE_PATTERNS.some(pattern => pattern.test(corrected.locationName!.trim()));
+    if (isVagueVenue) {
+      warnings.push('venue_vague');
+      // Don't null it out - keep for reference but flag it
     }
   }
 

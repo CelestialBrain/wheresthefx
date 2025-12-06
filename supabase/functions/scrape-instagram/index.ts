@@ -1230,6 +1230,21 @@ Deno.serve(async (req) => {
           // If duplicate, force to rejected tier
           const finalTier = duplicateCheck.isDuplicate ? 'rejected' : tierAssignment.tier;
           
+          // Calculate urgency score based on event date proximity
+          let urgencyScore = 0;
+          if (validation.correctedData.eventDate) {
+            const eventDate = new Date(validation.correctedData.eventDate);
+            const now = new Date();
+            const daysUntil = Math.floor((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            
+            if (daysUntil <= 0) urgencyScore = 100; // Today
+            else if (daysUntil === 1) urgencyScore = 80; // Tomorrow
+            else if (daysUntil <= 3) urgencyScore = 60; // This week
+            else if (daysUntil <= 7) urgencyScore = 50; // Within a week
+            else if (daysUntil <= 14) urgencyScore = 30; // Within 2 weeks
+            else urgencyScore = 10; // Future
+          }
+          
           // Upsert the post with enriched data + validation fields
           const { error, data: upsertedPost } = await supabase.from('instagram_posts').upsert({
             post_id: post.postId,
@@ -1271,6 +1286,11 @@ Deno.serve(async (req) => {
               : ((post.aiExtraction as any)?.eventStatus ?? 'confirmed'),
             availability_status: (post.aiExtraction as any)?.availabilityStatus ?? 'available',
             location_status: (post.aiExtraction as any)?.locationStatus ?? 'confirmed',
+            // Recurring event fields
+            is_recurring: (post.aiExtraction as any)?.isRecurring ?? false,
+            recurrence_pattern: (post.aiExtraction as any)?.recurrencePattern ?? null,
+            // Urgency score for sorting
+            urgency_score: urgencyScore,
           }, { onConflict: 'post_id' }).select('id').single();
           
           if (error) {
