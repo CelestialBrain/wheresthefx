@@ -59,6 +59,10 @@ IMPORTANT: Many Filipino event posters use stylized text. Look carefully for:
 - Venue names often at bottom of poster
 - Prices like "₱500", "PHP 500", "FREE ENTRY"
 
+CRITICAL: Include a "reasoning" field explaining WHY this is or isn't an event.
+For events: explain what indicators (date, time, venue, event-type words) you found.
+For non-events: explain what made you classify it as not an event (product promo, general announcement, etc.)
+
 Respond in JSON only:
 {
   "ocrText": "all text extracted from image",
@@ -72,7 +76,8 @@ Respond in JSON only:
   "price": 0,
   "isFree": true,
   "category": "nightlife",
-  "confidence": 0.85
+  "confidence": 0.85,
+  "reasoning": "This is an event because I found a specific date (Dec 15), time (8PM), venue (Club XYZ), and event-type language (party, join us)."
 }`;
 
     const result = await model.generateContent([
