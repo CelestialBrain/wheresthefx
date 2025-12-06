@@ -29,6 +29,8 @@ export interface TierAssignment {
 /**
  * Validates extracted event data and returns corrected values + warnings
  */
+const VALID_CATEGORIES = ['nightlife', 'music', 'art_culture', 'markets', 'food', 'workshops', 'community', 'comedy', 'other'];
+
 export function validateExtractedData(data: {
   eventDate?: string | null;
   eventEndDate?: string | null;
@@ -37,7 +39,10 @@ export function validateExtractedData(data: {
   locationName?: string | null;
   price?: number | null;
   caption?: string;
-}): ValidationResult {
+  eventTitle?: string | null;
+  category?: string | null;
+  isFree?: boolean | null;
+}): ValidationResult & { correctedCategory?: string } {
   const warnings: string[] = [];
   const corrected = { ...data };
   
@@ -156,9 +161,42 @@ export function validateExtractedData(data: {
     }
   }
 
+  // 7. Event title validation
+  if (data.eventTitle) {
+    if (data.eventTitle.length < 3) {
+      warnings.push('title_too_short');
+    }
+    // Check for emoji-only titles
+    const textWithoutEmoji = data.eventTitle.replace(/[\p{Emoji}\s]/gu, '');
+    if (textWithoutEmoji.length === 0) {
+      warnings.push('title_only_emoji');
+    }
+    // Check for excessively long titles
+    if (data.eventTitle.length > 200) {
+      warnings.push('title_too_long');
+    }
+  }
+
+  // 8. Category validation
+  let correctedCategory = data.category || 'other';
+  if (data.category && !VALID_CATEGORIES.includes(data.category.toLowerCase())) {
+    warnings.push('invalid_category');
+    correctedCategory = 'other';
+  }
+
+  // 9. is_free/price consistency check
+  if (data.isFree === false && (!data.price || data.price === 0)) {
+    warnings.push('not_free_but_no_price');
+  }
+  if (data.isFree === true && data.price && data.price > 0) {
+    warnings.push('free_but_has_price');
+    // Auto-correct: if there's a price, it's probably not free
+    corrected.price = data.price;
+  }
+
   // Determine if valid (severe warnings = not valid)
   const severeWarnings = warnings.filter(w => 
-    !w.includes('suspicious') && !w.includes('truncated')
+    !w.includes('suspicious') && !w.includes('truncated') && !w.includes('consistency')
   );
 
   return {
@@ -171,7 +209,8 @@ export function validateExtractedData(data: {
       endTime: corrected.endTime || null,
       locationName: corrected.locationName || null,
       price: corrected.price ?? null,
-    }
+    },
+    correctedCategory,
   };
 }
 
