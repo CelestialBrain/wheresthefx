@@ -765,7 +765,7 @@ Deno.serve(async (req) => {
     }
 
     // Parse request body
-    let body: { datasetId?: string; automated?: boolean; forceImport?: boolean; mode?: string; posts?: unknown[] } = {};
+    let body: { datasetId?: string; automated?: boolean; forceImport?: boolean; mode?: string; posts?: unknown[]; runId?: string; isFirstBatch?: boolean; isLastBatch?: boolean; batchNumber?: number; totalBatches?: number } = {};
     try {
       body = await req.json();
     } catch {
@@ -788,30 +788,50 @@ Deno.serve(async (req) => {
         });
       }
 
-      console.log(`[GH-INGEST] Starting batch ingest of ${body.posts.length} posts from GitHub Actions`);
+      const isFirstBatch = body.isFirstBatch || false;
+      const isLastBatch = body.isLastBatch || false;
+      const batchNumber = body.batchNumber || 1;
+      const totalBatches = body.totalBatches || 1;
+      const providedRunId = body.runId;
       
-      // Create scrape_run record for tracking
-      const { data: ingestRun, error: runError } = await supabase
-        .from('scrape_runs')
-        .insert({
-          run_type: 'github_actions_ingest',
-          status: 'running',
-          dataset_id: body.datasetId || null,
-        })
-        .select()
-        .single();
+      console.log(`[GH-INGEST] Batch ${batchNumber}/${totalBatches}: ${body.posts.length} posts (runId: ${providedRunId || 'new'})`);
       
-      const ingestRunId = ingestRun?.id;
-      if (runError) {
-        console.error('[GH-INGEST] Failed to create scrape_run:', runError);
+      // Only create scrape_run record on first batch or if no runId provided
+      let ingestRunId: string | null = providedRunId || null;
+      
+      if (isFirstBatch || !providedRunId) {
+        const { data: ingestRun, error: runError } = await supabase
+          .from('scrape_runs')
+          .insert({
+            id: providedRunId || undefined, // Use provided ID if available
+            run_type: 'github_actions_ingest',
+            status: 'running',
+            dataset_id: body.datasetId || null,
+          })
+          .select()
+          .single();
+        
+        if (runError && runError.code !== '23505') { // Ignore duplicate key errors
+          console.error('[GH-INGEST] Failed to create scrape_run:', runError);
+        } else if (ingestRun) {
+          ingestRunId = ingestRun.id;
+        }
+        
+        console.log(`[GH-INGEST] Created/using run: ${ingestRunId}`);
       }
       
       // Initialize logger for ingest
       const ingestLogger = ingestRunId ? new ScraperLogger(supabase, ingestRunId) : null;
       
-      await ingestLogger?.info('fetch', `GitHub Actions ingest started`, { 
-        totalPosts: body.posts.length,
-        datasetId: body.datasetId || 'unknown',
+      if (isFirstBatch) {
+        await ingestLogger?.info('fetch', `GitHub Actions ingest started`, { 
+          totalBatches,
+          datasetId: body.datasetId || 'unknown',
+        });
+      }
+      
+      await ingestLogger?.info('fetch', `Processing batch ${batchNumber}/${totalBatches}`, { 
+        batchPosts: body.posts.length,
       });
       
       let saved = 0;
@@ -1157,22 +1177,52 @@ Deno.serve(async (req) => {
         categoryBreakdown,
       };
       
-      await ingestLogger?.success('fetch', `GitHub Actions ingest complete`, summary);
-      await ingestLogger?.close();
+      await ingestLogger?.success('fetch', `Batch ${batchNumber}/${totalBatches} complete`, summary);
       
-      // Update scrape_run record
-      if (ingestRunId) {
+      // Only update scrape_run with final status on last batch
+      if (isLastBatch && ingestRunId) {
+        // Get current totals from the run to add to them
+        const { data: currentRun } = await supabase
+          .from('scrape_runs')
+          .select('posts_added, accounts_found')
+          .eq('id', ingestRunId)
+          .single();
+        
+        const totalSaved = (currentRun?.posts_added || 0) + saved;
+        const totalAccounts = Math.max(currentRun?.accounts_found || 0, accountsProcessed.size);
+        
         await supabase.from('scrape_runs').update({
-          status: failed === body.posts.length ? 'failed' : 'completed',
-          posts_added: saved,
+          status: 'completed',
+          posts_added: totalSaved,
           posts_updated: 0,
-          accounts_found: accountsProcessed.size,
+          accounts_found: totalAccounts,
           completed_at: new Date().toISOString(),
-          error_message: failed > 0 ? `${failed} posts failed to save` : null,
+          error_message: failed > 0 ? `${failed} posts failed in final batch` : null,
+        }).eq('id', ingestRunId);
+        
+        await ingestLogger?.success('fetch', `GitHub Actions ingest COMPLETE`, {
+          totalBatches,
+          finalSaved: totalSaved,
+        });
+        await ingestLogger?.close();
+        
+        console.log(`[GH-INGEST] ALL BATCHES COMPLETE: ${totalSaved} total saved`);
+      } else if (ingestRunId) {
+        // Update running totals for non-final batches
+        const { data: currentRun } = await supabase
+          .from('scrape_runs')
+          .select('posts_added, accounts_found')
+          .eq('id', ingestRunId)
+          .single();
+        
+        await supabase.from('scrape_runs').update({
+          posts_added: (currentRun?.posts_added || 0) + saved,
+          accounts_found: Math.max(currentRun?.accounts_found || 0, accountsProcessed.size),
+          last_heartbeat: new Date().toISOString(),
         }).eq('id', ingestRunId);
       }
       
-      console.log(`[GH-INGEST] Complete: ${saved} saved, ${failed} failed, ${eventsDetected} events, ${geocoded} geocoded, ${imagesStored} images stored`);
+      console.log(`[GH-INGEST] Batch ${batchNumber}/${totalBatches}: ${saved} saved, ${failed} failed, ${eventsDetected} events`);
       
       return new Response(JSON.stringify({ 
         success: true, 
@@ -1186,6 +1236,9 @@ Deno.serve(async (req) => {
         accountsProcessed: accountsProcessed.size,
         categoryBreakdown,
         runId: ingestRunId,
+        batchNumber,
+        totalBatches,
+        isComplete: isLastBatch,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
