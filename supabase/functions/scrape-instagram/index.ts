@@ -283,6 +283,34 @@ async function parseEventWithAI(
   }
 }
 
+/**
+ * Calculate similarity between two event titles (0-1 scale)
+ * Used to prevent merging different events at the same venue/date
+ */
+function calculateTitleSimilarity(title1: string | null, title2: string | null): number {
+  if (!title1 || !title2) return 0;
+  
+  // Normalize titles: lowercase, remove special chars, trim
+  const normalize = (s: string) => s.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 2); // Remove short words
+  
+  const words1 = normalize(title1);
+  const words2 = normalize(title2);
+  
+  if (words1.length === 0 || words2.length === 0) return 0;
+  
+  // Calculate Jaccard similarity (intersection over union)
+  const set1 = new Set(words1);
+  const set2 = new Set(words2);
+  const intersection = new Set([...set1].filter(x => set2.has(x)));
+  const union = new Set([...set1, ...set2]);
+  
+  return intersection.size / union.size;
+}
+
 // Parse and normalize date to YYYY-MM-DD format
 function parseAndNormalizeDate(dateStr: string): string | null {
   if (!dateStr) return null;
@@ -292,12 +320,6 @@ function parseAndNormalizeDate(dateStr: string): string | null {
   
   // If already in YYYY-MM-DD format, validate and return
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    const date = new Date(dateStr);
-    // If date is in the past by more than 30 days, assume next year
-    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-      date.setFullYear(currentYear + 1);
-      return date.toISOString().split('T')[0];
-    }
     return dateStr;
   }
   
@@ -318,11 +340,6 @@ function parseAndNormalizeDate(dateStr: string): string | null {
       
       const date = new Date(year, monthMap[monthStr], day);
       
-      // If date is in the past by more than 30 days, assume next year
-      if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-        date.setFullYear(currentYear + 1);
-      }
-      
       return date.toISOString().split('T')[0];
     }
   }
@@ -337,11 +354,6 @@ function parseAndNormalizeDate(dateStr: string): string | null {
     
     const date = new Date(year, month, day);
     
-    // If date is in the past by more than 30 days, assume next year
-    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-      date.setFullYear(currentYear + 1);
-    }
-    
     return date.toISOString().split('T')[0];
   }
   
@@ -354,11 +366,6 @@ function parseAndNormalizeDate(dateStr: string): string | null {
     if (year < 100) year += 2000;
     
     const date = new Date(year, month, day);
-    
-    // If date is in the past by more than 30 days, assume next year
-    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-      date.setFullYear(currentYear + 1);
-    }
     
     return date.toISOString().split('T')[0];
   }
@@ -865,11 +872,24 @@ Deno.serve(async (req) => {
           category?: string;
           ocrText?: string;
           confidence?: number;
+          additionalDates?: Array<{ date: string; venue: string; time?: string }>;
         };
       }
 
       for (const post of body.posts as IngestPost[]) {
         try {
+          // Guard against missing ownerUsername to prevent null instagram_account_id crashes
+          if (!post.ownerUsername) {
+            await ingestLogger?.log({
+              post_id: post.postId,
+              log_level: 'warn',
+              stage: 'validation',
+              message: 'Skipping post - missing ownerUsername',
+              data: { postId: post.postId }
+            });
+            continue;
+          }
+          
           if (post.ownerUsername) {
             accountsProcessed.add(post.ownerUsername.toLowerCase());
           }
@@ -1089,11 +1109,18 @@ Deno.serve(async (req) => {
             try {
               await ingestLogger?.info('image', `Downloading image for ${post.postId}...`, { postId: post.postId });
               
-              const imageResponse = await fetch(imageUrl, {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-              });
+              // Add 15-second timeout to prevent hanging on failed downloads
+              const timeoutMs = 15000;
+              const imageResponse = await Promise.race([
+                fetch(imageUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                  }
+                }),
+                new Promise<Response>((_, reject) => 
+                  setTimeout(() => reject(new Error('Image download timeout after 15s')), timeoutMs)
+                )
+              ]);
               
               if (imageResponse.ok) {
                 const imageBlob = await imageResponse.blob();
@@ -1230,6 +1257,33 @@ Deno.serve(async (req) => {
                 title: post.aiExtraction?.eventTitle,
                 category: category,
               });
+            }
+            
+            // Store additional dates if provided (multi-date events)
+            if (upsertedPost?.id && post.aiExtraction?.additionalDates && post.aiExtraction.additionalDates.length > 0) {
+              try {
+                const additionalDatesRecords = post.aiExtraction.additionalDates.map(ad => ({
+                  instagram_post_id: upsertedPost.id,
+                  event_date: ad.date,
+                  event_time: ad.time || null,
+                  venue_name: ad.venue,
+                }));
+                
+                const { error: datesError } = await supabase
+                  .from('event_dates')
+                  .upsert(additionalDatesRecords, { 
+                    onConflict: 'instagram_post_id,event_date,venue_name',
+                    ignoreDuplicates: false 
+                  });
+                
+                if (datesError) {
+                  console.warn(`Failed to insert additional dates for ${post.postId}:`, datesError.message);
+                } else {
+                  console.log(`Stored ${additionalDatesRecords.length} additional date(s) for ${post.postId}`);
+                }
+              } catch (datesInsertError) {
+                console.warn(`Error inserting additional dates for ${post.postId}:`, datesInsertError);
+              }
             }
             
             await ingestLogger?.success('save', `Saved post ${post.postId}`, {
@@ -2157,6 +2211,19 @@ Deno.serve(async (req) => {
             // If this is likely a duplicate, link them in event_groups
             for (const similar of similarEvents) {
               if (similar.post_id !== postId) {
+                // Check title similarity to prevent merging different events at same venue/date
+                const titleSimilarity = calculateTitleSimilarity(eventInfo.eventTitle, similar.event_title);
+                const SIMILARITY_THRESHOLD = 0.3; // 30% word overlap required
+                
+                if (titleSimilarity < SIMILARITY_THRESHOLD) {
+                  console.log(`Skipping merge: titles too different (similarity: ${titleSimilarity.toFixed(2)})`);
+                  console.log(`  - Current: "${eventInfo.eventTitle}"`);
+                  console.log(`  - Existing: "${similar.event_title}"`);
+                  continue; // Don't merge events with different titles
+                }
+                
+                console.log(`Titles similar enough to merge (similarity: ${titleSimilarity.toFixed(2)})`);
+                
                 // Check if already in a group
                 const { data: existingGroup } = await supabase
                   .from('event_groups')
