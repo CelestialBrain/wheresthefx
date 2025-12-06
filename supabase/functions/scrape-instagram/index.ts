@@ -2261,7 +2261,7 @@ Deno.serve(async (req) => {
             for (const similar of similarEvents) {
               if (similar.post_id !== postId) {
                 // Check title similarity to prevent merging different events at same venue/date
-                const titleSimilarity = calculateTitleSimilarity(eventInfo.eventTitle, similar.event_title);
+                const titleSimilarity = calculateTitleSimilarity(eventInfo.eventTitle ?? null, similar.event_title);
                 const SIMILARITY_THRESHOLD = 0.3; // 30% word overlap required
                 
                 if (titleSimilarity < SIMILARITY_THRESHOLD) {
@@ -2319,7 +2319,6 @@ Deno.serve(async (req) => {
                       merged_post_ids: [mergedId]
                     });
                   console.log(`Created new event group: primary=${primaryId} (authority=${primaryId === postId ? currentAuthority : similarAuthority}), merged=${mergedId} (authority=${mergedId === postId ? currentAuthority : similarAuthority})`);
-                }
                 }
               }
             }
