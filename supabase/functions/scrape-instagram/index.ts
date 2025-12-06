@@ -292,12 +292,6 @@ function parseAndNormalizeDate(dateStr: string): string | null {
   
   // If already in YYYY-MM-DD format, validate and return
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    const date = new Date(dateStr);
-    // If date is in the past by more than 30 days, assume next year
-    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-      date.setFullYear(currentYear + 1);
-      return date.toISOString().split('T')[0];
-    }
     return dateStr;
   }
   
@@ -318,11 +312,6 @@ function parseAndNormalizeDate(dateStr: string): string | null {
       
       const date = new Date(year, monthMap[monthStr], day);
       
-      // If date is in the past by more than 30 days, assume next year
-      if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-        date.setFullYear(currentYear + 1);
-      }
-      
       return date.toISOString().split('T')[0];
     }
   }
@@ -337,11 +326,6 @@ function parseAndNormalizeDate(dateStr: string): string | null {
     
     const date = new Date(year, month, day);
     
-    // If date is in the past by more than 30 days, assume next year
-    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-      date.setFullYear(currentYear + 1);
-    }
-    
     return date.toISOString().split('T')[0];
   }
   
@@ -354,11 +338,6 @@ function parseAndNormalizeDate(dateStr: string): string | null {
     if (year < 100) year += 2000;
     
     const date = new Date(year, month, day);
-    
-    // If date is in the past by more than 30 days, assume next year
-    if (date < new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-      date.setFullYear(currentYear + 1);
-    }
     
     return date.toISOString().split('T')[0];
   }
@@ -870,6 +849,18 @@ Deno.serve(async (req) => {
 
       for (const post of body.posts as IngestPost[]) {
         try {
+          // Guard against missing ownerUsername to prevent null instagram_account_id crashes
+          if (!post.ownerUsername) {
+            await ingestLogger?.log({
+              post_id: post.postId,
+              log_level: 'warn',
+              stage: 'validation',
+              message: 'Skipping post - missing ownerUsername',
+              data: { postId: post.postId }
+            });
+            continue;
+          }
+          
           if (post.ownerUsername) {
             accountsProcessed.add(post.ownerUsername.toLowerCase());
           }
