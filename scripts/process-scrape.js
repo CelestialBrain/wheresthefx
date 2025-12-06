@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -100,7 +101,7 @@ Respond in JSON only:
 /**
  * Send batch of processed posts to Edge Function
  */
-async function sendBatchToEdgeFunction(posts) {
+async function sendBatchToEdgeFunction(posts, runId, batchNumber, totalBatches) {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/scrape-instagram`, {
     method: 'POST',
     headers: {
@@ -110,6 +111,11 @@ async function sendBatchToEdgeFunction(posts) {
     body: JSON.stringify({
       mode: 'ingest',
       posts: posts,
+      runId: runId,
+      isFirstBatch: batchNumber === 1,
+      isLastBatch: batchNumber === totalBatches,
+      batchNumber: batchNumber,
+      totalBatches: totalBatches,
     }),
   });
 
@@ -201,6 +207,10 @@ async function main() {
   results.total = posts.length;
   console.log(`✅ Fetched ${posts.length} posts\n`);
   
+  // Generate a single run ID for all batches
+  const runId = crypto.randomUUID();
+  console.log(`📋 Run ID: ${runId}`);
+  
   // Process in batches
   const totalBatches = Math.ceil(posts.length / BATCH_SIZE);
   
@@ -236,8 +246,8 @@ async function main() {
     
     // Send batch to Edge Function for database storage
     try {
-      console.log(`\n  📤 Sending batch to Edge Function...`);
-      const response = await sendBatchToEdgeFunction(processedPosts);
+      console.log(`\n  📤 Sending batch ${batchNum}/${totalBatches} to Edge Function...`);
+      const response = await sendBatchToEdgeFunction(processedPosts, runId, batchNum, totalBatches);
       console.log(`  ✅ Batch saved: ${response.saved || 0} posts`);
     } catch (err) {
       console.log(`  ❌ Edge function error: ${err.message}`);
