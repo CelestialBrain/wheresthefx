@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Calendar, User, Bookmark, Settings, DollarSign, LogOut, Database, Bug, Info, Moon, Sun } from "lucide-react";
+import { Search, Calendar, User, Bookmark, Settings as SettingsIcon, DollarSign, LogOut, Bug, Info, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,9 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MobileSearchBar } from "./MobileSearchBar";
 import { SavedEventsDrawer } from "./SavedEventsDrawer";
-import { useSavedEventsCount } from "@/hooks/useSavedEventsCount";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -33,10 +30,8 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState("all");
   const [selectedPrice, setSelectedPrice] = useState("all");
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [savedDrawerOpen, setSavedDrawerOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const { data: savedCount } = useSavedEventsCount();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
 
@@ -138,12 +133,12 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
     <div className="fixed top-0 left-0 right-0 z-[1000]">
       <div className="container mx-auto px-4 py-3">
         {/* Desktop and Mobile Row */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           {/* Left Side - Search and Filters */}
-          <div className="flex items-center gap-2">
-            {/* Search - Desktop full, Mobile icon */}
-            <div className="hidden md:block">
-              <div className="relative h-10 w-[280px] rounded-md frosted-glass-button">
+          <div className="flex items-center gap-2 flex-1">
+            {/* Search - Always visible with dynamic width */}
+            <div className="flex-1 min-w-[100px]">
+              <div className="relative h-10 rounded-md frosted-glass-button">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70 pointer-events-none z-20" />
                 <input
                   className="absolute inset-0 w-full h-full bg-transparent pl-9 pr-4 text-sm text-white placeholder:text-white/60 focus:outline-none"
@@ -154,17 +149,6 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
                 />
               </div>
             </div>
-            
-            {/* Mobile Search Icon */}
-            {!mobileSearchOpen && (
-              <Button
-                size="icon"
-                className="md:hidden frosted-glass-button"
-                onClick={() => setMobileSearchOpen(true)}
-              >
-                <Search className="h-4 w-4" />
-              </Button>
-            )}
 
             {/* Date Filter */}
             <Select value={selectedDate} onValueChange={handleDateChange}>
@@ -203,8 +187,8 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
             </Select>
           </div>
 
-          {/* Right Side - User Menu */}
-          <div className="flex items-center gap-2">
+          {/* Right Side - User Menu Only */}
+          <div className="flex items-center">
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -225,8 +209,30 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
                     Saved Events
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => toast.info("Coming soon!")}>
-                    <Settings className="h-4 w-4 mr-2" />
+                    <SettingsIcon className="h-4 w-4 mr-2" />
                     Account Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                    {theme === 'dark' ? (
+                      <>
+                        <Sun className="h-4 w-4 mr-2" />
+                        Light Mode
+                      </>
+                    ) : (
+                      <>
+                        <Moon className="h-4 w-4 mr-2" />
+                        Dark Mode
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast.info("Use the feedback button to report bugs")}>
+                    <Bug className="h-4 w-4 mr-2" />
+                    Report a Bug
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toast.info("Where's the f(x)? - Event Discovery App")}>
+                    <Info className="h-4 w-4 mr-2" />
+                    About
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
@@ -244,66 +250,8 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
                 <User className="h-4 w-4" />
               </Button>
             )}
-
-            <Button
-              size="icon"
-              className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 shadow-none"
-              onClick={() => setSavedDrawerOpen(true)}
-            >
-              <Bookmark className="h-4 w-4" />
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="icon"
-                  className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 shadow-none"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => window.open('https://lovable.dev', '_blank')}>
-                  <Database className="h-4 w-4 mr-2" />
-                  View Backend
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-                  {theme === 'dark' ? (
-                    <>
-                      <Sun className="h-4 w-4 mr-2" />
-                      Light Mode
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="h-4 w-4 mr-2" />
-                      Dark Mode
-                    </>
-                  )}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => toast.info("Use the feedback button to report bugs")}>
-                  <Bug className="h-4 w-4 mr-2" />
-                  Report a Bug
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => toast.info("Where's the f(x)? - Event Discovery App")}>
-                  <Info className="h-4 w-4 mr-2" />
-                  About
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
-
-        {/* Mobile Search Bar - Slides down */}
-        {mobileSearchOpen && (
-          <div className="md:hidden mt-2">
-            <MobileSearchBar
-              isOpen={mobileSearchOpen}
-              onClose={() => setMobileSearchOpen(false)}
-              value={searchQuery}
-              onChange={handleSearchChange}
-            />
-          </div>
-        )}
       </div>
 
       <SavedEventsDrawer 
