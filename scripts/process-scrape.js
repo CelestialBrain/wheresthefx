@@ -263,13 +263,68 @@ Respond in JSON only:
     ]);
 
     const text = result.response.text();
-    const parsed = parseJSONWithCleanup(text);
+    let parsed = parseJSONWithCleanup(text);
+    
+    // Retry with stricter JSON formatting instructions if initial parse failed
+    if (!parsed) {
+      console.log(`    🔄 Initial JSON parse failed, retrying with stricter prompt...`);
+      try {
+        const retryPrompt = `The previous response was not valid JSON. Please extract the same information but respond with ONLY valid JSON - no markdown, no code blocks, no extra text. Ensure all strings are properly escaped and all fields match this exact schema:
+
+{
+  "ocrText": "string or null",
+  "isEvent": true,
+  "eventTitle": "string",
+  "eventDate": "YYYY-MM-DD",
+  "eventEndDate": "YYYY-MM-DD or null",
+  "eventTime": "HH:MM",
+  "endTime": "HH:MM or null",
+  "venueName": "string or null",
+  "venueAddress": "string or null",
+  "price": 0,
+  "priceMin": 0,
+  "priceMax": 0,
+  "priceNotes": "string or null",
+  "isFree": false,
+  "signupUrl": "string or null",
+  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
+  "category": "nightlife",
+  "confidence": 0.85,
+  "isRecurring": false,
+  "recurrencePattern": "string or null",
+  "rsvpDeadline": "YYYY-MM-DD or null",
+  "isHistoricalPost": false,
+  "reasoning": "string"
+}
+
+Extract information from the same image and caption as before.`;
+
+        const retryResult = await model.generateContent([
+          { text: retryPrompt },
+          {
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: base64Image,
+            },
+          },
+        ]);
+        
+        const retryText = retryResult.response.text();
+        parsed = parseJSONWithCleanup(retryText);
+        
+        if (parsed) {
+          console.log(`    ✅ Retry successful - got valid JSON`);
+        }
+      } catch (retryErr) {
+        console.log(`    ⚠️ Retry also failed: ${retryErr.message}`);
+      }
+    }
     
     if (parsed) {
       return parsed;
     }
     
-    console.log(`    ⚠️ Could not parse JSON from vision response`);
+    console.log(`    ⚠️ Could not parse JSON from vision response after retry`);
   } catch (err) {
     console.log(`    ⚠️ Vision extraction failed: ${err.message}`);
   }

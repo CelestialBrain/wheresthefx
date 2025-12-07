@@ -1383,6 +1383,12 @@ Deno.serve(async (req) => {
             else urgencyScore = 10; // Future
           }
           
+          // Generate fallback title if AI didn't extract one
+          const eventTitle = post.aiExtraction?.eventTitle || 
+            (isEvent && (category || canonicalVenue) 
+              ? `${category ? category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ') : 'Event'}${canonicalVenue ? ' at ' + canonicalVenue : ''}`
+              : null);
+          
           // Upsert the post with enriched data + validation fields
           const { error, data: upsertedPost } = await supabase.from('instagram_posts').upsert({
             post_id: post.postId,
@@ -1397,7 +1403,7 @@ Deno.serve(async (req) => {
             location_lat: locationLat,
             location_lng: locationLng,
             is_event: isEvent, // Use corrected isEvent (after non-event/historical checks)
-            event_title: post.aiExtraction?.eventTitle,
+            event_title: eventTitle,
             event_date: validation.correctedData.eventDate,
             event_end_date: post.aiExtraction?.eventEndDate || null,
             event_time: validation.correctedData.eventTime,
