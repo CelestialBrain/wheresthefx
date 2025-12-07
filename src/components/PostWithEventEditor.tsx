@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Eye, CalendarDays } from "lucide-react";
+import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Eye, CalendarDays, Repeat } from "lucide-react";
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -13,7 +13,8 @@ import { ImageWithSkeleton } from "./ImageWithSkeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { EventScheduleEditor, ScheduleDay } from "./EventScheduleEditor";
 import { Switch } from "@/components/ui/switch";
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CATEGORY_LABELS } from "@/constants/categoryColors";
 // Helper component to compare extracted vs current values
 const CompareValue = ({ extracted, current }: { extracted: any; current: any }) => {
   const extractedStr = extracted?.toString() || '(null)';
@@ -33,6 +34,22 @@ const CompareValue = ({ extracted, current }: { extracted: any; current: any }) 
     </span>
   );
 };
+
+// Event status options
+const EVENT_STATUS_OPTIONS = [
+  { value: 'confirmed', label: '✅ Confirmed' },
+  { value: 'cancelled', label: '❌ Cancelled' },
+  { value: 'rescheduled', label: '📅 Rescheduled' },
+  { value: 'postponed', label: '⏸️ Postponed' },
+];
+
+// Availability status options
+const AVAILABILITY_STATUS_OPTIONS = [
+  { value: 'available', label: '🟢 Available' },
+  { value: 'sold_out', label: '🔴 Sold Out' },
+  { value: 'few_left', label: '🟠 Few Left' },
+  { value: 'waitlist', label: '📋 Waitlist' },
+];
 
 interface PostWithEventEditorProps {
   post: {
@@ -58,12 +75,18 @@ interface PostWithEventEditorProps {
     ai_reasoning?: string | null;
     extraction_method?: string | null;
     instagram_account: { username: string } | null;
-    // Price fields - read from database
+    // Price fields
     is_free?: boolean;
     price?: number | null;
     price_min?: number | null;
     price_max?: number | null;
     price_notes?: string | null;
+    // Category and status fields
+    category?: string | null;
+    event_status?: string | null;
+    availability_status?: string | null;
+    is_recurring?: boolean | null;
+    recurrence_pattern?: string | null;
   };
   onCreateEvent: (eventData: any) => void;
   onCancel: () => void;
@@ -77,9 +100,16 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     event_time: post.event_time || "",
     location_name: post.location_name || "",
     signup_url: post.signup_url || "",
-    // Read price from database for tracking corrections
     price: post.price ?? null,
     is_free: post.is_free ?? true,
+    price_min: post.price_min ?? null,
+    price_max: post.price_max ?? null,
+    price_notes: post.price_notes ?? "",
+    category: post.category ?? "other",
+    event_status: post.event_status ?? "confirmed",
+    availability_status: post.availability_status ?? "available",
+    is_recurring: post.is_recurring ?? false,
+    recurrence_pattern: post.recurrence_pattern ?? "",
   };
 
   const [eventData, setEventData] = useState({
@@ -90,12 +120,17 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     end_time: post.end_time || "",
     description: post.caption || "",
     signup_url: post.signup_url || "",
-    // Read is_free and price from database, not hardcoded
     is_free: post.is_free ?? true,
     price: post.price ?? null,
     price_min: post.price_min ?? null,
     price_max: post.price_max ?? null,
     price_notes: post.price_notes ?? "",
+    // New fields
+    category: post.category ?? "other",
+    event_status: post.event_status ?? "confirmed",
+    availability_status: post.availability_status ?? "available",
+    is_recurring: post.is_recurring ?? false,
+    recurrence_pattern: post.recurrence_pattern ?? "",
   });
 
   const [isPublishing, setIsPublishing] = useState(false);
@@ -249,12 +284,94 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         original_ocr_text: post.caption,
       });
     }
+    // Price field corrections
     if (!eventData.is_free && eventData.price !== null && eventData.price !== originalValues.price) {
       corrections.push({
         post_id: post.id,
         field_name: "price",
         original_extracted_value: String(originalValues.price || ""),
         corrected_value: String(eventData.price),
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (!eventData.is_free && eventData.price_min !== null && eventData.price_min !== originalValues.price_min) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "price_min",
+        original_extracted_value: String(originalValues.price_min || ""),
+        corrected_value: String(eventData.price_min),
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (!eventData.is_free && eventData.price_max !== null && eventData.price_max !== originalValues.price_max) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "price_max",
+        original_extracted_value: String(originalValues.price_max || ""),
+        corrected_value: String(eventData.price_max),
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (!eventData.is_free && eventData.price_notes && eventData.price_notes !== originalValues.price_notes) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "price_notes",
+        original_extracted_value: originalValues.price_notes,
+        corrected_value: eventData.price_notes,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    // Category and status corrections
+    if (eventData.category !== originalValues.category) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "category",
+        original_extracted_value: originalValues.category,
+        corrected_value: eventData.category,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (eventData.event_status !== originalValues.event_status) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "event_status",
+        original_extracted_value: originalValues.event_status,
+        corrected_value: eventData.event_status,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (eventData.availability_status !== originalValues.availability_status) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "availability_status",
+        original_extracted_value: originalValues.availability_status,
+        corrected_value: eventData.availability_status,
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (eventData.is_recurring !== originalValues.is_recurring) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "is_recurring",
+        original_extracted_value: String(originalValues.is_recurring),
+        corrected_value: String(eventData.is_recurring),
+        extraction_method: "manual",
+        original_ocr_text: post.caption,
+      });
+    }
+    if (eventData.recurrence_pattern !== originalValues.recurrence_pattern && eventData.recurrence_pattern) {
+      corrections.push({
+        post_id: post.id,
+        field_name: "recurrence_pattern",
+        original_extracted_value: originalValues.recurrence_pattern,
+        corrected_value: eventData.recurrence_pattern,
         extraction_method: "manual",
         original_ocr_text: post.caption,
       });
@@ -312,6 +429,11 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           price_min: eventData.is_free ? null : eventData.price_min,
           price_max: eventData.is_free ? null : eventData.price_max,
           price_notes: eventData.is_free ? null : (eventData.price_notes || null),
+          category: eventData.category,
+          event_status: eventData.event_status,
+          availability_status: eventData.availability_status,
+          is_recurring: eventData.is_recurring,
+          recurrence_pattern: eventData.is_recurring ? eventData.recurrence_pattern : null,
           is_event: true,
           needs_review: false,
           ocr_confidence: 1.0,
@@ -403,6 +525,11 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           price_min: eventData.is_free ? null : eventData.price_min,
           price_max: eventData.is_free ? null : eventData.price_max,
           price_notes: eventData.is_free ? null : (eventData.price_notes || null),
+          category: eventData.category,
+          event_status: eventData.event_status,
+          availability_status: eventData.availability_status,
+          is_recurring: eventData.is_recurring,
+          recurrence_pattern: eventData.is_recurring ? eventData.recurrence_pattern : null,
           // Keep review flag until Publish
           needs_review: true,
           is_event: true,
@@ -574,6 +701,92 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
               placeholder="Enter event title"
             />
           </div>
+
+          {/* Category & Status Row */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Category</Label>
+              <Select
+                value={eventData.category}
+                onValueChange={(value) => setEventData({ ...eventData, category: value })}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Event Status</Label>
+              <Select
+                value={eventData.event_status}
+                onValueChange={(value) => setEventData({ ...eventData, event_status: value })}
+              >
+                <SelectTrigger className={`h-9 ${eventData.event_status === 'cancelled' ? 'border-destructive text-destructive' : ''}`}>
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EVENT_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Availability</Label>
+              <Select
+                value={eventData.availability_status}
+                onValueChange={(value) => setEventData({ ...eventData, availability_status: value })}
+              >
+                <SelectTrigger className={`h-9 ${eventData.availability_status === 'sold_out' ? 'border-destructive text-destructive' : ''}`}>
+                  <SelectValue placeholder="Availability" />
+                </SelectTrigger>
+                <SelectContent>
+                  {AVAILABILITY_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Recurring Event Toggle */}
+          <div className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-md">
+            <div className="flex items-center gap-2">
+              <Repeat className="w-4 h-4 text-muted-foreground" />
+              <Label htmlFor="recurring-toggle" className="text-sm font-medium cursor-pointer">
+                Recurring event
+              </Label>
+            </div>
+            <Switch
+              id="recurring-toggle"
+              checked={eventData.is_recurring}
+              onCheckedChange={(checked) => setEventData({ 
+                ...eventData, 
+                is_recurring: checked,
+                recurrence_pattern: checked ? eventData.recurrence_pattern : ""
+              })}
+            />
+          </div>
+
+          {/* Recurrence Pattern Input */}
+          {eventData.is_recurring && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Recurrence Pattern</Label>
+              <Input
+                value={eventData.recurrence_pattern}
+                onChange={(e) => setEventData({ ...eventData, recurrence_pattern: e.target.value })}
+                placeholder="e.g., weekly:friday, monthly:first-saturday"
+              />
+              <p className="text-xs text-muted-foreground">
+                Format: weekly:day, biweekly:day, monthly:first-day, monthly:last-day
+              </p>
+            </div>
+          )}
 
           {/* Schedule Mode Toggle */}
           <div className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-md">
