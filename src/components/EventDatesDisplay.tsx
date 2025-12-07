@@ -138,7 +138,6 @@ export function EventDatesDisplay({
   };
   
   const daySpan = calculateDaySpan(firstDate.event_date, lastDate.event_date);
-  const uniqueDays = daySpan;
 
   return (
     <div className="space-y-2">
@@ -150,7 +149,7 @@ export function EventDatesDisplay({
         <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         <span className="font-medium">{formatDateRange(firstDate.event_date, lastDate.event_date)}</span>
         <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-medium">
-          {uniqueDays}d
+          {daySpan}d
         </span>
         <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
       </button>
