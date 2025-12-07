@@ -12,6 +12,36 @@ const BATCH_SIZE = 10;
 const DELAY_BETWEEN_BATCHES_MS = 2000;
 const IMAGE_FETCH_TIMEOUT_MS = 15000;
 const IMAGE_FETCH_RETRIES = 2;
+// Minimum caption length for caption-only extraction
+// Below this threshold, captions lack enough context for reliable event extraction
+const MIN_CAPTION_LENGTH_FOR_EXTRACTION = 100;
+
+// Expected JSON schema for Gemini responses
+const EXPECTED_JSON_SCHEMA = `{
+  "ocrText": "string or null",
+  "isEvent": true,
+  "eventTitle": "string",
+  "eventDate": "YYYY-MM-DD",
+  "eventEndDate": "YYYY-MM-DD or null",
+  "eventTime": "HH:MM",
+  "endTime": "HH:MM or null",
+  "venueName": "string or null",
+  "venueAddress": "string or null",
+  "price": 0,
+  "priceMin": 0,
+  "priceMax": 0,
+  "priceNotes": "string or null",
+  "isFree": false,
+  "signupUrl": "string or null",
+  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
+  "category": "nightlife",
+  "confidence": 0.85,
+  "isRecurring": false,
+  "recurrencePattern": "string or null",
+  "rsvpDeadline": "YYYY-MM-DD or null",
+  "isHistoricalPost": false,
+  "reasoning": "string"
+}`;
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -271,31 +301,7 @@ Respond in JSON only:
       try {
         const retryPrompt = `The previous response was not valid JSON. Please extract the same information but respond with ONLY valid JSON - no markdown, no code blocks, no extra text. Ensure all strings are properly escaped and all fields match this exact schema:
 
-{
-  "ocrText": "string or null",
-  "isEvent": true,
-  "eventTitle": "string",
-  "eventDate": "YYYY-MM-DD",
-  "eventEndDate": "YYYY-MM-DD or null",
-  "eventTime": "HH:MM",
-  "endTime": "HH:MM or null",
-  "venueName": "string or null",
-  "venueAddress": "string or null",
-  "price": 0,
-  "priceMin": 0,
-  "priceMax": 0,
-  "priceNotes": "string or null",
-  "isFree": false,
-  "signupUrl": "string or null",
-  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
-  "category": "nightlife",
-  "confidence": 0.85,
-  "isRecurring": false,
-  "recurrencePattern": "string or null",
-  "rsvpDeadline": "YYYY-MM-DD or null",
-  "isHistoricalPost": false,
-  "reasoning": "string"
-}
+${EXPECTED_JSON_SCHEMA}
 
 Extract information from the same image and caption as before.`;
 
@@ -479,11 +485,11 @@ async function processPost(post) {
     aiResult = await extractWithGeminiVision(imageUrl, caption, post);
   }
   
-  // Caption-only fallback: If image fetch failed but caption is substantial (>100 chars), try caption-only extraction
-  if (!aiResult && !imageUrl && caption && caption.length > 100) {
+  // Caption-only fallback: If image fetch failed but caption is substantial, try caption-only extraction
+  if (!aiResult && !imageUrl && caption && caption.length > MIN_CAPTION_LENGTH_FOR_EXTRACTION) {
     console.log(`    🔄 No image available, attempting caption-only extraction...`);
     aiResult = await extractFromCaptionOnly(caption, post);
-  } else if (!aiResult && imageUrl && caption && caption.length > 100) {
+  } else if (!aiResult && imageUrl && caption && caption.length > MIN_CAPTION_LENGTH_FOR_EXTRACTION) {
     console.log(`    🔄 Image extraction failed, attempting caption-only fallback...`);
     aiResult = await extractFromCaptionOnly(caption, post);
   }

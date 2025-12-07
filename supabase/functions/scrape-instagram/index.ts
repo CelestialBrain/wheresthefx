@@ -705,6 +705,28 @@ async function parseEventFromCaption(
   return regexResult;
 }
 
+/**
+ * Generate a fallback event title when AI extraction doesn't provide one
+ * Format: "[Category] at [Venue]" or just category/venue if only one available
+ * @param category - Event category (e.g., "nightlife", "music")
+ * @param venueName - Venue name (e.g., "Circuit Makati")
+ * @returns Generated title or null if neither category nor venue available
+ */
+function generateFallbackTitle(category: string | null | undefined, venueName: string | null | undefined): string | null {
+  if (!category && !venueName) return null;
+  
+  // Capitalize and format category (e.g., "art_culture" -> "Art Culture")
+  const formattedCategory = category 
+    ? category.charAt(0).toUpperCase() + category.slice(1).replace(/_/g, ' ')
+    : 'Event';
+  
+  if (venueName) {
+    return `${formattedCategory} at ${venueName}`;
+  }
+  
+  return formattedCategory;
+}
+
 // Check if event has ended (considering time and Philippine timezone UTC+8)
 function isEventInPast(
   eventDateStr: string | undefined, 
@@ -721,7 +743,9 @@ function isEventInPast(
     // Use end date if available, otherwise start date
     const targetDateStr = eventEndDateStr || eventDateStr;
     
-    // If event is TODAY, check end time, not start time
+    // If event is TODAY (in UTC), check end time, not start time
+    // Note: Event times are already in 24-hour format and dates are YYYY-MM-DD
+    // This comparison works because both now and endDateTime use the same timezone (system/UTC)
     if (targetDateStr === todayStr) {
       if (endTimeStr) {
         const [hours, minutes] = endTimeStr.split(':').map(Number);
@@ -1385,9 +1409,7 @@ Deno.serve(async (req) => {
           
           // Generate fallback title if AI didn't extract one
           const eventTitle = post.aiExtraction?.eventTitle || 
-            (isEvent && (category || canonicalVenue) 
-              ? `${category ? category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ') : 'Event'}${canonicalVenue ? ' at ' + canonicalVenue : ''}`
-              : null);
+            (isEvent ? generateFallbackTitle(category, canonicalVenue) : null);
           
           // Upsert the post with enriched data + validation fields
           const { error, data: upsertedPost } = await supabase.from('instagram_posts').upsert({
