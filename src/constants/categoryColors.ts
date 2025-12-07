@@ -43,15 +43,15 @@ export function getCategoryFilter(category: string): string {
   return CATEGORY_FILTERS[color] || CATEGORY_FILTERS['#9E9E9E'];
 }
 
-// All categories for filter UI
+// All categories for filter UI - pixel dots instead of emoji
 export const ALL_CATEGORIES = [
-  { id: 'all', label: '🎯 All', color: '#FFFFFF' },
-  { id: 'nightlife', label: '🟣 Nightlife', color: '#9B59B6' },
-  { id: 'music', label: '🔴 Music', color: '#E74C3C' },
-  { id: 'art_culture', label: '🔵 Art & Film', color: '#00BCD4' },
-  { id: 'markets', label: '🟠 Markets', color: '#FF9800' },
-  { id: 'food', label: '🟡 Food', color: '#FFEB3B' },
-  { id: 'workshops', label: '🟢 Workshops', color: '#4CAF50' },
-  { id: 'community', label: '🩷 Community', color: '#E91E63' },
-  { id: 'other', label: '⚪ Other', color: '#9E9E9E' },
+  { id: 'all', label: 'All', color: '#FFFFFF' },
+  { id: 'nightlife', label: 'Nightlife', color: '#9B59B6' },
+  { id: 'music', label: 'Music', color: '#E74C3C' },
+  { id: 'art_culture', label: 'Art & Film', color: '#00BCD4' },
+  { id: 'markets', label: 'Markets', color: '#FF9800' },
+  { id: 'food', label: 'Food', color: '#FFEB3B' },
+  { id: 'workshops', label: 'Workshops', color: '#4CAF50' },
+  { id: 'community', label: 'Community', color: '#E91E63' },
+  { id: 'other', label: 'Other', color: '#9E9E9E' },
 ];

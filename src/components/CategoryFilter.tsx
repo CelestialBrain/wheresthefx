@@ -18,6 +18,11 @@ export function CategoryFilter({ activeCategory, onCategoryChange }: CategoryFil
               : 'bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm'
           }`}
         >
+          {/* Colored pixel dot */}
+          <span 
+            className="w-2 h-2 rounded-full flex-shrink-0"
+            style={{ backgroundColor: cat.color }}
+          />
           {cat.label}
         </button>
       ))}
