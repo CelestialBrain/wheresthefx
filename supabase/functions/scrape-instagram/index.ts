@@ -886,15 +886,22 @@ Deno.serve(async (req) => {
           isEvent?: boolean;
           eventTitle?: string;
           eventDate?: string;
+          eventEndDate?: string;
           eventTime?: string;
           endTime?: string;
           venueName?: string;
           venueAddress?: string;
           price?: number;
+          priceMin?: number;
+          priceMax?: number;
+          priceNotes?: string;
           isFree?: boolean;
           category?: string;
           ocrText?: string;
           confidence?: number;
+          isRecurring?: boolean;
+          recurrencePattern?: string;
+          schedule?: Array<{ date: string; times: Array<{ time: string; label?: string }> }>;
           additionalDates?: Array<{ date: string; venue: string; time?: string }>;
         };
       }
@@ -1194,7 +1201,7 @@ Deno.serve(async (req) => {
           // === VALIDATION LAYER ===
           const validation = validateExtractedData({
             eventDate: post.aiExtraction?.eventDate,
-            eventEndDate: null, // AI extraction doesn't support end date yet
+            eventEndDate: post.aiExtraction?.eventEndDate || null,
             eventTime: post.aiExtraction?.eventTime,
             endTime: post.aiExtraction?.endTime,
             locationName: canonicalVenue,
@@ -1261,6 +1268,7 @@ Deno.serve(async (req) => {
             is_event: post.aiExtraction?.isEvent || false,
             event_title: post.aiExtraction?.eventTitle,
             event_date: validation.correctedData.eventDate,
+            event_end_date: post.aiExtraction?.eventEndDate || null,
             event_time: validation.correctedData.eventTime,
             end_time: validation.correctedData.endTime,
             price: validation.correctedData.price || 0,
@@ -1312,8 +1320,51 @@ Deno.serve(async (req) => {
               });
             }
             
-            // Store additional dates if provided (multi-date events)
-            if (upsertedPost?.id && post.aiExtraction?.additionalDates && post.aiExtraction.additionalDates.length > 0) {
+            // Store schedule data if provided (multi-date/multi-time events)
+            const schedule = (post.aiExtraction as any)?.schedule;
+            if (upsertedPost?.id && schedule && Array.isArray(schedule) && schedule.length > 0) {
+              try {
+                // Build event_dates records from schedule
+                const scheduleRecords: Array<{
+                  instagram_post_id: string;
+                  event_date: string;
+                  event_time: string | null;
+                  venue_name: string | null;
+                }> = [];
+                
+                for (const day of schedule) {
+                  if (day.date && day.times && Array.isArray(day.times)) {
+                    for (const slot of day.times) {
+                      scheduleRecords.push({
+                        instagram_post_id: upsertedPost.id,
+                        event_date: day.date,
+                        event_time: slot.time || null,
+                        venue_name: slot.label || null, // Use label as screening/slot name
+                      });
+                    }
+                  }
+                }
+                
+                if (scheduleRecords.length > 0) {
+                  // Delete existing and insert new
+                  await supabase.from('event_dates').delete().eq('instagram_post_id', upsertedPost.id);
+                  
+                  const { error: scheduleError } = await supabase
+                    .from('event_dates')
+                    .insert(scheduleRecords);
+                  
+                  if (scheduleError) {
+                    console.warn(`Failed to insert schedule for ${post.postId}:`, scheduleError.message);
+                  } else {
+                    console.log(`Stored ${scheduleRecords.length} schedule slot(s) for ${post.postId}`);
+                  }
+                }
+              } catch (scheduleInsertError) {
+                console.warn(`Error inserting schedule for ${post.postId}:`, scheduleInsertError);
+              }
+            }
+            // Legacy support: Store additional dates if provided (multi-date events)
+            else if (upsertedPost?.id && post.aiExtraction?.additionalDates && post.aiExtraction.additionalDates.length > 0) {
               try {
                 const additionalDatesRecords = post.aiExtraction.additionalDates.map(ad => ({
                   instagram_post_id: upsertedPost.id,

@@ -72,6 +72,7 @@ CONFIDENCE GUIDELINES:
 
 DATE EXTRACTION:
 - Look for: "DEC 15", "December 15", "12/15", "Dec 6-7" (multi-day)
+- European/Philippine format: 05.12.2025 = December 5 (day.month.year), NOT May 12
 - For relative dates ("tomorrow", "this Friday"), calculate from today: ${today}
 - If month has passed this year, assume next year (e.g., "Jan 5" in December → ${currentYear + 1}-01-05)
 
@@ -86,10 +87,21 @@ VENUE/LOCATION:
 - DO NOT use @mentions as venues (those are usually performers/sponsors)
 - DO NOT use the posting account username as venue
 
-PRICE:
-- "₱500", "P500", "Php500", "PHP 500" → 500
-- "₱300-500" → 300 (use minimum/presale)
-- "FREE", "LIBRE", "Walang bayad" → isFree: true, price: 0
+PRICE EXTRACTION (ENHANCED):
+- Single price: "₱500", "P500", "Php500" → price: 500, priceMin: 500, priceMax: 500
+- Range: "₱300-500" → priceMin: 300, priceMax: 500, price: 300
+- Tiered pricing: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
+- Conditional: "Free before 10PM, ₱300 after" → priceMin: 0, priceMax: 300, priceNotes: "Free before 10PM, ₱300 after", isFree: true
+- "FREE", "LIBRE", "Walang bayad" → isFree: true, price: 0, priceMin: 0, priceMax: 0
+
+MULTI-DATE/MULTI-TIME EVENTS (Film Festivals, Art Screenings):
+- If multiple dates with different times/screenings, extract as "schedule" array
+- Example: "Dec 12: 4PM Padamlagan, 6:30PM Bloom / Dec 13: 1:30PM Paglilitis" →
+  schedule: [
+    { "date": "2025-12-12", "times": [{"time": "16:00", "label": "Padamlagan"}, {"time": "18:30", "label": "Bloom"}] },
+    { "date": "2025-12-13", "times": [{"time": "13:30", "label": "Paglilitis"}] }
+  ]
+- For single-day events, omit the schedule field
 
 NOT AN EVENT - Set isEvent: false if:
 - Contains operating hours: "6PM — Tues to Sat", "Open Mon-Fri"
@@ -101,6 +113,7 @@ COMMON MISTAKES TO AVOID:
 - "@photographer_name" is NOT a venue
 - "DM for reservations" numbers are NOT prices
 - Sponsor logos/handles are NOT venue names
+- 05.12.2025 is December 5, not May 12 (European format)
 
 Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
 
@@ -116,9 +129,15 @@ Respond in JSON only:
   "venueName": "venue name only",
   "venueAddress": "full address if visible",
   "price": 0,
+  "priceMin": 0,
+  "priceMax": 0,
+  "priceNotes": "tier details or null",
   "isFree": true,
   "category": "nightlife",
   "confidence": 0.85,
+  "isRecurring": false,
+  "recurrencePattern": "weekly:friday or null",
+  "schedule": null,
   "reasoning": "Explain what indicators you found (date, time, venue, event-type words) or why this is NOT an event."
 }`;
 
