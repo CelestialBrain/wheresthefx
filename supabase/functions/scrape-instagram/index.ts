@@ -709,27 +709,31 @@ async function parseEventFromCaption(
 function isEventInPast(
   eventDateStr: string | undefined, 
   eventEndDateStr?: string | undefined,
-  eventTimeStr?: string | undefined
+  eventTimeStr?: string | undefined,
+  endTimeStr?: string | undefined
 ): boolean {
   if (!eventDateStr) return false;
   
   try {
     const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
     
     // Use end date if available, otherwise start date
-    const checkDateStr = eventEndDateStr || eventDateStr;
+    const targetDateStr = eventEndDateStr || eventDateStr;
     
-    // If we have a time, create full datetime; otherwise assume end of day
-    // All events are in Philippine Time (UTC+8)
-    let eventDateTime: Date;
-    if (eventTimeStr) {
-      eventDateTime = new Date(`${checkDateStr}T${eventTimeStr}+08:00`);
-    } else {
-      // No time = assume event runs until end of day in PHT
-      eventDateTime = new Date(`${checkDateStr}T23:59:59+08:00`);
+    // If event is TODAY, check end time, not start time
+    if (targetDateStr === todayStr) {
+      if (endTimeStr) {
+        const [hours, minutes] = endTimeStr.split(':').map(Number);
+        const endDateTime = new Date();
+        endDateTime.setHours(hours, minutes, 0, 0);
+        return now > endDateTime;
+      }
+      return false; // No end time = valid until midnight
     }
     
-    return eventDateTime < now;
+    // For past dates, check if date has passed
+    return new Date(targetDateStr) < new Date(todayStr);
   } catch {
     return false;
   }
@@ -2278,7 +2282,7 @@ Deno.serve(async (req) => {
 
         // Skip events that have ended (unless force import)
         if (eventInfo.eventDate && !forceImport) {
-          if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate ?? undefined, eventInfo.eventTime ?? undefined)) {
+          if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate ?? undefined, eventInfo.eventTime ?? undefined, eventInfo.endTime ?? undefined)) {
             totalSkipped++;
             await logger.logSkip(postId, 'Event has ended', { 
               eventDate: eventInfo.eventDate,
@@ -2898,7 +2902,7 @@ Deno.serve(async (req) => {
             }
 
             // Skip events that have ended in direct scraping
-            if (eventInfo.eventDate && isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate, eventInfo.eventTime)) {
+            if (eventInfo.eventDate && isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate, eventInfo.eventTime, eventInfo.endTime)) {
               totalSkipped++;
               console.log(`Skipping post ${postId} - event has ended. Start: ${eventInfo.eventDate}, End: ${eventInfo.eventEndDate || 'N/A'}`);
               continue;
