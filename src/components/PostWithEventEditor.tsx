@@ -93,6 +93,9 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     // Read is_free and price from database, not hardcoded
     is_free: post.is_free ?? true,
     price: post.price ?? null,
+    price_min: post.price_min ?? null,
+    price_max: post.price_max ?? null,
+    price_notes: post.price_notes ?? "",
   });
 
   const [isPublishing, setIsPublishing] = useState(false);
@@ -305,7 +308,10 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           location_lng: location.lng,
           signup_url: eventData.signup_url || null,
           is_free: eventData.is_free,
-          price: eventData.is_free ? null : eventData.price,
+          price: eventData.is_free ? null : (eventData.price_min || eventData.price),
+          price_min: eventData.is_free ? null : eventData.price_min,
+          price_max: eventData.is_free ? null : eventData.price_max,
+          price_notes: eventData.is_free ? null : (eventData.price_notes || null),
           is_event: true,
           needs_review: false,
           ocr_confidence: 1.0,
@@ -393,7 +399,10 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           location_lng: location.lng,
           signup_url: eventData.signup_url || null,
           is_free: eventData.is_free,
-          price: eventData.is_free ? null : eventData.price,
+          price: eventData.is_free ? null : (eventData.price_min || eventData.price),
+          price_min: eventData.is_free ? null : eventData.price_min,
+          price_max: eventData.is_free ? null : eventData.price_max,
+          price_notes: eventData.is_free ? null : (eventData.price_notes || null),
           // Keep review flag until Publish
           needs_review: true,
           is_event: true,
@@ -703,7 +712,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="space-y-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -711,25 +720,61 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
                 onChange={(e) => setEventData({ 
                   ...eventData, 
                   is_free: e.target.checked,
-                  price: e.target.checked ? null : eventData.price 
+                  price: e.target.checked ? null : eventData.price,
+                  price_min: e.target.checked ? null : eventData.price_min,
+                  price_max: e.target.checked ? null : eventData.price_max,
+                  price_notes: e.target.checked ? "" : eventData.price_notes,
                 })}
                 className="w-4 h-4"
               />
               <span className="text-sm">Free Event</span>
             </label>
             {!eventData.is_free && (
-              <div className="relative flex-1">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="number"
-                  className="pl-10"
-                  value={eventData.price || ""}
-                  onChange={(e) => setEventData({ 
-                    ...eventData, 
-                    price: e.target.value ? parseFloat(e.target.value) : null 
-                  })}
-                  placeholder="Price"
-                />
+              <div className="space-y-3">
+                {/* Price Range Row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Price Min</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        className="pl-10"
+                        value={eventData.price_min || ""}
+                        onChange={(e) => setEventData({ 
+                          ...eventData, 
+                          price_min: e.target.value ? parseFloat(e.target.value) : null 
+                        })}
+                        placeholder="500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Price Max</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        className="pl-10"
+                        value={eventData.price_max || ""}
+                        onChange={(e) => setEventData({ 
+                          ...eventData, 
+                          price_max: e.target.value ? parseFloat(e.target.value) : null 
+                        })}
+                        placeholder="1500"
+                      />
+                    </div>
+                  </div>
+                </div>
+                {/* Price Notes */}
+                <div>
+                  <Label className="text-xs text-muted-foreground">Price Notes (tier details)</Label>
+                  <Input
+                    value={eventData.price_notes || ""}
+                    onChange={(e) => setEventData({ ...eventData, price_notes: e.target.value })}
+                    placeholder="GA ₱500, VIP ₱1500, Student ₱300"
+                  />
+                </div>
               </div>
             )}
           </div>
