@@ -8,11 +8,32 @@ import { Badge as UIBadge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
-import { Search, MapPin, Calendar, Clock, Edit2, Undo2, ExternalLink, Image as ImageIcon, Trash2 } from "lucide-react";
+import { PriceDisplay } from "./PriceDisplay";
+import { RecurringEventBadge } from "./RecurringEventBadge";
+import { EventDatesDisplay } from "./EventDatesDisplay";
+import { Search, MapPin, Calendar, Clock, Edit2, Undo2, ExternalLink, Image as ImageIcon, Trash2, Save, X, Repeat } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
+import { CATEGORY_LABELS } from "@/constants/categoryColors";
+
+// Status options
+const EVENT_STATUS_OPTIONS = [
+  { value: 'confirmed', label: 'Confirmed', color: 'bg-green-500/20 text-green-700' },
+  { value: 'cancelled', label: 'Cancelled', color: 'bg-red-500/20 text-red-700' },
+  { value: 'rescheduled', label: 'Rescheduled', color: 'bg-yellow-500/20 text-yellow-700' },
+  { value: 'postponed', label: 'Postponed', color: 'bg-orange-500/20 text-orange-700' },
+];
+
+const AVAILABILITY_STATUS_OPTIONS = [
+  { value: 'available', label: 'Available', color: 'bg-green-500/20 text-green-700' },
+  { value: 'sold_out', label: 'Sold Out', color: 'bg-red-500/20 text-red-700' },
+  { value: 'few_left', label: 'Few Left', color: 'bg-orange-500/20 text-orange-700' },
+  { value: 'waitlist', label: 'Waitlist', color: 'bg-blue-500/20 text-blue-700' },
+];
 
 interface PublishedEvent {
   id: string;
@@ -25,44 +46,82 @@ interface PublishedEvent {
   signup_url: string | null;
   is_free: boolean;
   price: number | null;
-  location_id: string | null;
-  instagram_post_id: string | null;
+  price_min: number | null;
+  price_max: number | null;
+  price_notes: string | null;
+  category: string | null;
+  event_status: string | null;
+  availability_status: string | null;
+  is_recurring: boolean | null;
+  recurrence_pattern: string | null;
+  location_name: string;
+  location_address: string | null;
+  location_lat: number;
+  location_lng: number;
+  source_post_id: string | null;
+  instagram_account_username: string | null;
+  image_url: string | null;
+  stored_image_url: string | null;
   created_at: string;
   updated_at: string;
-  location: {
-    id: string;
-    location_name: string;
-    formatted_address: string | null;
-    location_lat: number | null;
-    location_lng: number | null;
-    manual_override: boolean;
-  } | null;
-  instagram_post: {
-    post_id: string;
-    image_url: string | null;
-    stored_image_url?: string | null;
-    caption: string | null;
-    ocr_confidence: number | null;
-    instagram_account: { username: string } | null;
-  } | null;
+}
+
+interface EditFormData {
+  event_title: string;
+  event_date: string;
+  event_time: string;
+  end_time: string;
+  description: string;
+  signup_url: string;
+  is_free: boolean;
+  price_min: string;
+  price_max: string;
+  price_notes: string;
+  category: string;
+  event_status: string;
+  availability_status: string;
+  is_recurring: boolean;
+  recurrence_pattern: string;
 }
 
 export const PublishedEventsManager = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<PublishedEvent | null>(null);
   const [editingLocation, setEditingLocation] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [editForm, setEditForm] = useState<EditFormData | null>(null);
   const [undoStack, setUndoStack] = useState<Array<{ eventId: string; field: string; oldValue: any; newValue: any }>>([]);
   
   const queryClient = useQueryClient();
-
-  // Removed duplicate formatTime - now using formatTimeRange from dateUtils everywhere
 
   // Helper function to check if event is in the past
   const isPastEvent = (eventDate: string) => {
     return new Date(eventDate) < new Date(new Date().setHours(0, 0, 0, 0));
   };
 
-  // Fetch published events from canonical feed
+  // Initialize edit form from selected event
+  const initEditForm = (event: PublishedEvent) => {
+    setEditForm({
+      event_title: event.event_title || '',
+      event_date: event.event_date || '',
+      event_time: event.event_time || '',
+      end_time: event.end_time || '',
+      description: event.description || '',
+      signup_url: event.signup_url || '',
+      is_free: event.is_free ?? true,
+      price_min: event.price_min?.toString() || '',
+      price_max: event.price_max?.toString() || '',
+      price_notes: event.price_notes || '',
+      category: event.category || 'other',
+      event_status: event.event_status || 'confirmed',
+      availability_status: event.availability_status || 'available',
+      is_recurring: event.is_recurring ?? false,
+      recurrence_pattern: event.recurrence_pattern || '',
+    });
+    setEditingDetails(true);
+  };
+
+  // Fetch published events
   const { data: events, isLoading } = useQuery({
     queryKey: ["published-events", searchQuery],
     queryFn: async () => {
@@ -78,41 +137,7 @@ export const PublishedEventsManager = () => {
       const { data, error } = await query;
       if (error) throw error;
       
-      // Transform to match expected interface
-      return (data || []).map((event: any) => ({
-        id: event.id,
-        event_title: event.event_title,
-        event_date: event.event_date,
-        event_time: event.event_time,
-        event_end_date: event.event_end_date,
-        end_time: event.end_time,
-        description: event.description,
-        signup_url: event.signup_url,
-        is_free: event.is_free,
-        price: event.price,
-        location_id: null,
-        instagram_post_id: event.source_post_id,
-        created_at: event.created_at,
-        updated_at: event.updated_at,
-        location: {
-          id: event.id,
-          location_name: event.location_name,
-          formatted_address: event.location_address,
-          location_lat: event.location_lat,
-          location_lng: event.location_lng,
-          manual_override: true,
-        },
-        instagram_post: {
-          post_id: event.source_post_id || "",
-          image_url: event.image_url,
-          stored_image_url: event.stored_image_url,
-          caption: null,
-          ocr_confidence: null,
-          instagram_account: event.instagram_account_username ? {
-            username: event.instagram_account_username
-          } : null,
-        },
-      })) as PublishedEvent[];
+      return data as PublishedEvent[];
     },
   });
 
@@ -156,21 +181,25 @@ export const PublishedEventsManager = () => {
 
       if (error) throw error;
 
-      // Log history for each field
-      const historyEntries = Object.entries(updates).map(([field, newValue]) => ({
-        event_id: eventId,
-        edited_by: user?.id,
-        field_name: field,
-        old_value: oldValues[field] as any,
-        new_value: newValue as any,
-        action_type: "update",
-      }));
+      // Log history for each changed field
+      const historyEntries = Object.entries(updates)
+        .filter(([field]) => oldValues[field] !== updates[field])
+        .map(([field, newValue]) => ({
+          event_id: eventId,
+          edited_by: user?.id,
+          field_name: field,
+          old_value: oldValues[field] as any,
+          new_value: newValue as any,
+          action_type: "update",
+        }));
 
-      const { error: historyError } = await supabase
-        .from("event_edit_history")
-        .insert(historyEntries);
+      if (historyEntries.length > 0) {
+        const { error: historyError } = await supabase
+          .from("event_edit_history")
+          .insert(historyEntries);
 
-      if (historyError) console.error("Failed to log history:", historyError);
+        if (historyError) console.error("Failed to log history:", historyError);
+      }
 
       return { eventId, updates, oldValues };
     },
@@ -178,12 +207,15 @@ export const PublishedEventsManager = () => {
       // Add to undo stack
       setUndoStack((prev) => [
         { eventId, field: Object.keys(updates).join(","), oldValue: oldValues, newValue: updates },
-        ...prev.slice(0, 9), // Keep last 10
+        ...prev.slice(0, 9),
       ]);
       
       toast.success("Event updated successfully");
+      setEditingDetails(false);
+      setEditForm(null);
       queryClient.invalidateQueries({ queryKey: ["published-events"] });
       queryClient.invalidateQueries({ queryKey: ["edit-history", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event-markers"] });
     },
   });
 
@@ -204,81 +236,17 @@ export const PublishedEventsManager = () => {
     },
   });
 
-  // Location correction mutation
-  const saveLocationMutation = useMutation({
-    mutationFn: async ({
-      eventId,
-      locationId,
-      correction,
-    }: {
-      eventId: string;
-      locationId: string;
-      correction: { venueName: string; streetAddress: string; lat: number | null; lng: number | null };
-    }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      // Get old values first
-      const { data: location } = await supabase
-        .from("locations")
-        .select("*")
-        .eq("id", locationId)
-        .single();
-
-      // Update location
-      const { error } = await supabase
-        .from("locations")
-        .update({
-          location_name: correction.venueName,
-          formatted_address: correction.streetAddress,
-          location_lat: correction.lat,
-          location_lng: correction.lng,
-          manual_override: true,
-        })
-        .eq("id", locationId);
-
-      if (error) throw error;
-
-      // Log history
-      await supabase.from("event_edit_history").insert({
-        event_id: eventId,
-        edited_by: user?.id,
-        field_name: "location",
-        old_value: location,
-        new_value: correction,
-        action_type: "location_correction",
-      });
-
-      // Save to location_corrections for learning
-      await supabase.from("location_corrections").insert({
-        corrected_venue_name: correction.venueName,
-        corrected_street_address: correction.streetAddress,
-        manual_lat: correction.lat,
-        manual_lng: correction.lng,
-        corrected_by: user?.id,
-        applied_to_event_id: eventId,
-      });
-    },
-    onSuccess: () => {
-      toast.success("Location updated");
-      setEditingLocation(false);
-      queryClient.invalidateQueries({ queryKey: ["published-events"] });
-      queryClient.invalidateQueries({ queryKey: ["edit-history", selectedEvent?.id] });
-    },
-  });
-
   // Delete event mutation
   const deleteEventMutation = useMutation({
     mutationFn: async (eventId: string) => {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Get event details for history log
       const { data: event } = await supabase
         .from("published_events")
         .select("*")
         .eq("id", eventId)
         .single();
 
-      // Delete from published_events
       const { error } = await supabase
         .from("published_events")
         .delete()
@@ -286,7 +254,6 @@ export const PublishedEventsManager = () => {
 
       if (error) throw error;
 
-      // Log deletion in history
       if (event) {
         await supabase.from("event_edit_history").insert({
           event_id: eventId,
@@ -309,6 +276,48 @@ export const PublishedEventsManager = () => {
     },
   });
 
+  const handleSaveDetails = () => {
+    if (!selectedEvent || !editForm) return;
+
+    const updates: Record<string, any> = {
+      event_title: editForm.event_title,
+      event_date: editForm.event_date,
+      event_time: editForm.event_time || null,
+      end_time: editForm.end_time || null,
+      description: editForm.description || null,
+      signup_url: editForm.signup_url || null,
+      is_free: editForm.is_free,
+      price_min: editForm.price_min ? parseFloat(editForm.price_min) : null,
+      price_max: editForm.price_max ? parseFloat(editForm.price_max) : null,
+      price_notes: editForm.price_notes || null,
+      category: editForm.category,
+      event_status: editForm.event_status,
+      availability_status: editForm.availability_status,
+      is_recurring: editForm.is_recurring,
+      recurrence_pattern: editForm.is_recurring ? editForm.recurrence_pattern || null : null,
+    };
+
+    const oldValues: Record<string, any> = {
+      event_title: selectedEvent.event_title,
+      event_date: selectedEvent.event_date,
+      event_time: selectedEvent.event_time,
+      end_time: selectedEvent.end_time,
+      description: selectedEvent.description,
+      signup_url: selectedEvent.signup_url,
+      is_free: selectedEvent.is_free,
+      price_min: selectedEvent.price_min,
+      price_max: selectedEvent.price_max,
+      price_notes: selectedEvent.price_notes,
+      category: selectedEvent.category,
+      event_status: selectedEvent.event_status,
+      availability_status: selectedEvent.availability_status,
+      is_recurring: selectedEvent.is_recurring,
+      recurrence_pattern: selectedEvent.recurrence_pattern,
+    };
+
+    updateEventMutation.mutate({ eventId: selectedEvent.id, updates, oldValues });
+  };
+
   const handleDeleteClick = () => {
     if (!selectedEvent) return;
     
@@ -316,7 +325,6 @@ export const PublishedEventsManager = () => {
     const eventTitle = selectedEvent.event_title;
     let timeoutId: NodeJS.Timeout;
     
-    // Show toast with undo option
     toast.success(`Deleting "${eventTitle}"`, {
       duration: 5000,
       action: {
@@ -328,7 +336,6 @@ export const PublishedEventsManager = () => {
       },
     });
 
-    // Schedule deletion after 5 seconds
     timeoutId = setTimeout(() => {
       deleteEventMutation.mutate(eventId);
     }, 5000);
@@ -338,6 +345,11 @@ export const PublishedEventsManager = () => {
     if (undoStack.length > 0) {
       undoMutation.mutate(undoStack[0]);
     }
+  };
+
+  const getStatusBadge = (status: string | null, options: typeof EVENT_STATUS_OPTIONS) => {
+    const option = options.find(o => o.value === status) || options[0];
+    return <UIBadge className={`${option.color} text-xs`}>{option.label}</UIBadge>;
   };
 
   if (isLoading) {
@@ -381,21 +393,23 @@ export const PublishedEventsManager = () => {
         {events?.map((event) => (
           <Card 
             key={event.id} 
-            className="cursor-pointer hover:border-accent transition-colors"
+            className={`cursor-pointer hover:border-accent transition-colors ${event.event_status === 'cancelled' ? 'opacity-60' : ''}`}
             onClick={() => setSelectedEvent(event)}
           >
             <CardHeader className="p-4 md:p-6 pb-3">
               <div className="flex items-start gap-3">
-                {(event.instagram_post?.stored_image_url || event.instagram_post?.image_url) && (
+                {(event.stored_image_url || event.image_url) && (
                   <img
-                    src={event.instagram_post?.stored_image_url || event.instagram_post?.image_url}
+                    src={event.stored_image_url || event.image_url || ''}
                     alt=""
-                    className="w-12 h-12 md:w-16 md:h-16 object-cover rounded flex-shrink-0"
+                    className={`w-12 h-12 md:w-16 md:h-16 object-cover rounded flex-shrink-0 ${event.event_status === 'cancelled' ? 'grayscale' : ''}`}
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-sm md:text-base truncate">{event.event_title}</CardTitle>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <CardTitle className={`text-sm md:text-base truncate ${event.event_status === 'cancelled' ? 'line-through' : ''}`}>
+                      {event.event_title}
+                    </CardTitle>
                     {isPastEvent(event.event_date) && (
                       <UIBadge variant="secondary" className="text-xs shrink-0">Done</UIBadge>
                     )}
@@ -414,80 +428,338 @@ export const PublishedEventsManager = () => {
             <CardContent className="p-4 md:p-6 pt-0 space-y-2">
               <div className="flex items-start gap-2 text-sm">
                 <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-                <span className="line-clamp-1">{event.location?.location_name || "No location"}</span>
+                <span className="line-clamp-1">{event.location_name || "No location"}</span>
               </div>
-              {event.location?.manual_override && (
-                <UIBadge variant="secondary" className="text-xs">Manually Corrected</UIBadge>
-              )}
+              
+              {/* Price Display */}
+              <PriceDisplay
+                isFree={event.is_free}
+                priceMin={event.price_min}
+                priceMax={event.price_max}
+                priceNotes={event.price_notes}
+                size="sm"
+              />
+              
+              {/* Badges Row */}
+              <div className="flex flex-wrap gap-1">
+                {event.category && (
+                  <UIBadge variant="outline" className="text-xs">
+                    {CATEGORY_LABELS[event.category] || event.category}
+                  </UIBadge>
+                )}
+                <RecurringEventBadge 
+                  isRecurring={event.is_recurring} 
+                  pattern={event.recurrence_pattern}
+                  size="sm"
+                />
+                {event.event_status && event.event_status !== 'confirmed' && 
+                  getStatusBadge(event.event_status, EVENT_STATUS_OPTIONS)
+                }
+                {event.availability_status && event.availability_status !== 'available' && 
+                  getStatusBadge(event.availability_status, AVAILABILITY_STATUS_OPTIONS)
+                }
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
       {/* Event Detail Modal */}
-      <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+      <Dialog open={!!selectedEvent} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedEvent(null);
+          setEditingDetails(false);
+          setEditForm(null);
+          setEditingLocation(false);
+        }
+      }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-4 md:p-6">
           {selectedEvent && (
             <>
               <DialogHeader>
-                <DialogTitle>{selectedEvent.event_title}</DialogTitle>
+                <div className="flex items-center justify-between">
+                  <DialogTitle className={selectedEvent.event_status === 'cancelled' ? 'line-through' : ''}>
+                    {selectedEvent.event_title}
+                  </DialogTitle>
+                  {!editingDetails && (
+                    <Button variant="outline" size="sm" onClick={() => initEditForm(selectedEvent)}>
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Edit Details
+                    </Button>
+                  )}
+                </div>
               </DialogHeader>
 
               <div className="space-y-6">
-                {/* Instagram Post */}
-                {selectedEvent.instagram_post && (
+                {/* Instagram Post Info */}
+                {selectedEvent.source_post_id && (
                   <div className="space-y-2">
                     <h3 className="font-medium flex items-center gap-2">
                       <ImageIcon className="w-4 h-4" />
-                      Original Instagram Post
+                      Source Post
                     </h3>
                     <div className="flex gap-4">
-                      {(selectedEvent.instagram_post.stored_image_url || selectedEvent.instagram_post.image_url) && (
+                      {(selectedEvent.stored_image_url || selectedEvent.image_url) && (
                         <img
-                          src={selectedEvent.instagram_post.stored_image_url || selectedEvent.instagram_post.image_url}
+                          src={selectedEvent.stored_image_url || selectedEvent.image_url || ''}
                           alt="Post"
-                          className="w-40 h-40 object-cover rounded"
+                          className="w-32 h-32 object-cover rounded"
                         />
                       )}
-                      <div className="flex-1 space-y-2 text-sm">
-                        <p><strong>Account:</strong> @{selectedEvent.instagram_post.instagram_account?.username}</p>
-                        <p><strong>Post ID:</strong> {selectedEvent.instagram_post.post_id}</p>
-                        {selectedEvent.instagram_post.ocr_confidence && (
-                          <UIBadge variant="outline">
-                            OCR: {(selectedEvent.instagram_post.ocr_confidence * 100).toFixed(0)}%
-                          </UIBadge>
+                      <div className="flex-1 space-y-1 text-sm">
+                        {selectedEvent.instagram_account_username && (
+                          <p><strong>Account:</strong> @{selectedEvent.instagram_account_username}</p>
                         )}
-                        {selectedEvent.instagram_post.caption && (
-                          <p className="text-muted-foreground line-clamp-3">{selectedEvent.instagram_post.caption}</p>
-                        )}
+                        <p><strong>Post ID:</strong> {selectedEvent.source_post_id}</p>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* Event Details */}
-                <div className="space-y-3">
-                  <h3 className="font-medium">Event Details</h3>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div><strong>Date:</strong> {formatDateRange(selectedEvent.event_date, selectedEvent.event_end_date)}</div>
-                    <div><strong>Time:</strong> {formatTimeRange(selectedEvent.event_time, selectedEvent.end_time) || 'TBA'}</div>
-                    <div><strong>Price:</strong> {selectedEvent.is_free ? "Free" : `₱${selectedEvent.price}`}</div>
-                    {selectedEvent.signup_url && (
+                {/* Event Details - Edit Mode */}
+                {editingDetails && editForm ? (
+                  <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium">Edit Event Details</h3>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => { setEditingDetails(false); setEditForm(null); }}>
+                          <X className="w-4 h-4 mr-1" /> Cancel
+                        </Button>
+                        <Button size="sm" onClick={handleSaveDetails} disabled={updateEventMutation.isPending}>
+                          <Save className="w-4 h-4 mr-1" /> Save
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Title */}
                       <div className="col-span-2">
-                        <strong>Signup:</strong>{" "}
-                        <a href={selectedEvent.signup_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                          Link <ExternalLink className="w-3 h-3 inline" />
-                        </a>
+                        <Label>Event Title</Label>
+                        <Input
+                          value={editForm.event_title}
+                          onChange={(e) => setEditForm({ ...editForm, event_title: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Date & Time */}
+                      <div>
+                        <Label>Event Date</Label>
+                        <Input
+                          type="date"
+                          value={editForm.event_date}
+                          onChange={(e) => setEditForm({ ...editForm, event_date: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Event Time</Label>
+                        <Input
+                          type="time"
+                          value={editForm.event_time}
+                          onChange={(e) => setEditForm({ ...editForm, event_time: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>End Time (optional)</Label>
+                        <Input
+                          type="time"
+                          value={editForm.end_time}
+                          onChange={(e) => setEditForm({ ...editForm, end_time: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Category */}
+                      <div>
+                        <Label>Category</Label>
+                        <Select value={editForm.category} onValueChange={(v) => setEditForm({ ...editForm, category: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Event Status */}
+                      <div>
+                        <Label>Event Status</Label>
+                        <Select value={editForm.event_status} onValueChange={(v) => setEditForm({ ...editForm, event_status: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {EVENT_STATUS_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Availability Status */}
+                      <div>
+                        <Label>Availability</Label>
+                        <Select value={editForm.availability_status} onValueChange={(v) => setEditForm({ ...editForm, availability_status: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {AVAILABILITY_STATUS_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Free Toggle */}
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={editForm.is_free}
+                          onCheckedChange={(checked) => setEditForm({ ...editForm, is_free: checked })}
+                        />
+                        <Label>Free Event</Label>
+                      </div>
+
+                      {/* Price Fields - only if not free */}
+                      {!editForm.is_free && (
+                        <>
+                          <div>
+                            <Label>Min Price (₱)</Label>
+                            <Input
+                              type="number"
+                              value={editForm.price_min}
+                              onChange={(e) => setEditForm({ ...editForm, price_min: e.target.value })}
+                              placeholder="e.g., 300"
+                            />
+                          </div>
+                          <div>
+                            <Label>Max Price (₱)</Label>
+                            <Input
+                              type="number"
+                              value={editForm.price_max}
+                              onChange={(e) => setEditForm({ ...editForm, price_max: e.target.value })}
+                              placeholder="e.g., 500"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <Label>Price Notes</Label>
+                            <Input
+                              value={editForm.price_notes}
+                              onChange={(e) => setEditForm({ ...editForm, price_notes: e.target.value })}
+                              placeholder="e.g., VIP ₱1000, Early bird ₱200"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {/* Recurring Event */}
+                      <div className="col-span-2 flex items-center gap-3">
+                        <Switch
+                          checked={editForm.is_recurring}
+                          onCheckedChange={(checked) => setEditForm({ ...editForm, is_recurring: checked })}
+                        />
+                        <Repeat className="w-4 h-4 text-muted-foreground" />
+                        <Label>Recurring Event</Label>
+                      </div>
+
+                      {editForm.is_recurring && (
+                        <div className="col-span-2">
+                          <Label>Recurrence Pattern</Label>
+                          <Input
+                            value={editForm.recurrence_pattern}
+                            onChange={(e) => setEditForm({ ...editForm, recurrence_pattern: e.target.value })}
+                            placeholder="e.g., weekly:friday, monthly:first-saturday"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Format: weekly:day, monthly:first-day, biweekly:day
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Signup URL */}
+                      <div className="col-span-2">
+                        <Label>Signup URL</Label>
+                        <Input
+                          value={editForm.signup_url}
+                          onChange={(e) => setEditForm({ ...editForm, signup_url: e.target.value })}
+                          placeholder="https://..."
+                        />
+                      </div>
+
+                      {/* Description */}
+                      <div className="col-span-2">
+                        <Label>Description</Label>
+                        <Textarea
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Event Details - View Mode */
+                  <div className="space-y-3">
+                    <h3 className="font-medium">Event Details</h3>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div><strong>Date:</strong> {formatDateRange(selectedEvent.event_date, selectedEvent.event_end_date)}</div>
+                      <div><strong>Time:</strong> {formatTimeRange(selectedEvent.event_time, selectedEvent.end_time) || 'TBA'}</div>
+                      <div><strong>Category:</strong> {CATEGORY_LABELS[selectedEvent.category || ''] || selectedEvent.category || 'Other'}</div>
+                      <div className="flex items-center gap-2">
+                        <strong>Status:</strong> 
+                        {getStatusBadge(selectedEvent.event_status, EVENT_STATUS_OPTIONS)}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <strong>Availability:</strong> 
+                        {getStatusBadge(selectedEvent.availability_status, AVAILABILITY_STATUS_OPTIONS)}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <strong>Price:</strong>
+                        <PriceDisplay
+                          isFree={selectedEvent.is_free}
+                          priceMin={selectedEvent.price_min}
+                          priceMax={selectedEvent.price_max}
+                          priceNotes={selectedEvent.price_notes}
+                          size="sm"
+                        />
+                      </div>
+                      {selectedEvent.is_recurring && (
+                        <div className="col-span-2 flex items-center gap-2">
+                          <strong>Recurring:</strong>
+                          <RecurringEventBadge 
+                            isRecurring={selectedEvent.is_recurring} 
+                            pattern={selectedEvent.recurrence_pattern}
+                          />
+                        </div>
+                      )}
+                      {selectedEvent.signup_url && (
+                        <div className="col-span-2">
+                          <strong>Signup:</strong>{" "}
+                          <a href={selectedEvent.signup_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                            Link <ExternalLink className="w-3 h-3 inline" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                    {selectedEvent.description && (
+                      <div>
+                        <strong className="text-sm">Description:</strong>
+                        <p className="text-sm text-muted-foreground mt-1">{selectedEvent.description}</p>
                       </div>
                     )}
+
+                    {/* Multi-day Event Dates */}
+                    {selectedEvent.source_post_id && (
+                      <EventDatesDisplay
+                        eventId={selectedEvent.source_post_id}
+                        primaryDate={selectedEvent.event_date}
+                        primaryTime={selectedEvent.event_time}
+                        primaryVenue={selectedEvent.location_name}
+                      />
+                    )}
                   </div>
-                  {selectedEvent.description && (
-                    <div>
-                      <strong className="text-sm">Description:</strong>
-                      <p className="text-sm text-muted-foreground mt-1">{selectedEvent.description}</p>
-                    </div>
-                  )}
-                </div>
+                )}
 
                 {/* Location */}
                 <div className="space-y-3">
@@ -506,32 +778,62 @@ export const PublishedEventsManager = () => {
                     </Button>
                   </div>
 
-                  {!editingLocation && selectedEvent.location && (
+                  {!editingLocation && (
                     <div className="bg-muted/50 rounded-md p-3 space-y-1 text-sm">
-                      <div><strong>Venue:</strong> {selectedEvent.location.location_name}</div>
-                      <div><strong>Address:</strong> {selectedEvent.location.formatted_address || "N/A"}</div>
-                      <div><strong>Coordinates:</strong> {selectedEvent.location.location_lat}, {selectedEvent.location.location_lng}</div>
-                      {selectedEvent.location.manual_override && (
-                        <UIBadge variant="secondary" className="mt-2">Manually Corrected</UIBadge>
-                      )}
+                      <div><strong>Venue:</strong> {selectedEvent.location_name}</div>
+                      <div><strong>Address:</strong> {selectedEvent.location_address || "N/A"}</div>
+                      <div><strong>Coordinates:</strong> {selectedEvent.location_lat}, {selectedEvent.location_lng}</div>
                     </div>
                   )}
 
-                  {editingLocation && selectedEvent.location && (
+                  {editingLocation && (
                     <LocationCorrectionEditor
                       eventId={selectedEvent.id}
-                      locationId={selectedEvent.location.id}
+                      locationId={selectedEvent.id}
                       originalOCR={{
-                        venue: selectedEvent.location.location_name,
-                        address: selectedEvent.location.formatted_address || "",
+                        venue: selectedEvent.location_name,
+                        address: selectedEvent.location_address || "",
                       }}
-                      currentLocation={selectedEvent.location}
-                      onSave={(correction) => {
-                        saveLocationMutation.mutate({
+                      currentLocation={{
+                        location_name: selectedEvent.location_name,
+                        formatted_address: selectedEvent.location_address,
+                        location_lat: selectedEvent.location_lat,
+                        location_lng: selectedEvent.location_lng,
+                      }}
+                      onSave={async (correction) => {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        
+                        const oldValues = {
+                          location_name: selectedEvent.location_name,
+                          location_address: selectedEvent.location_address,
+                          location_lat: selectedEvent.location_lat,
+                          location_lng: selectedEvent.location_lng,
+                        };
+
+                        const updates = {
+                          location_name: correction.venueName,
+                          location_address: correction.streetAddress,
+                          location_lat: correction.lat,
+                          location_lng: correction.lng,
+                        };
+
+                        updateEventMutation.mutate({
                           eventId: selectedEvent.id,
-                          locationId: selectedEvent.location!.id,
-                          correction,
+                          updates,
+                          oldValues,
                         });
+                        
+                        // Save to location_corrections for learning
+                        await supabase.from("location_corrections").insert({
+                          corrected_venue_name: correction.venueName,
+                          corrected_street_address: correction.streetAddress,
+                          manual_lat: correction.lat,
+                          manual_lng: correction.lng,
+                          corrected_by: user?.id,
+                          applied_to_event_id: selectedEvent.id,
+                        });
+
+                        setEditingLocation(false);
                       }}
                       onCancel={() => setEditingLocation(false)}
                     />
@@ -571,7 +873,6 @@ export const PublishedEventsManager = () => {
           )}
         </DialogContent>
       </Dialog>
-
     </div>
   );
 };
