@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { AlertCircle, Loader, CheckCircle, Trash, ChevronLeft, ChevronRight, CheckCheck, AlertTriangle, XCircle } from "lucide-react";
+import { AlertCircle, Loader, CheckCircle, Trash, ChevronLeft, ChevronRight, CheckCheck, AlertTriangle, XCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import { PostWithEventEditor } from "./PostWithEventEditor";
 import { ClientOCRProcessor } from "./ClientOCRProcessor";
@@ -24,9 +24,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Post {
   id: string;
+  post_id: string;
   post_url: string;
   image_url: string;
   stored_image_url: string | null;
@@ -41,10 +48,14 @@ interface Post {
   location_lat: number | null;
   location_lng: number | null;
   price: number | null;
+  price_min: number | null;
+  price_max: number | null;
+  price_notes: string | null;
   is_free: boolean;
   signup_url: string | null;
   ocr_processed: boolean;
   ocr_confidence: number | null;
+  ocr_text: string | null;
   ocr_error_count: number;
   ocr_last_error: string | null;
   needs_review: boolean;
@@ -53,9 +64,13 @@ interface Post {
   extraction_method: string | null;
   category: string | null;
   ai_confidence: number | null;
+  ai_reasoning: string | null;
   review_tier: string | null;
   validation_warnings: string[] | null;
   is_duplicate: boolean | null;
+  is_recurring: boolean | null;
+  recurrence_pattern: string | null;
+  urgency_score: number | null;
 }
 
 const extractionMethodLabels: Record<string, { label: string; icon: string }> = {
@@ -100,7 +115,191 @@ export function ConsolidatedReviewQueue() {
   const [rejectionNotes, setRejectionNotes] = useState("");
   const [postToReject, setPostToReject] = useState<Post | null>(null);
   const [hidePastEvents, setHidePastEvents] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const queryClient = useQueryClient();
+
+  // Export functions
+  const exportQueueAsJSON = async () => {
+    setIsExporting(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Fetch ALL posts for current tier (bypass pagination)
+      let query = supabase
+        .from("instagram_posts")
+        .select(`
+          id, post_id, post_url, caption, ocr_text, ai_reasoning,
+          event_title, event_date, event_end_date, event_time, end_time,
+          location_name, location_address, location_lat, location_lng,
+          price, price_min, price_max, price_notes, is_free,
+          signup_url, category, ai_confidence, extraction_method,
+          review_tier, validation_warnings, is_duplicate,
+          is_recurring, recurrence_pattern, urgency_score,
+          ocr_confidence, ocr_error_count,
+          instagram_account:instagram_accounts(username)
+        `)
+        .eq("is_event", true)
+        .eq("review_tier", tierTab);
+
+      const { data, error } = await query.order("created_at", { ascending: false });
+      
+      if (error) throw error;
+
+      // Filter past events if toggle is on
+      let filteredData = data || [];
+      if (hidePastEvents) {
+        filteredData = filteredData.filter(post => 
+          !post.event_date || post.event_date >= today
+        );
+      }
+
+      // Calculate summary statistics
+      const summary = {
+        exportedAt: new Date().toISOString(),
+        tier: tierTab,
+        totalPosts: filteredData.length,
+        hidePastEvents,
+        statistics: {
+          avgConfidence: filteredData.length > 0 
+            ? (filteredData.reduce((acc, p) => acc + (p.ai_confidence || 0), 0) / filteredData.length).toFixed(3)
+            : 0,
+          missingFields: {
+            event_title: filteredData.filter(p => !p.event_title).length,
+            event_date: filteredData.filter(p => !p.event_date).length,
+            event_time: filteredData.filter(p => !p.event_time).length,
+            location_name: filteredData.filter(p => !p.location_name).length,
+            coordinates: filteredData.filter(p => !p.location_lat).length,
+            price: filteredData.filter(p => !p.is_free && !p.price).length,
+          },
+          categories: filteredData.reduce((acc, p) => {
+            const cat = p.category || 'unknown';
+            acc[cat] = (acc[cat] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>),
+          extractionMethods: filteredData.reduce((acc, p) => {
+            const method = p.extraction_method || 'unknown';
+            acc[method] = (acc[method] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>),
+          validationWarnings: filteredData.reduce((acc, p) => {
+            (p.validation_warnings || []).forEach((w: string) => {
+              acc[w] = (acc[w] || 0) + 1;
+            });
+            return acc;
+          }, {} as Record<string, number>),
+        },
+      };
+
+      const exportData = {
+        summary,
+        posts: filteredData.map(p => ({
+          ...p,
+          instagram_username: p.instagram_account?.username || null,
+        })),
+      };
+
+      // Download as JSON
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `review_queue_${tierTab}_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${filteredData.length} posts as JSON`);
+    } catch (error: any) {
+      toast.error("Export failed: " + error.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportQueueAsCSV = async () => {
+    setIsExporting(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      let query = supabase
+        .from("instagram_posts")
+        .select(`
+          id, post_id, post_url, caption, ocr_text,
+          event_title, event_date, event_end_date, event_time, end_time,
+          location_name, location_address, location_lat, location_lng,
+          price, price_min, price_max, price_notes, is_free,
+          signup_url, category, ai_confidence, extraction_method,
+          review_tier, validation_warnings, is_duplicate,
+          is_recurring, recurrence_pattern, urgency_score,
+          instagram_account:instagram_accounts(username)
+        `)
+        .eq("is_event", true)
+        .eq("review_tier", tierTab);
+
+      const { data, error } = await query.order("created_at", { ascending: false });
+      
+      if (error) throw error;
+
+      let filteredData = data || [];
+      if (hidePastEvents) {
+        filteredData = filteredData.filter(post => 
+          !post.event_date || post.event_date >= today
+        );
+      }
+
+      // CSV headers
+      const headers = [
+        'id', 'post_id', 'post_url', 'instagram_username',
+        'event_title', 'event_date', 'event_time', 'end_time',
+        'location_name', 'location_address', 'location_lat', 'location_lng',
+        'price', 'price_min', 'price_max', 'price_notes', 'is_free',
+        'category', 'ai_confidence', 'extraction_method',
+        'review_tier', 'validation_warnings', 'is_duplicate',
+        'is_recurring', 'recurrence_pattern', 'urgency_score',
+        'caption', 'ocr_text'
+      ];
+
+      // Escape CSV values
+      const escapeCSV = (val: any): string => {
+        if (val === null || val === undefined) return '';
+        const str = String(val);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      const rows = filteredData.map(p => [
+        p.id, p.post_id, p.post_url, p.instagram_account?.username || '',
+        p.event_title, p.event_date, p.event_time, p.end_time,
+        p.location_name, p.location_address, p.location_lat, p.location_lng,
+        p.price, p.price_min, p.price_max, p.price_notes, p.is_free,
+        p.category, p.ai_confidence, p.extraction_method,
+        p.review_tier, (p.validation_warnings || []).join('; '), p.is_duplicate,
+        p.is_recurring, p.recurrence_pattern, p.urgency_score,
+        p.caption, p.ocr_text
+      ].map(escapeCSV).join(','));
+
+      const csv = [headers.join(','), ...rows].join('\n');
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `review_queue_${tierTab}_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${filteredData.length} posts as CSV`);
+    } catch (error: any) {
+      toast.error("Export failed: " + error.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Fetch tier counts
   const { data: tierCounts } = useQuery({
@@ -489,6 +688,30 @@ export function ConsolidatedReviewQueue() {
                   </div>
                 </div>
                 <div className="flex gap-2 w-full md:w-auto">
+                  {/* Export Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        disabled={isExporting || !allPosts?.length}
+                      >
+                        <Download className="w-4 h-4 md:mr-1" />
+                        <span className="hidden md:inline">
+                          {isExporting ? "Exporting..." : `Export (${allPosts?.length || 0})`}
+                        </span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={exportQueueAsJSON}>
+                        📄 Export as JSON (with analysis)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={exportQueueAsCSV}>
+                        📊 Export as CSV (spreadsheet)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
                   <Button 
                     size="sm" 
                     variant="outline" 
