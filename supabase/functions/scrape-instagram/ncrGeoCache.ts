@@ -909,6 +909,115 @@ export const NCR_VENUE_GEOCACHE: Record<string, VenueData> = {
     city: 'Makati',
     fullName: 'The Alley at Karrivin'
   },
+  
+  // ============================================================
+  // PHASE 6 ADDITIONS - Missing Venues from Audit
+  // ============================================================
+  'the jungle': {
+    lat: 14.5657,
+    lng: 121.0290,
+    city: 'Makati',
+    fullName: 'The Jungle Poblacion'
+  },
+  'the jungle poblacion': {
+    lat: 14.5657,
+    lng: 121.0290,
+    city: 'Makati'
+  },
+  'jungle poblacion': {
+    lat: 14.5657,
+    lng: 121.0290,
+    city: 'Makati',
+    fullName: 'The Jungle Poblacion'
+  },
+  'walrus': {
+    lat: 14.6355,
+    lng: 121.0788,
+    city: 'Quezon City',
+    fullName: 'Walrus Katipunan'
+  },
+  'walrus katipunan': {
+    lat: 14.6355,
+    lng: 121.0788,
+    city: 'Quezon City'
+  },
+  'walrus qc': {
+    lat: 14.6355,
+    lng: 121.0788,
+    city: 'Quezon City',
+    fullName: 'Walrus Katipunan'
+  },
+  "ruby wong's": {
+    lat: 14.5654,
+    lng: 121.0293,
+    city: 'Makati',
+    fullName: "Ruby Wong's"
+  },
+  'ruby wongs': {
+    lat: 14.5654,
+    lng: 121.0293,
+    city: 'Makati',
+    fullName: "Ruby Wong's"
+  },
+  'ruby wong': {
+    lat: 14.5654,
+    lng: 121.0293,
+    city: 'Makati',
+    fullName: "Ruby Wong's"
+  },
+  'the funroof': {
+    lat: 14.5567,
+    lng: 121.0299,
+    city: 'Makati',
+    fullName: 'The Funroof'
+  },
+  'funroof': {
+    lat: 14.5567,
+    lng: 121.0299,
+    city: 'Makati',
+    fullName: 'The Funroof'
+  },
+  'up nsc amphitheater': {
+    lat: 14.6470,
+    lng: 121.0700,
+    city: 'Quezon City',
+    fullName: 'UP National Science Complex Amphitheater'
+  },
+  'up national science complex': {
+    lat: 14.6470,
+    lng: 121.0700,
+    city: 'Quezon City',
+    fullName: 'UP National Science Complex Amphitheater'
+  },
+  'up national science complex amphitheater': {
+    lat: 14.6470,
+    lng: 121.0700,
+    city: 'Quezon City'
+  },
+  'nsc amphitheater': {
+    lat: 14.6470,
+    lng: 121.0700,
+    city: 'Quezon City',
+    fullName: 'UP National Science Complex Amphitheater'
+  },
+  '5g coffee house': {
+    lat: 14.5736,
+    lng: 121.0617,
+    city: 'Pasig',
+    fullName: '5G Coffee House'
+  },
+  '5g coffee': {
+    lat: 14.5736,
+    lng: 121.0617,
+    city: 'Pasig',
+    fullName: '5G Coffee House'
+  },
+  '5g': {
+    lat: 14.5736,
+    lng: 121.0617,
+    city: 'Pasig',
+    fullName: '5G Coffee House'
+  },
 };
 
 /**
