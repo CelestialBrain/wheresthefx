@@ -28,7 +28,7 @@ const results = {
 /**
  * Extract event data from image using Gemini Vision
  */
-async function extractWithGeminiVision(imageUrl, caption) {
+async function extractWithGeminiVision(imageUrl, caption, post = {}) {
   try {
     const imageResponse = await fetch(imageUrl);
     if (!imageResponse.ok) {
@@ -43,9 +43,16 @@ async function extractWithGeminiVision(imageUrl, caption) {
     const today = new Date().toISOString().split('T')[0];
     const currentYear = new Date().getFullYear();
     
+    // Calculate post age to detect historical posts
+    const postTimestamp = post?.timestamp;
+    const postDate = postTimestamp ? new Date(postTimestamp) : new Date();
+    const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
+    const isOldPost = postAgeInDays > 30;
+    
     const prompt = `You are an expert at extracting event information from Filipino Instagram event posters.
 
 TODAY'S DATE: ${today}
+INSTAGRAM POST DATE: ${postDate.toISOString().split('T')[0]} (${postAgeInDays} days ago)${isOldPost ? ' ⚠️ OLD POST - likely historical' : ''}
 
 INSTAGRAM CAPTION:
 """
@@ -54,38 +61,62 @@ ${caption || '(no caption)'}
 
 Extract ALL text visible in the image, then determine if this is an event announcement.
 
+⚠️ CRITICAL: HISTORICAL POST DETECTION
+- This post was made ${postAgeInDays} days ago
+- If the extracted event date is BEFORE the post date, this is a HISTORICAL POST about a past event
+- DO NOT increment the year! A "May 3" post from May 2025 is NOT a May 2026 event
+- If the event date has already passed, set isEvent: false and note "Historical post - event already occurred"
+
 CRITICAL VALIDATION RULES:
-1. eventDate MUST be on or after today (${today})
-2. eventDate MUST be within 6 months of today
-3. eventDate year MUST be ${currentYear} or ${currentYear + 1}
-4. If you see past dates, check if it's a recurring event - if so, calculate the NEXT occurrence
-5. DO NOT extract phone numbers as prices (e.g., 09171234567 is NOT a price)
-6. DO NOT extract years as times (e.g., 2025 is NOT a time)
-7. Times should be in HH:MM format (24-hour)
-8. Prices in Philippines are typically ₱100-₱5000 for events
+1. eventDate MUST be on or after the POST date (${postDate.toISOString().split('T')[0]}), not today
+2. If an event date is in the past relative to TODAY (${today}), it's already passed - set isEvent: false
+3. DO NOT auto-increment year for past dates! "May 3" in a May 5 post means May 3 (already passed), NOT next year
+4. eventDate year MUST be ${currentYear} or ${currentYear + 1}
+5. If you see past dates, check if it's a recurring event - if so, calculate the NEXT occurrence
+6. DO NOT extract phone numbers as prices (e.g., 09171234567 is NOT a price)
+7. DO NOT extract years as times (e.g., 2025 is NOT a time)
+8. Times should be in HH:MM format (24-hour)
+9. Prices in Philippines are typically ₱100-₱5000 for events
+
+⚠️ NOT AN EVENT - Set isEvent: false if:
+- This is a THANK YOU / RECAP post (contains "thank you", "merci", "what a night", "until next time")
+- This is a THROWBACK post (contains "#tbt", "#throwback", "look back", "memories")
+- This is a VENUE PROMO (contains "host your events", "book our space", "private events", "for bookings")
+- This is a PRODUCT/MENU post (contains "new on the menu", "now serving", "try our", "limited edition")
+- This is a CALL FOR APPLICATIONS (contains "calling all vendors", "now accepting applications", "apply now")
+- Contains operating hours: "6PM — Tues to Sat", "Open Mon-Fri"
+- Says "Every [day]" without a specific date
+- Generic promo: "Visit us", "Come check out", "Be in the loop"
+- Describes regular venue operations, not a unique event
 
 CONFIDENCE GUIDELINES:
-- Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible
-- Set confidence 0.7-0.89 if most fields are clear but some are inferred
-- Set confidence 0.5-0.69 if you're making educated guesses
-- Set confidence < 0.5 if you're very uncertain
+- Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible in BOTH image AND caption
+- Set confidence 0.8-0.89 if fields are clear in either image OR caption
+- Set confidence 0.6-0.79 if you're interpreting date formats or inferring AM/PM
+- Set confidence < 0.6 if you're making educated guesses - consider setting field to null instead
 
-DATE EXTRACTION:
-- Look for: "DEC 15", "December 15", "12/15", "Dec 6-7" (multi-day)
+DATE EXTRACTION - ⚠️ CAREFUL WITH FORMATS:
 - European/Philippine format: 05.12.2025 = December 5 (day.month.year), NOT May 12
-- For relative dates ("tomorrow", "this Friday"), calculate from today: ${today}
-- If month has passed this year, assume next year (e.g., "Jan 5" in December → ${currentYear + 1}-01-05)
+- Validate extracted date against expected day-of-week: "Freaky Friday" must result in a Friday
+- Look for: "DEC 15", "December 15", "12/15", "Dec 6-7" (multi-day)
+- For relative dates ("tomorrow", "this Friday"), calculate from post date, not today
+- If month has passed this year, assume next year ONLY if post is recent (within 7 days)
+- ⚠️ RSVP DEADLINE detection: "RSVP by Dec 16" or "Register before Dec 10" - extract as rsvpDeadline, NOT eventDate
 
 TIME EXTRACTION:
 - Look for: "8PM", "9:00 PM", "DOORS OPEN 7PM", "21:00"
+- "12MN", "12 midnight", "12 mn" = "00:00" (midnight)
 - TIME AMBIGUITY - Infer AM/PM from context:
   * Bar/club/party/concert: 8, 9, 10 → PM (20:00, 21:00, 22:00)
   * Market/fair/yoga/run: 7, 8, 9 → AM (07:00, 08:00, 09:00)
 
-VENUE/LOCATION:
-- Look for venue names, addresses, 📍 symbols
+VENUE/LOCATION - ⚠️ STRICT RULES:
+- Extract the ACTUAL venue name from the post content
 - DO NOT use @mentions as venues (those are usually performers/sponsors)
 - DO NOT use the posting account username as venue
+- DO NOT guess or make up venue names - if unclear, set to null
+- Vague venues should be flagged: "TBA", "DM for details", "secret location", "my bar", "the venue"
+- If venue is just a generic word like "cafe" or "bar", set to null
 
 PRICE EXTRACTION (ENHANCED):
 - Single price: "₱500", "P500", "Php500" → price: 500, priceMin: 500, priceMax: 500
@@ -93,27 +124,6 @@ PRICE EXTRACTION (ENHANCED):
 - Tiered pricing: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
 - Conditional: "Free before 10PM, ₱300 after" → priceMin: 0, priceMax: 300, priceNotes: "Free before 10PM, ₱300 after", isFree: true
 - "FREE", "LIBRE", "Walang bayad" → isFree: true, price: 0, priceMin: 0, priceMax: 0
-
-MULTI-DATE/MULTI-TIME EVENTS (Film Festivals, Art Screenings):
-- If multiple dates with different times/screenings, extract as "schedule" array
-- Example: "Dec 12: 4PM Padamlagan, 6:30PM Bloom / Dec 13: 1:30PM Paglilitis" →
-  schedule: [
-    { "date": "2025-12-12", "times": [{"time": "16:00", "label": "Padamlagan"}, {"time": "18:30", "label": "Bloom"}] },
-    { "date": "2025-12-13", "times": [{"time": "13:30", "label": "Paglilitis"}] }
-  ]
-- For single-day events, omit the schedule field
-
-NOT AN EVENT - Set isEvent: false if:
-- Contains operating hours: "6PM — Tues to Sat", "Open Mon-Fri"
-- Says "Every [day]" without a specific date
-- Generic promo: "Visit us", "Come check out", "Be in the loop"
-- Describes regular venue operations, not a unique event
-
-COMMON MISTAKES TO AVOID:
-- "@photographer_name" is NOT a venue
-- "DM for reservations" numbers are NOT prices
-- Sponsor logos/handles are NOT venue names
-- 05.12.2025 is December 5, not May 12 (European format)
 
 Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
 
@@ -126,7 +136,7 @@ Respond in JSON only:
   "eventEndDate": "YYYY-MM-DD or null for multi-day",
   "eventTime": "HH:MM",
   "endTime": "HH:MM or null",
-  "venueName": "venue name only",
+  "venueName": "venue name only, or null if unclear",
   "venueAddress": "full address if visible",
   "price": 0,
   "priceMin": 0,
@@ -137,8 +147,9 @@ Respond in JSON only:
   "confidence": 0.85,
   "isRecurring": false,
   "recurrencePattern": "weekly:friday or null",
-  "schedule": null,
-  "reasoning": "Explain what indicators you found (date, time, venue, event-type words) or why this is NOT an event."
+  "rsvpDeadline": "YYYY-MM-DD if RSVP deadline mentioned, null otherwise",
+  "isHistoricalPost": false,
+  "reasoning": "Explain what indicators you found (date, time, venue, event-type words) or why this is NOT an event. If historical, explain why."
 }`;
 
     const result = await model.generateContent([
@@ -201,9 +212,45 @@ async function processPost(post) {
   const imageUrl = post.displayUrl || post.imageUrl;
   
   // Use Gemini Vision for image text extraction
+  // Pass full post context for historical post detection
   let aiResult = null;
   if (imageUrl) {
-    aiResult = await extractWithGeminiVision(imageUrl, caption);
+    aiResult = await extractWithGeminiVision(imageUrl, caption, post);
+  }
+  
+  // Post-process AI result for historical posts
+  if (aiResult) {
+    // If AI marked as historical or event date is in the past, mark as not an event
+    if (aiResult.isHistoricalPost) {
+      aiResult.isEvent = false;
+      console.log(`    📜 Historical post detected - marking as not event`);
+    }
+    
+    // Double-check: if event date is before post date and post is old, it's historical
+    if (aiResult.eventDate && post.timestamp) {
+      const eventDate = new Date(aiResult.eventDate);
+      const postDate = new Date(post.timestamp);
+      const today = new Date();
+      
+      // If event date is before post date, this is definitely a historical reference
+      if (eventDate < postDate) {
+        aiResult.isEvent = false;
+        aiResult.isHistoricalPost = true;
+        aiResult.reasoning = (aiResult.reasoning || '') + ' [Auto-detected: Event date before post date = historical]';
+        console.log(`    📜 Event date (${aiResult.eventDate}) before post date - marking as historical`);
+      }
+      
+      // If event date is in the past relative to today and post is old (>30 days), it's historical
+      const postAgeInDays = Math.floor((today - postDate) / (1000 * 60 * 60 * 24));
+      const eventAgeInDays = Math.floor((today - eventDate) / (1000 * 60 * 60 * 24));
+      
+      if (eventAgeInDays > 0 && postAgeInDays > 30) {
+        aiResult.isEvent = false;
+        aiResult.isHistoricalPost = true;
+        aiResult.reasoning = (aiResult.reasoning || '') + ` [Auto-detected: Old post (${postAgeInDays} days) with past event date = historical]`;
+        console.log(`    📜 Old post with past event date - marking as historical`);
+      }
+    }
   }
   
   return {

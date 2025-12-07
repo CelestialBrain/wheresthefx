@@ -434,7 +434,7 @@ export function preNormalizeText(text: string): string {
 
 // Check if post is DEFINITELY a vendor/merchant listing (hard reject)
 // This is a strict filter for obvious non-event vendor posts
-// Enhanced with NCR-specific patterns
+// Enhanced with NCR-specific patterns and non-event detection
 export function isVendorPostStrict(text: string): boolean {
   const strictVendorPatterns = [
     // Vendor recruitment/applications
@@ -462,6 +462,54 @@ export function isVendorPostStrict(text: string): boolean {
   ];
 
   return strictVendorPatterns.some(pattern => pattern.test(text));
+}
+
+/**
+ * Detects posts that are NOT events - venue promos, recaps, calls for applications, etc.
+ * These should be rejected even if they have event-like keywords
+ */
+export function isNotAnEventPost(text: string): boolean {
+  const notEventPatterns = [
+    // ===== VENUE RENTAL/BOOKING PROMOS =====
+    /\b(host your events?|book our (venue|space|cafe|bar))\b/i,
+    /\b(private events?|for (private )?bookings?)\b/i,
+    /\b(event (venue|space|rental)|inquire about|planning (a|an) (private )?event)\b/i,
+    /\b(corporate events?|venue for rent|rent our space)\b/i,
+    /\bbook us for your\b/i,
+    
+    // ===== THANK YOU / RECAP POSTS =====
+    /\b(thank you|maraming salamat|merci|gracias)\b.*(@|to our|to the|to everyone)/i,
+    /\b(that was|what a night|what a day|until next time)\b/i,
+    /\b(see you (again|next|soon)|til next time)\b/i,
+    
+    // ===== THROWBACK / MEMORIES =====
+    /\b(quick look ?back|throwback|recap|highlights?|memories from)\b/i,
+    /\b(#tbt|#throwback|#flashback)\b/i,
+    /\blast (week|month|year)'?s?\b/i,
+    
+    // ===== CALL FOR APPLICATIONS (not the event itself) =====
+    /\b(calling (all|for)|applications? (are )?open|now accepting)\b/i,
+    /\b(apply now|sign[- ]?up to (be|join|become))\b/i,
+    /\b(looking for (food|drink|)?\s*merchants?|vendor (slots?|applications?))\b/i,
+    /\b(join our team|we'?re hiring|now hiring)\b/i,
+    
+    // ===== PRODUCT/MENU ANNOUNCEMENTS =====
+    /\b(new (on the )?menu|now (available|serving)|try our)\b/i,
+    /\b(limited (edition|time) (only)?|seasonal (drink|menu|item))\b/i,
+    /\b(introducing our (new)?|check out our (new )?menu)\b/i,
+    
+    // ===== GENERIC VENUE PROMOS (no specific event) =====
+    /\b(visit us|come (check|hang)|drop by anytime)\b/i,
+    /\b(see you soon|be in the loop|stay tuned)\b.*!?\s*$/i, // At end of caption
+    /\b(follow us|link in bio)\s*$/i, // At end of caption
+    
+    // ===== OPERATING HOURS ANNOUNCEMENTS =====
+    /\bwe('re| are) now open\b/i,
+    /\b(open|operating) hours?\b/i,
+    /\bnew hours?\b/i,
+  ];
+
+  return notEventPatterns.some(pattern => pattern.test(text));
 }
 
 // Check if post has merchant/vendor-ish language (soft signal)

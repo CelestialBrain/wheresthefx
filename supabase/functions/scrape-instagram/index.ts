@@ -5,6 +5,7 @@ import {
   isVendorPostStrict,
   isPossiblyVendorPost,
   isRecurringSchedulePost,
+  isNotAnEventPost,
   extractPrice,
   extractTime,
   extractDate,
@@ -969,7 +970,114 @@ Deno.serve(async (req) => {
             });
           }
           
-          if (post.aiExtraction?.isEvent) eventsDetected++;
+          // === PHASE 3: NON-EVENT DETECTION ===
+          // Check if this is a non-event post (venue promo, recap, etc.) using caption
+          let isEvent = post.aiExtraction?.isEvent || false;
+          let nonEventReason: string | null = null;
+          
+          if (isEvent && post.caption) {
+            const normalizedCaption = preNormalizeText(post.caption);
+            
+            // Check for non-event patterns
+            if (isNotAnEventPost(normalizedCaption)) {
+              isEvent = false;
+              nonEventReason = 'NON_EVENT_PATTERN_DETECTED';
+              await ingestLogger?.log({
+                post_id: post.postId,
+                log_level: 'info',
+                stage: 'rejection',
+                message: 'Post rejected: Non-event pattern detected (venue promo/recap/call for apps)',
+                data: {
+                  reason: nonEventReason,
+                  captionPreview: post.caption?.substring(0, 200) || null,
+                  ownerUsername: post.ownerUsername || null,
+                },
+              });
+            }
+            
+            // Check for vendor posts
+            if (isEvent && isVendorPostStrict(normalizedCaption)) {
+              isEvent = false;
+              nonEventReason = 'VENDOR_POST_DETECTED';
+              await ingestLogger?.log({
+                post_id: post.postId,
+                log_level: 'info',
+                stage: 'rejection',
+                message: 'Post rejected: Vendor/merchant post detected',
+                data: {
+                  reason: nonEventReason,
+                  captionPreview: post.caption?.substring(0, 200) || null,
+                },
+              });
+            }
+            
+            // Check for recurring schedule posts (operating hours, not events)
+            if (isEvent && isRecurringSchedulePost(normalizedCaption)) {
+              isEvent = false;
+              nonEventReason = 'RECURRING_SCHEDULE_POST';
+              await ingestLogger?.log({
+                post_id: post.postId,
+                log_level: 'info',
+                stage: 'rejection',
+                message: 'Post rejected: Recurring schedule/operating hours (not a one-time event)',
+                data: {
+                  reason: nonEventReason,
+                  captionPreview: post.caption?.substring(0, 200) || null,
+                },
+              });
+            }
+          }
+          
+          // === PHASE 1: HISTORICAL POST DETECTION ===
+          // Check if this is a historical post (old post about past event)
+          let isHistoricalPost = false;
+          
+          if (isEvent && post.timestamp && post.aiExtraction?.eventDate) {
+            const postDate = new Date(post.timestamp);
+            const eventDate = new Date(post.aiExtraction.eventDate);
+            const today = new Date();
+            
+            const postAgeInDays = Math.floor((today.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24));
+            const eventAgeInDays = Math.floor((today.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24));
+            
+            // If event date is before post date, this is definitely a historical reference
+            if (eventDate < postDate) {
+              isEvent = false;
+              isHistoricalPost = true;
+              nonEventReason = 'HISTORICAL_EVENT_BEFORE_POST';
+              await ingestLogger?.log({
+                post_id: post.postId,
+                log_level: 'info',
+                stage: 'rejection',
+                message: `Post rejected: Historical - event date (${post.aiExtraction.eventDate}) before post date (${post.timestamp.split('T')[0]})`,
+                data: {
+                  reason: nonEventReason,
+                  eventDate: post.aiExtraction.eventDate,
+                  postDate: post.timestamp,
+                },
+              });
+            }
+            // If post is old (>45 days) and event date is in the past, it's historical
+            else if (postAgeInDays > 45 && eventAgeInDays > 0) {
+              isEvent = false;
+              isHistoricalPost = true;
+              nonEventReason = 'HISTORICAL_OLD_POST_PAST_EVENT';
+              await ingestLogger?.log({
+                post_id: post.postId,
+                log_level: 'info',
+                stage: 'rejection',
+                message: `Post rejected: Historical - old post (${postAgeInDays} days) with past event date`,
+                data: {
+                  reason: nonEventReason,
+                  eventDate: post.aiExtraction.eventDate,
+                  postAgeInDays,
+                  eventAgeInDays,
+                },
+              });
+            }
+          }
+          
+          if (isEvent) eventsDetected++;
           if (post.imageUrl) withImages++;
           
           // Track category
@@ -1265,7 +1373,7 @@ Deno.serve(async (req) => {
             location_address: post.aiExtraction?.venueAddress,
             location_lat: locationLat,
             location_lng: locationLng,
-            is_event: post.aiExtraction?.isEvent || false,
+            is_event: isEvent, // Use corrected isEvent (after non-event/historical checks)
             event_title: post.aiExtraction?.eventTitle,
             event_date: validation.correctedData.eventDate,
             event_end_date: post.aiExtraction?.eventEndDate || null,
