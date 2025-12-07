@@ -186,10 +186,13 @@ YEAR INFERENCE:
 - "Jan 5" posted in December ${currentYear} → January 5, ${currentYear + 1}
 - Always prefer future dates over past dates
 
-MULTI-DAY EVENTS:
+MULTI-DAY EVENTS (CRITICAL - always extract eventEndDate for multi-day events):
 - "Dec 6-7" or "December 6-7" → eventDate: first date, eventEndDate: last date
-- "Friday & Saturday" → calculate both dates, set eventEndDate
+- "Dec 12 Fri and Dec 13 Sat" → eventDate: 2025-12-12, eventEndDate: 2025-12-13
+- "Friday & Saturday" → calculate both dates, eventEndDate is the Saturday
 - "3-day event Dec 12-14" → eventDate: Dec 12, eventEndDate: Dec 14
+- "DEC 12-13, 2025" in poster → eventDate: 2025-12-12, eventEndDate: 2025-12-13
+- If event spans multiple calendar days → ALWAYS set eventEndDate to the final day
 
 TIME EXTRACTION RULES:
 - Look for "PM", "AM", time formats, "doors open"
@@ -516,10 +519,13 @@ YEAR INFERENCE:
 - "Jan 5" posted in December ${currentYear} → January 5, ${currentYear + 1}
 - Always prefer future dates over past dates
 
-MULTI-DAY EVENTS:
-- "Dec 6-7" → eventDate: ${currentYear}-12-06, eventEndDate: ${currentYear}-12-07
-- "Friday & Saturday" → calculate both dates, set eventEndDate
+MULTI-DAY EVENTS (CRITICAL - extract eventEndDate):
+- "Dec 6-7" or "Dec 6 and Dec 7" → eventDate: ${currentYear}-12-06, eventEndDate: ${currentYear}-12-07
+- "December 12 Friday and December 13 Saturday" → eventDate: ${currentYear}-12-12, eventEndDate: ${currentYear}-12-13
+- "Friday & Saturday" → calculate both dates, set eventDate=first, eventEndDate=last
 - "3-day event Dec 12-14" → eventDate: Dec 12, eventEndDate: Dec 14
+- "DEC 12-13, 2025" → eventDate: 2025-12-12, eventEndDate: 2025-12-13
+- If poster shows MULTIPLE dates on different days → ALWAYS set eventEndDate to the last date
 
 TIME EXTRACTION:
 - Convert to 24-hour format (HH:MM:SS)

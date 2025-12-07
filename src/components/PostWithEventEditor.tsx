@@ -30,6 +30,12 @@ interface PostWithEventEditorProps {
     signup_url: string | null;
     ocr_confidence: number | null;
     instagram_account: { username: string } | null;
+    // Price fields - read from database
+    is_free?: boolean;
+    price?: number | null;
+    price_min?: number | null;
+    price_max?: number | null;
+    price_notes?: string | null;
   };
   onCreateEvent: (eventData: any) => void;
   onCancel: () => void;
@@ -43,7 +49,9 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     event_time: post.event_time || "",
     location_name: post.location_name || "",
     signup_url: post.signup_url || "",
-    price: null as number | null,
+    // Read price from database for tracking corrections
+    price: post.price ?? null,
+    is_free: post.is_free ?? true,
   };
 
   const [eventData, setEventData] = useState({
@@ -54,8 +62,9 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     end_time: post.end_time || "",
     description: post.caption || "",
     signup_url: post.signup_url || "",
-    is_free: true,
-    price: null as number | null,
+    // Read is_free and price from database, not hardcoded
+    is_free: post.is_free ?? true,
+    price: post.price ?? null,
   });
 
   const [isPublishing, setIsPublishing] = useState(false);
