@@ -1430,7 +1430,10 @@ Deno.serve(async (req) => {
                 
                 await saveGroundTruth(post.postId, post.caption || '', mergedResult, supabase);
                 
-                await ingestLogger?.info('save', `Saved ground truth for ${post.postId}`, {
+                // Train patterns by comparing AI results with regex patterns
+                await trainPatternsFromComparison(post.postId, post.caption || '', mergedResult, supabase);
+                
+                await ingestLogger?.info('save', `Saved ground truth and trained patterns for ${post.postId}`, {
                   confidence: post.aiExtraction.confidence,
                   fieldsCount: Object.values(mergedResult).filter(v => v !== null && v !== undefined).length,
                 });
