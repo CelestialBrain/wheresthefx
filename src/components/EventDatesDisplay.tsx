@@ -98,7 +98,7 @@ export function EventDatesDisplay({
         {primaryDate && (
           <div className="flex items-center gap-1.5">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span>{formatDate(primaryDate)}</span>
+            <span className="font-medium">{formatDate(primaryDate)}</span>
           </div>
         )}
         {primaryTime && (
@@ -156,22 +156,24 @@ export function EventDatesDisplay({
 
       {/* Expanded date list */}
       {isExpanded && (
-        <div className="ml-5 space-y-1 text-sm">
+        <div className="mt-2 rounded-lg border border-border bg-muted/30 p-2 space-y-1">
           {allDates.map((date, index) => (
             <div 
               key={`${date.event_date}-${index}`}
-              className="flex items-center gap-3 text-muted-foreground py-0.5"
+              className="flex items-center justify-between text-sm px-2 py-1"
             >
-              <div className="w-1 h-1 rounded-full bg-muted-foreground/50 flex-shrink-0" />
-              <span className="w-16">{formatDateShort(date.event_date)}</span>
+              <span className="text-foreground">
+                {formatDate(date.event_date)}
+              </span>
+              <span className="text-muted-foreground/30 flex-1 mx-3 border-b border-dotted border-muted-foreground/30" />
               {date.event_time && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 text-muted-foreground">
                   <Clock className="h-3 w-3" />
                   {formatTime(date.event_time)}
                 </span>
               )}
               {date.venue_name && date.venue_name !== primaryVenue && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 text-muted-foreground ml-2">
                   <MapPin className="h-3 w-3" />
                   {date.venue_name}
                 </span>

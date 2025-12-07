@@ -284,11 +284,11 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
 
         {/* Location + Distance */}
         {post.is_event && post.location_name && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <MapPin className="h-3 w-3 flex-shrink-0" />
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="h-4 w-4 flex-shrink-0" />
             <span className="truncate flex-1">{post.location_name}</span>
             {post.distance !== undefined && (
-              <span className="text-primary text-xs font-medium whitespace-nowrap ml-1">
+              <span className="text-primary text-sm font-medium whitespace-nowrap ml-1">
                 {formatDistance(post.distance)}
               </span>
             )}
