@@ -206,17 +206,18 @@ Deno.serve(async (req) => {
     // Get unique post IDs
     const postIds = [...new Set(groundTruth.map(g => g.post_id).filter(Boolean))];
 
-    // Fetch captions for these posts
+    // Fetch captions for these posts - use post_id (TEXT) not id (UUID)
     const { data: posts, error: postsError } = await supabase
       .from('instagram_posts')
-      .select('id, caption')
-      .in('id', postIds);
+      .select('post_id, caption')
+      .in('post_id', postIds);
 
     if (postsError) {
       throw new Error(`Failed to fetch posts: ${postsError.message}`);
     }
 
-    const captionMap = new Map(posts?.map(p => [p.id, p.caption]) || []);
+    // Map by post_id (Instagram numeric ID as string)
+    const captionMap = new Map(posts?.map(p => [p.post_id, p.caption]) || []);
 
     // Process each ground truth record
     let updated = 0;
