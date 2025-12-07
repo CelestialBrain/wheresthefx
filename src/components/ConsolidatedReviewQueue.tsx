@@ -30,6 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PriceDisplay } from "./PriceDisplay";
 
 interface Post {
   id: string;
@@ -773,6 +774,14 @@ export function ConsolidatedReviewQueue() {
                               {post.is_duplicate && (
                                 <Badge variant="destructive" className="text-xs">Duplicate</Badge>
                               )}
+                              <PriceDisplay 
+                                isFree={post.is_free}
+                                price={post.price}
+                                priceMin={post.price_min}
+                                priceMax={post.price_max}
+                                priceNotes={post.price_notes}
+                                size="sm"
+                              />
                             </div>
                           </div>
 
