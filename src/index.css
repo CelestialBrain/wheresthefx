@@ -193,6 +193,16 @@ All colors MUST be HSL.
     display: none !important;
   }
 
+  /* Hide scrollbar for category filter and other horizontal scrolls */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari, Opera */
+  }
+
   /* ---- Leaflet fixes: remove tile "grid" lines & match sea gray ---- */
   .leaflet-container,
   .leaflet-pane,
