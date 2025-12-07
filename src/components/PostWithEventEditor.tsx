@@ -170,20 +170,23 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         if (existingDates && existingDates.length > 0) {
           // Convert database records to ScheduleDay format
           const grouped: Record<string, ScheduleDay> = {};
+          const primaryVenue = post.location_name;
           
           for (const record of existingDates) {
             const dateKey = record.event_date;
             if (!grouped[dateKey]) {
+              // Only set venue at day level if it differs from primary event venue
+              const isDifferentVenue = record.venue_name && record.venue_name !== primaryVenue;
               grouped[dateKey] = {
                 date: dateKey,
                 timeSlots: [],
-                venueName: record.venue_name || undefined,
-                venueAddress: record.venue_address || undefined,
+                venueName: isDifferentVenue ? record.venue_name : undefined,
+                venueAddress: isDifferentVenue ? record.venue_address : undefined,
               };
             }
             grouped[dateKey].timeSlots.push({
               time: record.event_time || '',
-              label: record.venue_name || '', // venue_name stores screening/label
+              label: '', // Label should be empty - venue_name is for venue, not screening label
             });
           }
           

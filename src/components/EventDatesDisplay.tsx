@@ -94,13 +94,32 @@ export function EventDatesDisplay({
   }
 
   // Multi-day event
-  const allDates = [
+  // Combine primary date with additional dates and deduplicate by date+time
+  const allDatesWithDuplicates = [
     { event_date: primaryDate!, event_time: primaryTime, venue_name: primaryVenue },
     ...additionalDates
   ].filter(d => d.event_date);
+  
+  // Deduplicate by date + time combination
+  const uniqueSlots = [...new Map(
+    allDatesWithDuplicates.map(slot => [`${slot.event_date}-${slot.event_time}`, slot])
+  ).values()];
+  
+  const allDates = uniqueSlots;
 
   const firstDate = allDates[0];
   const lastDate = allDates[allDates.length - 1];
+  
+  // Calculate actual day span (inclusive)
+  const calculateDaySpan = (startDate: string, endDate: string): number => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const diffInMs = end.getTime() - start.getTime();
+    return Math.floor(diffInMs / msPerDay) + 1; // +1 because both days are inclusive
+  };
+  
+  const daySpan = calculateDaySpan(firstDate.event_date, lastDate.event_date);
 
   return (
     <div className="space-y-2">
@@ -111,7 +130,7 @@ export function EventDatesDisplay({
           {formatDate(firstDate.event_date)} - {formatDate(lastDate.event_date)}
         </span>
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-          {allDates.length} days
+          {daySpan} {daySpan === 1 ? 'day' : 'days'}
         </span>
         <Button
           variant="ghost"
