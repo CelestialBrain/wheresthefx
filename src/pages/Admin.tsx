@@ -54,6 +54,7 @@ const Admin = () => {
   const [isBulkPublishing, setIsBulkPublishing] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [isAutoApproving, setIsAutoApproving] = useState(false);
+  const [isBackfillingGroundTruth, setIsBackfillingGroundTruth] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -405,6 +406,33 @@ const Admin = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const backfillGroundTruth = async () => {
+    try {
+      setIsBackfillingGroundTruth(true);
+      
+      const { data, error } = await supabase.functions.invoke("backfill-ground-truth", {
+        body: {},
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Ground Truth Backfill",
+        description: `Updated ${data.updated}/${data.processed} records. ${data.remaining > 0 ? `${data.remaining} remaining - run again!` : 'Complete!'}`,
+      });
+
+      console.log("Backfill ground truth result:", data);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to backfill ground truth",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBackfillingGroundTruth(false);
     }
   };
 

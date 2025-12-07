@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.generate-patterns-from-ai]
 verify_jwt = false
+
+[functions.backfill-ground-truth]
+verify_jwt = false

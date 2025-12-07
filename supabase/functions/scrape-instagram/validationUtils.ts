@@ -15,6 +15,7 @@ export interface ValidationResult {
     endTime: string | null;
     locationName: string | null;
     price: number | null;
+    isFree?: boolean | null;
   };
 }
 
@@ -240,24 +241,67 @@ export function validateExtractedData(data: {
     correctedCategory = 'other';
   }
 
-  // 9. is_free/price consistency check - IMPROVED LOGIC
-  if (data.isFree === false && (!data.price || data.price === 0)) {
-    // Not free but no price specified - set price to null (unknown) not 0
-    warnings.push('not_free_but_no_price');
-    corrected.price = null; // Explicitly null instead of 0 to indicate unknown
-  }
-  if (data.isFree === true && data.price && data.price > 0) {
-    warnings.push('free_but_has_price');
-    // Auto-correct: if there's a price, it's probably not free
-    corrected.price = data.price;
-    // Don't change isFree here - let the UI handle the conflict
-  }
-  // If isFree is null/undefined but price is 0, assume free
-  if (data.isFree === null || data.isFree === undefined) {
-    if (!data.price || data.price === 0) {
-      // Leave as-is, but this is ambiguous
-      warnings.push('free_status_unclear');
+  // 9. is_free/price consistency check - STRICT CAPTION-BASED LOGIC
+  const captionLower = (data.caption || '').toLowerCase();
+  
+  // Check for explicit FREE indicators in caption
+  const explicitFreeIndicators = [
+    /\bfree\s+(entry|entrance|admission)\b/i,
+    /\bno\s+cover(\s+charge)?\b/i,
+    /\blibre\b/i,
+    /\bwalang\s+bayad\b/i,
+    /\bfree\s*$/im, // "FREE" at end of line
+    /^free\b/im,    // "FREE" at start of line
+  ];
+  const hasExplicitFree = explicitFreeIndicators.some(p => p.test(data.caption || ''));
+  
+  // Check for price indicators in caption
+  const priceIndicators = [
+    /₱\s*\d+/,
+    /(?:PHP|Php|php)\s*\d+/,
+    /P\s*\d{2,}/,  // P followed by 2+ digits (avoid matching random P)
+    /\d+\s*pesos?\b/i,
+    /\bticket\s*[:=]?\s*₱?\s*\d+/i,
+    /\bpresale\b/i,
+    /\bdoor\s+(price|charge)\b/i,
+    /\bcover\s+charge\b/i,
+  ];
+  const hasPriceIndicator = priceIndicators.some(p => p.test(data.caption || ''));
+  
+  // Determine is_free based on caption content
+  let correctedIsFree = data.isFree;
+  
+  if (hasExplicitFree && !hasPriceIndicator) {
+    // Explicit FREE language with no price = definitely free
+    if (data.isFree !== true) {
+      warnings.push('auto_corrected_to_free');
+      correctedIsFree = true;
     }
+  } else if (hasPriceIndicator) {
+    // Has price indicators = NOT free
+    if (data.isFree === true) {
+      warnings.push('free_but_has_price_indicators');
+      correctedIsFree = false;
+    }
+  } else if (data.price && data.price > 0) {
+    // Has extracted price = NOT free
+    if (data.isFree === true) {
+      warnings.push('free_but_has_price');
+      correctedIsFree = false;
+    }
+  }
+  
+  // Track corrected is_free in result (will need to use this in caller)
+  (corrected as any).isFree = correctedIsFree;
+  
+  // Price/free consistency
+  if (correctedIsFree === false && (!data.price || data.price === 0)) {
+    warnings.push('not_free_but_no_price');
+    corrected.price = null;
+  }
+  if (correctedIsFree === true && data.price && data.price > 0) {
+    warnings.push('free_conflicts_with_price');
+    corrected.price = null; // Clear price for free events
   }
 
   // Determine if valid (severe warnings = not valid)
@@ -275,6 +319,7 @@ export function validateExtractedData(data: {
       endTime: corrected.endTime || null,
       locationName: corrected.locationName || null,
       price: corrected.price ?? null,
+      isFree: correctedIsFree,
     },
     correctedCategory,
   };

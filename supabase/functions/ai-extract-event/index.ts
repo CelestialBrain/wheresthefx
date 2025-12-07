@@ -309,12 +309,24 @@ Examples of NOT events:
 - "Coming soon to BGC!" → teaser, no date/venue
 - "Amazing night last Saturday!" → past event, EVENT_ENDED
 
-=== RECURRING EVENT DETECTION ===
-Weekly venue events should be marked recurring:
-- "Freaky Friday" at a bar/club → is_recurring: true, recurrence_pattern: "weekly:friday"
-- "Taco Tuesday", "Wine Wednesday" → weekly events
-- "First Saturday market" → recurrence_pattern: "monthly:first-saturday"
-- Look for day-of-week in event name as strong indicator
+=== RECURRING EVENT DETECTION (STRICT RULES) ===
+ONLY mark is_recurring: true if you see EXPLICIT recurring language:
+- "Every Friday" / "Every Saturday" → is_recurring: true, recurrence_pattern: "weekly:friday"
+- "Weekly" / "Every week" → is_recurring: true
+- "Monthly" / "Every month" / "First Saturday of every month" → is_recurring: true
+- "Taco Tuesday" / "Wine Wednesday" as venue's REGULAR event → is_recurring: true
+
+DO NOT mark as recurring:
+- Multi-day events: "Dec 6-7", "Friday & Saturday", "3-day festival" → is_recurring: FALSE
+- One-time weekend events: "This weekend", "Join us this Sat" → is_recurring: FALSE  
+- Events with specific dates that aren't part of a series → is_recurring: FALSE
+- Single event on a named day: "This Friday night party" → is_recurring: FALSE
+
+KEY DISTINCTION: 
+- "Freaky Friday at Club X" with NO date = recurring weekly event
+- "Freaky Friday Dec 6" with SPECIFIC date = one-time event (is_recurring: FALSE)
+- "Dec 6-7 weekend event" = multi-day ONE-TIME event (is_recurring: FALSE)
+
 For recurring events, eventDate = the NEXT occurrence from ${today}
 
 === CONFIDENCE SCORING (BE CONSERVATIVE) ===
@@ -326,6 +338,18 @@ For recurring events, eventDate = the NEXT occurrence from ${today}
 
 Example: date "05.12.2025" requiring DD.MM interpretation → max 75% confidence
 Example: time inferred from "club event" context → max 70% confidence
+
+=== is_free DETECTION (STRICT RULES) ===
+isFree: true ONLY if explicit free language found:
+- "FREE entry", "FREE admission", "No cover charge"
+- "LIBRE", "Walang bayad", "Free entrance"
+
+isFree: false if ANY price indicator found:
+- ₱/PHP/P followed by number
+- "ticket", "presale", "door price", "cover charge" with amount
+- Price tiers or ranges mentioned
+
+isFree: null if unclear (no explicit free language AND no price found)
 
 FILIPINO DATE/TIME WORDS:
 - Date: "bukas" = tomorrow, "mamaya" = later today, "ngayon" = today
