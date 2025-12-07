@@ -13,6 +13,8 @@ import { CATEGORY_LABELS, CATEGORY_COLORS } from "@/constants/categoryColors";
 import { EventStatusBadge, EventStatus } from "./EventStatusBadge";
 import { AvailabilityBadge, AvailabilityStatus } from "./AvailabilityBadge";
 import { PriceDisplay } from "./PriceDisplay";
+import { RecurringEventBadge } from "./RecurringEventBadge";
+import { EventDatesDisplay } from "./EventDatesDisplay";
 
 export interface InstagramPost {
   id: string;
@@ -47,6 +49,9 @@ export interface InstagramPost {
   price_min?: number | null;
   price_max?: number | null;
   price_notes?: string | null;
+  // Recurring event fields
+  is_recurring?: boolean | null;
+  recurrence_pattern?: string | null;
   instagram_accounts: {
     username: string;
     display_name: string | null;
@@ -255,10 +260,11 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
           </h3>
           
           {/* Status badges */}
-          {post.is_event && (post.event_status !== 'confirmed' || post.availability_status !== 'available') && (
+          {post.is_event && (post.event_status !== 'confirmed' || post.availability_status !== 'available' || post.is_recurring) && (
             <div className="flex flex-wrap gap-1 mt-1">
               <EventStatusBadge status={post.event_status as EventStatus} size="sm" />
               <AvailabilityBadge status={post.availability_status as AvailabilityStatus} />
+              <RecurringEventBadge isRecurring={post.is_recurring} pattern={post.recurrence_pattern} size="sm" />
             </div>
           )}
         </div>
@@ -266,16 +272,14 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
 
       {/* Bottom Section: Details (full width below image) */}
       <div className="space-y-1.5">
-        {/* Date & Time */}
-        {post.is_event && (post.event_date || post.event_time) && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Calendar className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">
-              {post.event_date && formatDate(post.event_date, post.event_end_date)}
-              {post.event_date && (post.event_time || post.end_time) && ' • '}
-              {post.event_time || post.end_time ? formatTime(post.event_time, post.end_time) : 'TBA'}
-            </span>
-          </div>
+        {/* Date & Time - use EventDatesDisplay for multi-day support */}
+        {post.is_event && post.event_date && (
+          <EventDatesDisplay
+            eventId={post.id}
+            primaryDate={post.event_date}
+            primaryTime={post.event_time}
+            primaryVenue={post.location_name}
+          />
         )}
 
         {/* Location + Distance */}
