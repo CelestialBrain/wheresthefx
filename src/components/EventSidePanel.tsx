@@ -111,20 +111,15 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                 };
 
                 return (
-                  <div key={event.id} className="relative">
-                    <InstagramPostCard post={postData} variant="popup" />
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="absolute top-2 right-2 h-7 w-7 p-0"
-                      onClick={() => {
-                        setReportingEventId(event.post_id);
-                        setReportDialogOpen(true);
-                      }}
-                    >
-                      <Flag className="h-3 w-3" />
-                    </Button>
-                  </div>
+                  <InstagramPostCard 
+                    key={event.id} 
+                    post={postData} 
+                    variant="popup"
+                    onReport={(postId) => {
+                      setReportingEventId(postId);
+                      setReportDialogOpen(true);
+                    }} 
+                  />
                 );
               })}
             </div>

@@ -5,16 +5,9 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -26,6 +19,8 @@ interface EventPopupProps {
 export function EventPopup({ events, onClose }: EventPopupProps) {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
+  const [reportType, setReportType] = useState<string>("outdated");
+  const [reportDescription, setReportDescription] = useState("");
   const { data: savedEventsData = [] } = useSavedEvents();
   
   const savedEventIds = new Set(
@@ -53,18 +48,19 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
       .insert({
         instagram_post_id: reportingPostId,
         reporter_user_id: user.id,
-        report_type: 'inappropriate',
-        description: 'Reported from map popup',
+        report_type: reportType,
+        description: reportDescription,
       });
 
     if (error) {
       toast.error("Failed to report event");
     } else {
-      toast.success("Event reported successfully");
+      toast.success("Report submitted. Thank you!");
     }
 
     setReportDialogOpen(false);
     setReportingPostId(null);
+    setReportDescription("");
   };
 
   return (
@@ -136,22 +132,43 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
         </ScrollArea>
       </Card>
 
-      <AlertDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Report Event</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to report this event? This action will notify moderators.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmReport} className="bg-red-500 hover:bg-red-600">
-              Report
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Report Dialog */}
+      <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Report Issue</DialogTitle>
+            <DialogDescription>
+              Help us improve by reporting issues with this event
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Select value={reportType} onValueChange={setReportType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="outdated">Event already happened</SelectItem>
+                <SelectItem value="wrong_location">Wrong location</SelectItem>
+                <SelectItem value="wrong_date">Wrong date/time</SelectItem>
+                <SelectItem value="spam">Spam/Not an event</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            <Textarea
+              placeholder="Additional details (optional)"
+              value={reportDescription}
+              onChange={(e) => setReportDescription(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmReport}>Submit Report</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
     </>
   );
