@@ -8,9 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Search, CheckCircle2, XCircle, AlertCircle, Eye, EyeOff, AlertTriangle } from "lucide-react";
+import { Search, CheckCircle2, XCircle, AlertCircle, Eye, EyeOff, AlertTriangle, Edit2, Save, X, Lightbulb, Database } from "lucide-react";
 import { PatternLearner } from "./PatternLearner";
+import { PatternCreationForm } from "./PatternCreationForm";
+import { PatternSuggestionsReview } from "./PatternSuggestionsReview";
+import { GroundTruthViewer } from "./GroundTruthViewer";
 
 interface PatternTestResult {
   patternId: string;
@@ -21,11 +25,19 @@ interface PatternTestResult {
   error: string | null;
 }
 
+interface EditingPattern {
+  id: string;
+  regex: string;
+  description: string;
+  priority: string;
+}
+
 export const PatternManager = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [testText, setTestText] = useState("");
   const [showAllPatterns, setShowAllPatterns] = useState(false);
+  const [editingPattern, setEditingPattern] = useState<EditingPattern | null>(null);
   const queryClient = useQueryClient();
 
   const { data: patterns, isLoading } = useQuery({
@@ -46,6 +58,30 @@ export const PatternManager = () => {
     },
   });
 
+  // Fetch counts for tabs
+  const { data: suggestionCount } = useQuery({
+    queryKey: ["pattern-suggestions-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("pattern_suggestions")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  const { data: groundTruthCount } = useQuery({
+    queryKey: ["ground-truth-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("extraction_ground_truth")
+        .select("*", { count: "exact", head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
   const togglePatternMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       const { data, error } = await supabase
@@ -56,15 +92,7 @@ export const PatternManager = () => {
         .single();
 
       if (error) throw error;
-      
-      if (!data) {
-        throw new Error("Failed to update pattern - no data returned");
-      }
-      
-      if (data.is_active === isActive) {
-        throw new Error("Pattern toggle failed - value unchanged");
-      }
-      
+      if (!data) throw new Error("Failed to update pattern");
       return data;
     },
     onSuccess: (data) => {
@@ -73,7 +101,36 @@ export const PatternManager = () => {
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to update pattern");
+    },
+  });
+
+  const updatePatternMutation = useMutation({
+    mutationFn: async (pattern: EditingPattern) => {
+      // Validate regex
+      try {
+        new RegExp(pattern.regex, "gi");
+      } catch (e) {
+        throw new Error(`Invalid regex: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      }
+
+      const { error } = await supabase
+        .from("extraction_patterns")
+        .update({
+          pattern_regex: pattern.regex,
+          pattern_description: pattern.description || null,
+          priority: parseInt(pattern.priority) || 100,
+        })
+        .eq("id", pattern.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["extraction-patterns"] });
+      toast.success("Pattern updated");
+      setEditingPattern(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
     },
   });
 
@@ -94,49 +151,26 @@ export const PatternManager = () => {
 
   const [testingType, setTestingType] = useState<string>("all");
 
-  const testPattern = (patternRegex: string, description: string | null): { matches: string[]; error: string | null } => {
-    console.log('---');
-    console.log('Pattern:', description);
-    console.log('Regex string:', patternRegex);
-    console.log('Regex length:', patternRegex.length);
-    // Log first 30 chars as character codes to detect hidden escaping issues
-    console.log('First 30 chars as codes:', patternRegex.slice(0, 30).split('').map(c => `${c}(${c.charCodeAt(0)})`).join(' '));
+  const testPattern = (patternRegex: string): { matches: string[]; error: string | null } => {
     try {
       const regex = new RegExp(patternRegex, "gi");
-      console.log('Regex object:', regex);
-      console.log('Test text preview:', testText.slice(0, 100));
       const matches = testText.match(regex);
-      console.log('Matches:', matches);
       return { matches: matches || [], error: null };
     } catch (error: any) {
-      console.error('Regex error:', error.message);
       return { matches: [], error: error.message || "Invalid regex" };
     }
   };
 
   const getTestResults = (): PatternTestResult[] => {
-    console.log('=== Pattern Testing ===');
-    console.log('Total patterns from query:', patterns?.length || 0);
-    console.log('Selected type filter:', selectedType);
-    console.log('Testing type filter:', testingType);
-    console.log('Test text length:', testText.length);
-    
-    if (!patterns || !testText.trim()) {
-      console.log('No patterns or empty test text');
-      return [];
-    }
+    if (!patterns || !testText.trim()) return [];
     
     const activePatterns = patterns.filter(p => p.is_active);
-    console.log('Active patterns:', activePatterns.length);
-    
-    // Filter by testing type (separate from selectedType which filters the Patterns tab)
     const patternsToTest = testingType === "all" 
       ? activePatterns 
       : activePatterns.filter(p => p.pattern_type === testingType);
-    console.log('Patterns to test after type filter:', patternsToTest.length);
     
     return patternsToTest.map(pattern => {
-      const { matches, error } = testPattern(pattern.pattern_regex, pattern.pattern_description);
+      const { matches, error } = testPattern(pattern.pattern_regex);
       return {
         patternId: pattern.id,
         patternType: pattern.pattern_type,
@@ -166,17 +200,15 @@ export const PatternManager = () => {
     return "text-orange-600";
   };
 
-  // Get pattern health color based on success/failure rate
   const getPatternHealthColor = (successCount: number, failureCount: number): string => {
     const total = successCount + failureCount;
-    if (total < 5) return ""; // Not enough data
+    if (total < 5) return "";
     const successRate = successCount / total;
     if (successRate >= 0.7) return "border-l-4 border-l-green-500";
     if (successRate >= 0.5) return "border-l-4 border-l-yellow-500";
     return "border-l-4 border-l-red-500";
   };
 
-  // Get success rate as percentage string
   const getSuccessRateDisplay = (successCount: number, failureCount: number): string | null => {
     const total = successCount + failureCount;
     if (total < 5) return null;
@@ -184,7 +216,6 @@ export const PatternManager = () => {
     return `${successRate.toFixed(0)}%`;
   };
 
-  // Get badge variant based on success rate percentage
   const getSuccessRateVariant = (successRate: number): "default" | "secondary" | "destructive" => {
     if (successRate >= 70) return "default";
     if (successRate >= 50) return "secondary";
@@ -201,6 +232,15 @@ export const PatternManager = () => {
     }
   };
 
+  const startEditing = (pattern: any) => {
+    setEditingPattern({
+      id: pattern.id,
+      regex: pattern.pattern_regex,
+      description: pattern.pattern_description || "",
+      priority: pattern.priority?.toString() || "100",
+    });
+  };
+
   if (isLoading) {
     return <div className="flex justify-center p-8">Loading patterns...</div>;
   }
@@ -208,13 +248,30 @@ export const PatternManager = () => {
   return (
     <div className="space-y-4 md:space-y-6">
       <Tabs defaultValue="patterns" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 gap-1">
+        <TabsList className="grid w-full grid-cols-5 gap-1">
           <TabsTrigger value="patterns" className="text-xs md:text-sm">Patterns</TabsTrigger>
+          <TabsTrigger value="suggestions" className="text-xs md:text-sm relative">
+            Suggestions
+            {suggestionCount && suggestionCount > 0 && (
+              <Badge className="ml-1 h-5 w-5 p-0 text-xs flex items-center justify-center bg-accent text-accent-foreground">
+                {suggestionCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="ground-truth" className="text-xs md:text-sm">
+            Ground Truth
+            {groundTruthCount && groundTruthCount > 0 && (
+              <span className="ml-1 text-xs text-muted-foreground">({groundTruthCount})</span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="learning" className="text-xs md:text-sm">Learning</TabsTrigger>
           <TabsTrigger value="testing" className="text-xs md:text-sm">Testing</TabsTrigger>
         </TabsList>
 
         <TabsContent value="patterns" className="space-y-3 md:space-y-4 mt-4 md:mt-6">
+          {/* Pattern Creation Form */}
+          <PatternCreationForm />
+
           <div className="flex flex-col md:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -240,100 +297,157 @@ export const PatternManager = () => {
 
           <div className="grid gap-3">
             {filteredPatterns?.map((pattern) => {
-              const regexCheck = checkRegexValidity(pattern.pattern_regex);
+              const isEditing = editingPattern?.id === pattern.id;
+              const regexToCheck = isEditing ? editingPattern.regex : pattern.pattern_regex;
+              const regexCheck = checkRegexValidity(regexToCheck);
               const healthColor = getPatternHealthColor(pattern.success_count || 0, pattern.failure_count || 0);
               const successRate = getSuccessRateDisplay(pattern.success_count || 0, pattern.failure_count || 0);
               
               return (
                 <Card key={pattern.id} className={`${!regexCheck.valid ? "border-destructive" : ""} ${healthColor}`}>
                   <CardContent className="p-4 md:p-6">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="text-xs">{pattern.pattern_type}</Badge>
-                          <Badge
-                            variant={pattern.source === "default" ? "secondary" : pattern.source === "ai_learned" ? "default" : "outline"}
-                            className="text-xs"
-                          >
-                            {pattern.source === "ai_learned" ? "🤖 AI" : pattern.source}
-                          </Badge>
-                          <span className={`text-xs md:text-sm font-semibold ${getConfidenceColor(Number(pattern.confidence_score))}`}>
-                            {(Number(pattern.confidence_score) * 100).toFixed(0)}% confidence
-                          </span>
-                          {successRate && (
-                            <Badge 
-                              variant={getSuccessRateVariant(Number(successRate.replace('%', '')))}
-                              className="text-xs"
+                    {isEditing ? (
+                      /* Edit Mode */
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline">{pattern.pattern_type}</Badge>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => updatePatternMutation.mutate(editingPattern)}
+                              disabled={!regexCheck.valid || updatePatternMutation.isPending}
                             >
-                              {successRate} success
-                            </Badge>
-                          )}
+                              <Save className="h-4 w-4 mr-1" />
+                              Save
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingPattern(null)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-xs">Regex Pattern</Label>
+                          <Input
+                            value={editingPattern.regex}
+                            onChange={(e) => setEditingPattern({ ...editingPattern, regex: e.target.value })}
+                            className={`font-mono text-sm ${!regexCheck.valid ? 'border-destructive' : ''}`}
+                          />
                           {!regexCheck.valid && (
-                            <Badge variant="destructive" className="text-xs">
-                              <AlertTriangle className="h-3 w-3 mr-1" />
-                              Invalid Regex
-                            </Badge>
+                            <p className="text-xs text-destructive mt-1">{regexCheck.error}</p>
                           )}
                         </div>
-                        
-                        <code className="block p-2 bg-muted rounded text-xs md:text-sm break-all">
-                          {pattern.pattern_regex}
-                        </code>
-                        
-                        {!regexCheck.valid && (
-                          <p className="text-xs text-destructive">
-                            Error: {regexCheck.error}
-                          </p>
-                        )}
-                        
-                        {pattern.pattern_description && (
-                          <p className="text-xs md:text-sm text-muted-foreground">
-                            {pattern.pattern_description}
-                          </p>
-                        )}
-                        
-                        <div className="flex flex-wrap gap-2 md:gap-4 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3 text-green-600" />
-                            {pattern.success_count} successes
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <XCircle className="h-3 w-3 text-red-600" />
-                            {pattern.failure_count} failures
-                          </span>
-                          {pattern.priority && (
-                            <span>Priority: {pattern.priority}</span>
-                          )}
-                          {pattern.last_used_at && (
-                            <span>
-                              Last used: {new Date(pattern.last_used_at).toLocaleDateString()}
-                            </span>
-                          )}
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-xs">Description</Label>
+                            <Input
+                              value={editingPattern.description}
+                              onChange={(e) => setEditingPattern({ ...editingPattern, description: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Priority</Label>
+                            <Input
+                              type="number"
+                              value={editingPattern.priority}
+                              onChange={(e) => setEditingPattern({ ...editingPattern, priority: e.target.value })}
+                            />
+                          </div>
                         </div>
                       </div>
+                    ) : (
+                      /* View Mode */
+                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="outline" className="text-xs">{pattern.pattern_type}</Badge>
+                            <Badge
+                              variant={pattern.source === "default" ? "secondary" : pattern.source === "ai_learned" ? "default" : "outline"}
+                              className="text-xs"
+                            >
+                              {pattern.source === "ai_learned" ? "🤖 AI" : pattern.source === "manual" ? "✏️ Manual" : pattern.source}
+                            </Badge>
+                            <span className={`text-xs md:text-sm font-semibold ${getConfidenceColor(Number(pattern.confidence_score))}`}>
+                              {(Number(pattern.confidence_score) * 100).toFixed(0)}% confidence
+                            </span>
+                            {successRate && (
+                              <Badge 
+                                variant={getSuccessRateVariant(Number(successRate.replace('%', '')))}
+                                className="text-xs"
+                              >
+                                {successRate} success
+                              </Badge>
+                            )}
+                            {!regexCheck.valid && (
+                              <Badge variant="destructive" className="text-xs">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Invalid Regex
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          <code className="block p-2 bg-muted rounded text-xs md:text-sm break-all">
+                            {pattern.pattern_regex}
+                          </code>
+                          
+                          {!regexCheck.valid && (
+                            <p className="text-xs text-destructive">Error: {regexCheck.error}</p>
+                          )}
+                          
+                          {pattern.pattern_description && (
+                            <p className="text-xs md:text-sm text-muted-foreground">
+                              {pattern.pattern_description}
+                            </p>
+                          )}
+                          
+                          <div className="flex flex-wrap gap-2 md:gap-4 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-green-600" />
+                              {pattern.success_count} successes
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <XCircle className="h-3 w-3 text-red-600" />
+                              {pattern.failure_count} failures
+                            </span>
+                            {pattern.priority && (
+                              <span>Priority: {pattern.priority}</span>
+                            )}
+                          </div>
+                        </div>
 
-                      <div className="flex items-center gap-2 md:flex-col md:items-end">
-                        <Switch
-                          checked={pattern.is_active}
-                          onCheckedChange={() =>
-                            togglePatternMutation.mutate({
-                              id: pattern.id,
-                              isActive: pattern.is_active,
-                            })
-                          }
-                        />
-                        {(pattern.source === "learned" || pattern.source === "ai_learned") && (
+                        <div className="flex items-center gap-2 md:flex-col md:items-end">
+                          <Switch
+                            checked={pattern.is_active}
+                            onCheckedChange={() =>
+                              togglePatternMutation.mutate({
+                                id: pattern.id,
+                                isActive: pattern.is_active,
+                              })
+                            }
+                          />
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => deletePatternMutation.mutate(pattern.id)}
-                            className="text-xs text-destructive hover:text-destructive"
+                            onClick={() => startEditing(pattern)}
+                            className="text-xs"
                           >
-                            Delete
+                            <Edit2 className="h-3 w-3 mr-1" />
+                            Edit
                           </Button>
-                        )}
+                          {(pattern.source === "learned" || pattern.source === "ai_learned" || pattern.source === "manual") && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deletePatternMutation.mutate(pattern.id)}
+                              className="text-xs text-destructive hover:text-destructive"
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -347,6 +461,40 @@ export const PatternManager = () => {
           </div>
         </TabsContent>
 
+        <TabsContent value="suggestions" className="mt-4 md:mt-6">
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                <Lightbulb className="h-5 w-5" />
+                Pattern Suggestions
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Review and approve AI-generated pattern suggestions
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 md:p-6 pt-0">
+              <PatternSuggestionsReview />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ground-truth" className="mt-4 md:mt-6">
+          <Card>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-base md:text-lg flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Ground Truth Data
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Verified extraction values used for pattern training
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 md:p-6 pt-0">
+              <GroundTruthViewer />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="learning">
           <PatternLearner />
         </TabsContent>
@@ -356,7 +504,7 @@ export const PatternManager = () => {
             <CardHeader className="p-4 md:p-6">
               <CardTitle className="text-base md:text-lg">Pattern Testing</CardTitle>
               <CardDescription className="text-xs md:text-sm">
-                Test your extraction patterns against sample text (e.g., paste an event caption)
+                Test your extraction patterns against sample text
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 md:p-6 pt-0 space-y-4">
@@ -503,7 +651,6 @@ export const PatternManager = () => {
                     <div className="text-center py-4 text-muted-foreground">
                       <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No patterns matched the test text</p>
-                      <p className="text-xs mt-1">Try pasting a different event caption or check your patterns</p>
                     </div>
                   )}
                 </div>
@@ -513,9 +660,6 @@ export const PatternManager = () => {
                 <div className="text-center py-8 text-muted-foreground">
                   <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">Enter some text above to test patterns</p>
-                  <p className="text-xs mt-1">
-                    Tip: Copy an event caption from Instagram to see which patterns match
-                  </p>
                 </div>
               )}
             </CardContent>
