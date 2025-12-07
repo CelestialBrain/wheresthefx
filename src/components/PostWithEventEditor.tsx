@@ -198,15 +198,27 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         // Fallback: auto-detect from AI extraction if no DB records
         if (post.event_end_date && post.event_date && post.event_end_date !== post.event_date) {
           setIsMultiDay(true);
-          const initialSchedule: ScheduleDay[] = [
-            { date: post.event_date, timeSlots: [{ time: post.event_time || "", label: "" }] },
-          ];
-          if (post.event_end_date !== post.event_date) {
-            initialSchedule.push({ 
-              date: post.event_end_date, 
-              timeSlots: [{ time: post.end_time || post.event_time || "", label: "" }] 
-            });
-          }
+          
+          // Generate ALL dates between start and end (inclusive)
+          const { generateDateRange } = await import('@/utils/dateUtils');
+          const allDates = generateDateRange(post.event_date, post.event_end_date);
+          
+          const initialSchedule: ScheduleDay[] = allDates.map((dateStr, index) => {
+            const isFirstDay = index === 0;
+            const isLastDay = index === allDates.length - 1;
+            
+            // First day uses event_time, last day uses end_time (or event_time), middle days use event_time
+            let time = post.event_time || "";
+            if (isLastDay && post.end_time) {
+              time = post.end_time;
+            }
+            
+            return {
+              date: dateStr,
+              timeSlots: [{ time, label: "" }]
+            };
+          });
+          
           setScheduleData(initialSchedule);
         }
       } finally {
