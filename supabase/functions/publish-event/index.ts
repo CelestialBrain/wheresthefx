@@ -153,6 +153,51 @@ serve(async (req) => {
       // Don't throw - the event was published successfully
     }
 
+    // Copy event_dates from instagram_posts to published_events
+    console.log('Copying event_dates to published event');
+    const { data: sourceDates, error: fetchDatesError } = await supabase
+      .from('event_dates')
+      .select('*')
+      .eq('instagram_post_id', postId);
+
+    if (fetchDatesError) {
+      console.error('Error fetching source event_dates:', fetchDatesError);
+    } else if (sourceDates && sourceDates.length > 0) {
+      console.log(`Found ${sourceDates.length} event_dates to copy`);
+      
+      // Delete any existing dates for this published event
+      const { error: deleteDatesError } = await supabase
+        .from('event_dates')
+        .delete()
+        .eq('published_event_id', eventId);
+
+      if (deleteDatesError) {
+        console.error('Error deleting existing published event_dates:', deleteDatesError);
+      }
+
+      // Insert copied dates with published_event_id
+      const publishedDates = sourceDates.map(d => ({
+        event_date: d.event_date,
+        event_time: d.event_time,
+        venue_name: d.venue_name,
+        venue_address: d.venue_address,
+        published_event_id: eventId,
+        instagram_post_id: null, // Clear old reference for published copies
+      }));
+      
+      const { error: insertDatesError } = await supabase
+        .from('event_dates')
+        .insert(publishedDates);
+
+      if (insertDatesError) {
+        console.error('Error inserting published event_dates:', insertDatesError);
+      } else {
+        console.log(`Copied ${publishedDates.length} event_dates to published event`);
+      }
+    } else {
+      console.log('No event_dates found for this post');
+    }
+
     console.log(`Event ${action} successfully:`, eventId);
 
     return new Response(

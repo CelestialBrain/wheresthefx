@@ -101,7 +101,8 @@ export type Database = {
           event_date: string
           event_time: string | null
           id: string
-          instagram_post_id: string
+          instagram_post_id: string | null
+          published_event_id: string | null
           venue_address: string | null
           venue_name: string | null
         }
@@ -110,7 +111,8 @@ export type Database = {
           event_date: string
           event_time?: string | null
           id?: string
-          instagram_post_id: string
+          instagram_post_id?: string | null
+          published_event_id?: string | null
           venue_address?: string | null
           venue_name?: string | null
         }
@@ -119,7 +121,8 @@ export type Database = {
           event_date?: string
           event_time?: string | null
           id?: string
-          instagram_post_id?: string
+          instagram_post_id?: string | null
+          published_event_id?: string | null
           venue_address?: string | null
           venue_name?: string | null
         }
@@ -129,6 +132,13 @@ export type Database = {
             columns: ["instagram_post_id"]
             isOneToOne: false
             referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_dates_published_event_id_fkey"
+            columns: ["published_event_id"]
+            isOneToOne: false
+            referencedRelation: "published_events"
             referencedColumns: ["id"]
           },
         ]

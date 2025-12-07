@@ -5,7 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface EventDate {
   id: string;
-  instagram_post_id: string;
+  instagram_post_id: string | null;
+  published_event_id: string | null;
   event_date: string;
   event_time: string | null;
   venue_name: string | null;
@@ -18,13 +19,15 @@ interface EventDatesDisplayProps {
   primaryDate: string | null;
   primaryTime: string | null;
   primaryVenue: string | null;
+  isPublishedEvent?: boolean; // True if eventId is a published_event_id
 }
 
 export function EventDatesDisplay({ 
   eventId, 
   primaryDate, 
   primaryTime,
-  primaryVenue 
+  primaryVenue,
+  isPublishedEvent = false
 }: EventDatesDisplayProps) {
   const [additionalDates, setAdditionalDates] = useState<EventDate[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -32,10 +35,13 @@ export function EventDatesDisplay({
 
   useEffect(() => {
     async function fetchEventDates() {
+      // Query by the appropriate column based on event type
+      const columnName = isPublishedEvent ? 'published_event_id' : 'instagram_post_id';
+      
       const { data, error } = await supabase
         .from('event_dates')
         .select('*')
-        .eq('instagram_post_id', eventId)
+        .eq(columnName, eventId)
         .order('event_date', { ascending: true });
 
       if (error) {
@@ -47,7 +53,7 @@ export function EventDatesDisplay({
     }
 
     fetchEventDates();
-  }, [eventId]);
+  }, [eventId, isPublishedEvent]);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
