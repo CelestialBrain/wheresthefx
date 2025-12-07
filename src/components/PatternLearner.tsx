@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Brain, Loader2, TrendingUp, Info, HelpCircle, Sparkles, Ban, Database } from "lucide-react";
+import { Brain, Loader2, TrendingUp, Info, HelpCircle, Sparkles, Ban, Database, RotateCcw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
@@ -13,6 +13,7 @@ export const PatternLearner = () => {
   const [isLearning, setIsLearning] = useState(false);
   const [isGeneratingFromAI, setIsGeneratingFromAI] = useState(false);
   const [isDisablingFailing, setIsDisablingFailing] = useState(false);
+  const [isRetryingFailed, setIsRetryingFailed] = useState(false);
   const [progress, setProgress] = useState(0);
   const queryClient = useQueryClient();
 
@@ -83,6 +84,12 @@ export const PatternLearner = () => {
         .select("*", { count: "exact", head: true })
         .eq("status", "pending");
 
+      // Get failed suggestions count (for retry button)
+      const { count: failedSuggestions } = await supabase
+        .from("pattern_suggestions")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "generation_failed");
+
       // Get ground truth count
       const { count: groundTruthCount } = await supabase
         .from("extraction_ground_truth")
@@ -97,6 +104,7 @@ export const PatternLearner = () => {
         lastCorrectionAt,
         fieldCounts,
         pendingSuggestions: pendingSuggestions || 0,
+        failedSuggestions: failedSuggestions || 0,
         groundTruthCount: groundTruthCount || 0,
         failingPatterns,
       };
@@ -181,6 +189,36 @@ export const PatternLearner = () => {
     onError: (error: Error) => {
       toast.error(`Failed to disable patterns: ${error.message}`);
       setIsDisablingFailing(false);
+    },
+  });
+
+  // Mutation for retrying failed suggestions
+  const retryFailedMutation = useMutation({
+    mutationFn: async () => {
+      setIsRetryingFailed(true);
+      
+      // Reset all failed suggestions to pending with attempt_count = 0
+      const { data, error } = await supabase
+        .from("pattern_suggestions")
+        .update({ status: "pending", attempt_count: 0 })
+        .eq("status", "generation_failed")
+        .select("id");
+
+      if (error) throw error;
+      return { reset: data?.length || 0 };
+    },
+    onSuccess: (data) => {
+      if (data.reset > 0) {
+        toast.success(`Reset ${data.reset} failed suggestions for retry`);
+      } else {
+        toast.info("No failed suggestions to reset");
+      }
+      queryClient.invalidateQueries({ queryKey: ["learning-stats"] });
+      setIsRetryingFailed(false);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to reset suggestions: ${error.message}`);
+      setIsRetryingFailed(false);
     },
   });
 
@@ -342,6 +380,9 @@ export const PatternLearner = () => {
             <p className="text-xs text-muted-foreground">
               Generate regex patterns automatically using AI from {learningStats?.groundTruthCount || 0} ground truth records 
               and {learningStats?.pendingSuggestions || 0} pending suggestions.
+              {(learningStats?.failedSuggestions || 0) > 0 && (
+                <span className="text-destructive"> ({learningStats?.failedSuggestions} failed)</span>
+              )}
             </p>
             <Alert>
               <Info className="h-4 w-4" />
@@ -350,24 +391,43 @@ export const PatternLearner = () => {
                 These are handled by AI extraction + known_venues database instead. Date/time patterns may fail if existing patterns already cover the format.
               </AlertDescription>
             </Alert>
-            <Button
-              onClick={() => generateFromAIMutation.mutate()}
-              disabled={isGeneratingFromAI || ((learningStats?.groundTruthCount || 0) + (learningStats?.pendingSuggestions || 0) < 3)}
-              className="w-full"
-              variant="secondary"
-            >
-              {isGeneratingFromAI ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating Patterns with AI...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  🤖 Generate Patterns from AI
-                </>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => generateFromAIMutation.mutate()}
+                disabled={isGeneratingFromAI || ((learningStats?.groundTruthCount || 0) + (learningStats?.pendingSuggestions || 0) < 3)}
+                className="flex-1"
+                variant="secondary"
+              >
+                {isGeneratingFromAI ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    🤖 Generate Patterns
+                  </>
+                )}
+              </Button>
+              {(learningStats?.failedSuggestions || 0) > 0 && (
+                <Button
+                  onClick={() => retryFailedMutation.mutate()}
+                  disabled={isRetryingFailed}
+                  variant="outline"
+                  title={`Reset ${learningStats?.failedSuggestions} failed suggestions for retry`}
+                >
+                  {isRetryingFailed ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <RotateCcw className="mr-1 h-4 w-4" />
+                      Retry Failed
+                    </>
+                  )}
+                </Button>
               )}
-            </Button>
+            </div>
           </div>
 
           <Separator />

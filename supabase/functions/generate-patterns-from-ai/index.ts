@@ -75,7 +75,54 @@ Text: "${s.sample_text}"
 Correct value: "${s.expected_value}"
 `).join('\n');
 
-  return `You are an expert at creating regex patterns for extracting specific data from Instagram event captions.
+  // Pattern-specific guidance for simpler, more permissive regex
+  const patternGuidance: Record<string, string> = {
+    date: `For DATES:
+- Keep patterns SIMPLE and PERMISSIVE
+- Match formats: "Dec 7", "December 7", "12/7", "7 Dec", "Dec. 7", "12-07-2025"
+- Filipino months: "Enero", "Pebrero", "Marso", "Abril", "Mayo", "Hunyo", "Hulyo", "Agosto", "Setyembre", "Oktubre", "Nobyembre", "Disyembre"
+- GOOD patterns: (\\d{1,2})[/.-](\\d{1,2}), (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\.?\\s*(\\d{1,2})
+- AVOID: overly complex lookaheads, word boundaries that fail on emojis`,
+
+    time: `For TIMES:
+- Keep patterns SIMPLE - must have colon OR am/pm indicator
+- Match: "7pm", "7:00 PM", "7:00pm", "19:00", "alas-7", "7 ng gabi"
+- Filipino: "alas-(\\d+)", "(\\d+)\\s*ng\\s*(umaga|gabi|hapon)"
+- GOOD: (\\d{1,2}):(\\d{2})\\s*(am|pm)?, (\\d{1,2})\\s*(am|pm)
+- CRITICAL: DO NOT match prices (₱500, P350) or years (2025) - require colon or am/pm`,
+
+    price: `For PRICES:
+- Keep patterns SIMPLE for peso amounts
+- Match: "₱500", "PHP 500", "P500", "Php 500", "500 pesos", "$50"
+- Handle ranges: "₱500-₱800", "P500-800"
+- GOOD: (?:₱|PHP|Php|P)\\s*(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?)
+- AVOID: negative lookbehinds that break on emoji boundaries`,
+
+    signup_url: `For SIGNUP URLs:
+- Match http/https URLs and common shortened links
+- Match: "https://...", "bit.ly/...", "tinyurl.com/..."
+- GOOD: (https?://[^\\s<>"{}|\\\\^\\[\\]]+)
+- Keep it simple - just capture the URL`,
+
+    free: `For FREE indicators:
+- Match: "FREE", "Free entry", "No cover", "Libre", "Walang bayad"
+- GOOD: \\b(free|libre|no cover|walang bayad)\\b
+- Case insensitive matching`,
+  };
+
+  const guidance = patternGuidance[patternType] || `For ${patternType}: Create a simple pattern that captures the target value`;
+
+  return `You are an expert at creating SIMPLE, PERMISSIVE regex patterns for extracting data from Instagram event captions.
+
+CRITICAL RULES:
+1. SIMPLER IS BETTER - complex patterns fail more often
+2. Use GROUP 1 for capture (first parentheses)
+3. AVOID word boundaries (\\b) near emojis - they fail
+4. AVOID complex lookaheads/lookbehinds
+5. Use character classes [...] instead of complex alternations
+6. Test mentally: will this work on messy social media text?
+
+${guidance}
 
 Given these examples of ${patternType} extraction:
 
@@ -84,24 +131,16 @@ ${sampleText}
 Generate a regex pattern that would correctly extract these values.
 
 REQUIREMENTS:
-1. The regex must capture the target value in GROUP 1 (first capture group)
-2. Use JavaScript/ECMAScript regex syntax
-3. Be specific enough to avoid false positives
-4. Handle variations in formatting (spaces, punctuation)
-5. Work with Filipino/English mixed text
-6. Escape special regex characters properly
+1. Capture target value in GROUP 1
+2. JavaScript/ECMAScript syntax
+3. PERMISSIVE enough to handle formatting variations
+4. Works with Filipino/English/emoji mixed text
+5. No control characters, no double-escaping
 
-Pattern type guidance:
-- For dates: Match formats like "Dec 7", "December 7", "12/7", "7 December", etc.
-- For times: Match formats like "7pm", "7:00 PM", "19:00", "7-9pm", etc.
-- For prices: Match peso formats (₱500, PHP 500, P500, Php500) and dollar formats
-- For URLs: Match http/https patterns and shortened links
-- For venues: Look for patterns like "at [Venue]", "📍 [Venue]", "@venue"
-
-Return JSON only, no markdown code blocks:
+Return JSON only (no markdown):
 {
-  "regex": "your regex pattern here",
-  "description": "human readable description",
+  "regex": "your simple regex pattern",
+  "description": "what this pattern matches",
   "confidence": 0.X
 }`;
 }
