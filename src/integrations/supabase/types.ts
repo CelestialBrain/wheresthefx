@@ -498,6 +498,7 @@ export type Database = {
           field_name: string
           ground_truth_value: string
           id: string
+          original_text: string | null
           post_id: string | null
           source: string | null
         }
@@ -507,6 +508,7 @@ export type Database = {
           field_name: string
           ground_truth_value: string
           id?: string
+          original_text?: string | null
           post_id?: string | null
           source?: string | null
         }
@@ -516,6 +518,7 @@ export type Database = {
           field_name?: string
           ground_truth_value?: string
           id?: string
+          original_text?: string | null
           post_id?: string | null
           source?: string | null
         }

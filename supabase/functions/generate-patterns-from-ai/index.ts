@@ -33,6 +33,7 @@ interface GroundTruthRecord {
   post_id: string;
   field_name: string;
   ground_truth_value: string;
+  original_text: string | null;  // The raw text from caption (e.g., "Dec 6" instead of "2025-12-06")
   source: string;
   created_at: string;
 }
@@ -534,7 +535,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ========== FETCH ALL GROUND TRUTH (NO LIMIT) ==========
+    // ========== FETCH ALL GROUND TRUTH WITH ORIGINAL_TEXT (NO LIMIT) ==========
     if (useGroundTruth) {
       const { data: groundTruth, error: groundTruthError } = await supabase
         .from('extraction_ground_truth')
@@ -547,57 +548,78 @@ Deno.serve(async (req) => {
       } else if (groundTruth) {
         console.log(`[GeneratePatterns] Fetched ALL ${groundTruth.length} ground truth records`);
 
-        const postIds = [...new Set((groundTruth as GroundTruthRecord[]).map(gt => gt.post_id))];
-        
-        // Fetch captions in batches of 200
-        const captionMap = new Map<string, string>();
-        for (let i = 0; i < postIds.length; i += 200) {
-          const batch = postIds.slice(i, i + 200);
-          const { data: posts } = await supabase
-            .from('instagram_posts')
-            .select('post_id, caption')
-            .in('post_id', batch);
+        // Count records WITH original_text (the ones useful for pattern generation)
+        const withOriginalText = (groundTruth as GroundTruthRecord[]).filter(gt => gt.original_text);
+        console.log(`[GeneratePatterns] ${withOriginalText.length} records have original_text (${Math.round(withOriginalText.length / groundTruth.length * 100)}%)`);
 
-          if (posts) {
-            for (const post of posts) {
-              if (post.caption && post.post_id) {
-                captionMap.set(post.post_id, post.caption);
+        // Only fetch captions for records WITHOUT original_text (legacy fallback)
+        const recordsWithoutOriginal = (groundTruth as GroundTruthRecord[]).filter(gt => !gt.original_text);
+        const postIds = [...new Set(recordsWithoutOriginal.map(gt => gt.post_id))];
+        
+        const captionMap = new Map<string, string>();
+        if (postIds.length > 0) {
+          console.log(`[GeneratePatterns] Fetching captions for ${postIds.length} posts without original_text`);
+          for (let i = 0; i < postIds.length; i += 200) {
+            const batch = postIds.slice(i, i + 200);
+            const { data: posts } = await supabase
+              .from('instagram_posts')
+              .select('post_id, caption')
+              .in('post_id', batch);
+
+            if (posts) {
+              for (const post of posts) {
+                if (post.caption && post.post_id) {
+                  captionMap.set(post.post_id, post.caption);
+                }
               }
             }
           }
         }
-        
-        console.log(`[GeneratePatterns] Fetched captions for ${captionMap.size} posts`);
 
         for (const gt of groundTruth as GroundTruthRecord[]) {
-          const caption = captionMap.get(gt.post_id);
-          if (!caption || !gt.ground_truth_value) continue;
+          if (!gt.ground_truth_value) continue;
 
           const patternType = fieldNameToPatternType(gt.field_name);
           if (!samplesByType.has(patternType)) {
             samplesByType.set(patternType, []);
           }
 
-          // Extract snippet around value
-          const normalizedCaption = caption.toLowerCase();
-          const normalizedValue = gt.ground_truth_value.toLowerCase();
-          const idx = normalizedCaption.indexOf(normalizedValue);
+          // PREFER original_text (the raw caption text like "Dec 6")
+          // This is what we want to generate patterns for!
+          let sampleText: string;
+          let expectedValue: string;
           
-          let snippet = caption;
-          if (idx !== -1) {
-            const start = Math.max(0, idx - 100);
-            const end = Math.min(caption.length, idx + gt.ground_truth_value.length + 100);
-            snippet = caption.substring(start, end);
+          if (gt.original_text) {
+            // Use original_text as BOTH sample and expected value
+            // The pattern should match this exact text!
+            sampleText = gt.original_text;
+            expectedValue = gt.original_text;  // Use original for matching, not normalized
           } else {
-            snippet = caption.substring(0, 300);
+            // Fallback for legacy records without original_text
+            const caption = captionMap.get(gt.post_id);
+            if (!caption) continue;
+            
+            const normalizedCaption = caption.toLowerCase();
+            const normalizedValue = gt.ground_truth_value.toLowerCase();
+            const idx = normalizedCaption.indexOf(normalizedValue);
+            
+            if (idx !== -1) {
+              const start = Math.max(0, idx - 100);
+              const end = Math.min(caption.length, idx + gt.ground_truth_value.length + 100);
+              sampleText = caption.substring(start, end);
+            } else {
+              sampleText = caption.substring(0, 300);
+            }
+            expectedValue = gt.ground_truth_value;
           }
 
           const sample: Sample = {
             id: gt.id,
-            sample_text: snippet,
-            expected_value: gt.ground_truth_value,
+            sample_text: sampleText,
+            expected_value: expectedValue,
             source: 'ground_truth',
-            detectedFormat: detectFormat(patternType, gt.ground_truth_value),
+            // Detect format from original_text (raw) not normalized value
+            detectedFormat: detectFormat(patternType, gt.original_text || gt.ground_truth_value),
           };
 
           samplesByType.get(patternType)?.push(sample);
