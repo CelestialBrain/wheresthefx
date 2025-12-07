@@ -1,13 +1,14 @@
 /**
- * Generate Patterns from AI Edge Function
+ * Generate Patterns from AI Edge Function - ENHANCED VERSION
  * 
  * This function:
- * 1. Fetches pending pattern_suggestions OR high-confidence ground truth
- * 2. Groups samples by pattern_type (venue, date, time, price, signup_url)
- * 3. Calls Gemini AI to generate regex patterns from examples
- * 4. Validates generated regex against sample texts
- * 5. If success rate >= 70%, adds to extraction_patterns with is_active=true
- * 6. Marks suggestions as processed
+ * 1. Fetches ALL pending pattern_suggestions AND high-confidence ground truth (no limits)
+ * 2. Groups samples by pattern_type (date, time, price, signup_url, free)
+ * 3. CLUSTERS samples by detected format (e.g., "Dec 7" vs "12/7" for dates)
+ * 4. Generates MULTIPLE regex patterns per type (one per format cluster)
+ * 5. Validates generated regex against cluster samples
+ * 6. If success rate >= 60%, adds to extraction_patterns with is_active=true
+ * 7. Includes rate limit handling for Gemini API
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.76.1';
@@ -41,11 +42,149 @@ interface Sample {
   sample_text: string;
   expected_value: string;
   source: 'suggestion' | 'ground_truth';
+  detectedFormat?: string;
 }
 
-/**
- * Map field names to pattern types
- */
+interface ClusterResult {
+  patternType: string;
+  cluster: string;
+  samplesInCluster: number;
+  samplesUsed: number;
+  generatedRegex: string | null;
+  validationResult: {
+    testedAgainst: number;
+    matched: number;
+    successRate: number;
+  } | null;
+  status: 'created' | 'validation_failed' | 'generation_failed' | 'invalid_regex' | 'duplicate' | 'skipped';
+  reason?: string;
+}
+
+// ============================================================
+// FORMAT DETECTION - Cluster samples by detected format
+// ============================================================
+
+function detectDateFormat(value: string): string {
+  const v = value.toLowerCase().trim();
+  
+  // Filipino months
+  if (/^(enero|pebrero|marso|abril|mayo|hunyo|hulyo|agosto|setyembre|oktubre|nobyembre|disyembre)/i.test(v)) {
+    return 'filipino_month';
+  }
+  
+  // Month abbreviation first: "Dec 7", "Dec. 7", "December 7"
+  if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(v)) {
+    return 'month_first';
+  }
+  
+  // Day first with month: "7 Dec", "7th December"
+  if (/^\d{1,2}(st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(v)) {
+    return 'day_first';
+  }
+  
+  // Numeric with slash: "12/7", "12/07/2025"
+  if (/^\d{1,2}\/\d{1,2}/.test(v)) {
+    return 'numeric_slash';
+  }
+  
+  // Numeric with dash: "12-7", "2025-12-07"
+  if (/^\d{1,2}-\d{1,2}/.test(v) || /^\d{4}-\d{1,2}-\d{1,2}/.test(v)) {
+    return 'numeric_dash';
+  }
+  
+  // Numeric with dot: "12.07", "07.12.2025"
+  if (/^\d{1,2}\.\d{1,2}/.test(v)) {
+    return 'numeric_dot';
+  }
+  
+  return 'other_date';
+}
+
+function detectTimeFormat(value: string): string {
+  const v = value.toLowerCase().trim();
+  
+  // Filipino time: "alas-7", "7 ng gabi"
+  if (/alas/i.test(v) || /ng\s*(umaga|gabi|hapon)/i.test(v)) {
+    return 'filipino_time';
+  }
+  
+  // 12-hour with AM/PM: "7pm", "7:00 PM", "7:00pm"
+  if (/\d{1,2}(:\d{2})?\s*(am|pm)/i.test(v)) {
+    return '12h_ampm';
+  }
+  
+  // 24-hour: "19:00", "07:30"
+  if (/^([01]?\d|2[0-3]):[0-5]\d$/.test(v)) {
+    return '24h';
+  }
+  
+  // Just colon format without AM/PM: "7:00"
+  if (/^\d{1,2}:\d{2}/.test(v)) {
+    return 'colon_format';
+  }
+  
+  return 'other_time';
+}
+
+function detectPriceFormat(value: string): string {
+  const v = value.trim();
+  
+  // Peso sign: "₱500"
+  if (/^₱/.test(v)) {
+    return 'peso_sign';
+  }
+  
+  // PHP prefix: "PHP 500", "Php500"
+  if (/^php/i.test(v)) {
+    return 'php_prefix';
+  }
+  
+  // P prefix: "P500"
+  if (/^P\d/.test(v)) {
+    return 'p_prefix';
+  }
+  
+  // Word "pesos": "500 pesos"
+  if (/pesos?/i.test(v)) {
+    return 'peso_word';
+  }
+  
+  // Dollar: "$50"
+  if (/^\$/.test(v)) {
+    return 'dollar';
+  }
+  
+  // Range format: "500-800"
+  if (/^\d+-\d+/.test(v)) {
+    return 'range';
+  }
+  
+  return 'other_price';
+}
+
+function detectFormat(patternType: string, value: string): string {
+  switch (patternType) {
+    case 'date':
+      return detectDateFormat(value);
+    case 'time':
+      return detectTimeFormat(value);
+    case 'price':
+      return detectPriceFormat(value);
+    case 'signup_url':
+      if (/^https?:\/\//i.test(value)) return 'full_url';
+      if (/bit\.ly|tinyurl|goo\.gl/i.test(value)) return 'shortener';
+      return 'other_url';
+    case 'free':
+      return 'free_indicator';
+    default:
+      return 'default';
+  }
+}
+
+// ============================================================
+// FIELD NAME MAPPING
+// ============================================================
+
 function fieldNameToPatternType(fieldName: string): string {
   const mapping: Record<string, string> = {
     eventDate: 'date',
@@ -65,54 +204,75 @@ function fieldNameToPatternType(fieldName: string): string {
   return mapping[fieldName] || fieldName;
 }
 
-/**
- * Build prompt for Gemini AI to generate regex from multiple samples
- */
-function buildMultiSamplePrompt(patternType: string, samples: Sample[]): string {
-  const sampleText = samples.map((s, i) => `
+// ============================================================
+// AI PROMPT BUILDING - Format-specific guidance
+// ============================================================
+
+function buildClusterPrompt(patternType: string, cluster: string, samples: Sample[]): string {
+  const sampleText = samples.slice(0, 15).map((s, i) => `
 Example ${i + 1}:
-Text: "${s.sample_text}"
+Text: "${s.sample_text.substring(0, 200)}"
 Correct value: "${s.expected_value}"
 `).join('\n');
 
-  // Pattern-specific guidance for simpler, more permissive regex
-  const patternGuidance: Record<string, string> = {
-    date: `For DATES:
-- Keep patterns SIMPLE and PERMISSIVE
-- Match formats: "Dec 7", "December 7", "12/7", "7 Dec", "Dec. 7", "12-07-2025"
-- Filipino months: "Enero", "Pebrero", "Marso", "Abril", "Mayo", "Hunyo", "Hulyo", "Agosto", "Setyembre", "Oktubre", "Nobyembre", "Disyembre"
-- GOOD patterns: (\\d{1,2})[/.-](\\d{1,2}), (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\.?\\s*(\\d{1,2})
-- AVOID: overly complex lookaheads, word boundaries that fail on emojis`,
-
-    time: `For TIMES:
-- Keep patterns SIMPLE - must have colon OR am/pm indicator
-- Match: "7pm", "7:00 PM", "7:00pm", "19:00", "alas-7", "7 ng gabi"
-- Filipino: "alas-(\\d+)", "(\\d+)\\s*ng\\s*(umaga|gabi|hapon)"
-- GOOD: (\\d{1,2}):(\\d{2})\\s*(am|pm)?, (\\d{1,2})\\s*(am|pm)
-- CRITICAL: DO NOT match prices (₱500, P350) or years (2025) - require colon or am/pm`,
-
-    price: `For PRICES:
-- Keep patterns SIMPLE for peso amounts
-- Match: "₱500", "PHP 500", "P500", "Php 500", "500 pesos", "$50"
-- Handle ranges: "₱500-₱800", "P500-800"
-- GOOD: (?:₱|PHP|Php|P)\\s*(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?)
-- AVOID: negative lookbehinds that break on emoji boundaries`,
-
-    signup_url: `For SIGNUP URLs:
-- Match http/https URLs and common shortened links
-- Match: "https://...", "bit.ly/...", "tinyurl.com/..."
-- GOOD: (https?://[^\\s<>"{}|\\\\^\\[\\]]+)
-- Keep it simple - just capture the URL`,
-
-    free: `For FREE indicators:
-- Match: "FREE", "Free entry", "No cover", "Libre", "Walang bayad"
-- GOOD: \\b(free|libre|no cover|walang bayad)\\b
-- Case insensitive matching`,
+  // Cluster-specific guidance
+  const clusterGuidance: Record<string, Record<string, string>> = {
+    date: {
+      'month_first': `Pattern for MONTH-FIRST dates like "Dec 7", "December 7th", "Dec. 7":
+- Match: (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\.?\\s*(\\d{1,2})
+- Capture the full date in group 1`,
+      'day_first': `Pattern for DAY-FIRST dates like "7 Dec", "7th December":
+- Match: (\\d{1,2})(?:st|nd|rd|th)?\\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*`,
+      'numeric_slash': `Pattern for NUMERIC dates with slash like "12/7", "12/07/2025":
+- Match: (\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?`,
+      'numeric_dash': `Pattern for NUMERIC dates with dash like "12-7", "2025-12-07":
+- Match: (\\d{1,2})-(\\d{1,2})(?:-(\\d{2,4}))? or (\\d{4})-(\\d{1,2})-(\\d{1,2})`,
+      'numeric_dot': `Pattern for NUMERIC dates with dot like "12.07", "07.12.2025":
+- Match: (\\d{1,2})\\.(\\d{1,2})(?:\\.(\\d{2,4}))?`,
+      'filipino_month': `Pattern for FILIPINO month names like "Enero 7", "Disyembre 25":
+- Match: (Enero|Pebrero|Marso|Abril|Mayo|Hunyo|Hulyo|Agosto|Setyembre|Oktubre|Nobyembre|Disyembre)\\s*(\\d{1,2})`,
+    },
+    time: {
+      '12h_ampm': `Pattern for 12-HOUR times with AM/PM like "7pm", "7:00 PM":
+- Match: (\\d{1,2})(?::(\\d{2}))?\\s*(am|pm|AM|PM)
+- CRITICAL: Must have AM/PM indicator`,
+      '24h': `Pattern for 24-HOUR times like "19:00", "07:30":
+- Match: ([01]?\\d|2[0-3]):([0-5]\\d)
+- No AM/PM needed`,
+      'colon_format': `Pattern for times with colon like "7:00":
+- Match: (\\d{1,2}):(\\d{2})`,
+      'filipino_time': `Pattern for FILIPINO times like "alas-7", "7 ng gabi":
+- Match: alas-?(\\d{1,2}) or (\\d{1,2})\\s*ng\\s*(umaga|gabi|hapon)`,
+    },
+    price: {
+      'peso_sign': `Pattern for PESO SIGN prices like "₱500", "₱1,500":
+- Match: ₱\\s*(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?)`,
+      'php_prefix': `Pattern for PHP PREFIX prices like "PHP 500", "Php500":
+- Match: [Pp][Hh][Pp]\\s*(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?)`,
+      'p_prefix': `Pattern for P PREFIX prices like "P500":
+- Match: P(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?)
+- CRITICAL: Avoid matching "PM" times`,
+      'peso_word': `Pattern for PESO WORD prices like "500 pesos":
+- Match: (\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2})?)\\s*pesos?`,
+      'range': `Pattern for PRICE RANGES like "500-800", "₱500-₱1000":
+- Match: (?:₱|PHP|P)?(\\d+)\\s*[-–]\\s*(?:₱|PHP|P)?(\\d+)`,
+    },
+    signup_url: {
+      'full_url': `Pattern for FULL URLs like "https://example.com/signup":
+- Match: (https?://[^\\s<>"{}|\\\\^\\[\\]]+)`,
+      'shortener': `Pattern for URL SHORTENERS like "bit.ly/abc123":
+- Match: ((?:bit\\.ly|tinyurl\\.com|goo\\.gl)/[^\\s]+)`,
+    },
   };
 
-  const guidance = patternGuidance[patternType] || `For ${patternType}: Create a simple pattern that captures the target value`;
+  const guidance = clusterGuidance[patternType]?.[cluster] || 
+    `For ${patternType} (${cluster}): Create a simple pattern that captures the target value`;
 
-  return `You are an expert at creating SIMPLE, PERMISSIVE regex patterns for extracting data from Instagram event captions.
+  return `You are an expert at creating SIMPLE, PERMISSIVE regex patterns for extracting ${patternType} data from Instagram event captions.
+
+TARGET FORMAT: ${cluster}
+
+${guidance}
 
 CRITICAL RULES:
 1. SIMPLER IS BETTER - complex patterns fail more often
@@ -120,24 +280,21 @@ CRITICAL RULES:
 3. AVOID word boundaries (\\b) near emojis - they fail
 4. AVOID complex lookaheads/lookbehinds
 5. Use character classes [...] instead of complex alternations
-6. Test mentally: will this work on messy social media text?
+6. NEVER include control characters or double-escaped sequences
 
-${guidance}
-
-Given these examples of ${patternType} extraction:
+Given these examples of ${patternType} (${cluster} format):
 
 ${sampleText}
 
-Generate a regex pattern that would correctly extract these values.
+Generate a regex pattern specifically for this format cluster.
 
 REQUIREMENTS:
-1. Capture target value in GROUP 1
+1. Capture target value in GROUP 1 (or full match)
 2. JavaScript/ECMAScript syntax
-3. PERMISSIVE enough to handle formatting variations
-4. Works with Filipino/English/emoji mixed text
-5. No control characters, no double-escaping
+3. Works with messy social media text (emojis, mixed languages)
+4. No control characters, no double-escaping like \\\\b
 
-Return JSON only (no markdown):
+Return JSON only (no markdown code blocks):
 {
   "regex": "your simple regex pattern",
   "description": "what this pattern matches",
@@ -145,17 +302,20 @@ Return JSON only (no markdown):
 }`;
 }
 
-/**
- * Call Gemini AI to generate a pattern from multiple samples
- */
-async function generatePatternFromSamples(
+// ============================================================
+// GEMINI API CALL WITH RATE LIMITING
+// ============================================================
+
+async function generatePatternFromCluster(
   patternType: string,
+  cluster: string,
   samples: Sample[],
-  apiKey: string
+  apiKey: string,
+  retryCount = 0
 ): Promise<{ regex: string; description: string; confidence: number } | null> {
   if (samples.length === 0) return null;
 
-  const prompt = buildMultiSamplePrompt(patternType, samples);
+  const prompt = buildClusterPrompt(patternType, cluster, samples);
 
   try {
     const response = await fetch(
@@ -175,8 +335,20 @@ async function generatePatternFromSamples(
       }
     );
 
+    // Handle rate limiting
+    if (response.status === 429) {
+      if (retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
+        console.log(`[GeneratePatterns] Rate limited, waiting ${delay}ms before retry ${retryCount + 1}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return generatePatternFromCluster(patternType, cluster, samples, apiKey, retryCount + 1);
+      }
+      console.error(`[GeneratePatterns] Rate limit exceeded after ${retryCount} retries`);
+      return null;
+    }
+
     if (!response.ok) {
-      console.error(`Gemini API error: ${response.status}`);
+      console.error(`[GeneratePatterns] Gemini API error: ${response.status}`);
       return null;
     }
 
@@ -187,7 +359,7 @@ async function generatePatternFromSamples(
       return null;
     }
 
-    // Clean up the response - remove markdown code blocks if present
+    // Clean up the response
     let cleaned = textContent.trim();
     if (cleaned.startsWith('```json')) {
       cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
@@ -199,22 +371,23 @@ async function generatePatternFromSamples(
       const parsed = JSON.parse(cleaned);
       return {
         regex: parsed.regex,
-        description: parsed.description || `AI-generated pattern for ${patternType}`,
+        description: parsed.description || `AI-generated ${patternType} pattern for ${cluster} format`,
         confidence: parsed.confidence || 0.5,
       };
     } catch (parseError) {
-      console.error('Failed to parse Gemini response:', cleaned);
+      console.error(`[GeneratePatterns] Failed to parse Gemini response for ${patternType}/${cluster}:`, cleaned);
       return null;
     }
   } catch (err) {
-    console.error('Gemini pattern generation error:', err);
+    console.error(`[GeneratePatterns] Gemini error for ${patternType}/${cluster}:`, err);
     return null;
   }
 }
 
-/**
- * Validate that a regex pattern matches expected values in samples
- */
+// ============================================================
+// VALIDATION
+// ============================================================
+
 function validatePatternAgainstSamples(
   pattern: string,
   samples: Sample[]
@@ -228,18 +401,15 @@ function validatePatternAgainstSamples(
       const match = regex.exec(sample.sample_text);
 
       if (match) {
-        // Check if group 1 or full match contains the expected value
         const extractedValue = match[1] || match[0];
         const normalized1 = extractedValue.toLowerCase().trim();
         const normalized2 = sample.expected_value.toLowerCase().trim();
 
-        // Check for exact or partial match
         if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) {
           successCount++;
         }
       }
     } catch {
-      // Invalid regex
       return { successRate: 0, successCount: 0, totalCount };
     }
   }
@@ -251,41 +421,40 @@ function validatePatternAgainstSamples(
   };
 }
 
-/**
- * Check if regex is valid and doesn't contain problematic characters
- */
 function isValidRegex(pattern: string): { valid: boolean; error?: string } {
-  // Check for control characters (ASCII 0-31) which indicate corruption
+  // Check for control characters
   for (let i = 0; i < pattern.length; i++) {
     const charCode = pattern.charCodeAt(i);
     if (charCode >= 0 && charCode <= 31 && charCode !== 10 && charCode !== 13) {
-      // Allow newline (10) and carriage return (13) but reject others
       return { 
         valid: false, 
-        error: `Pattern contains control character (ASCII ${charCode}) at position ${i}` 
+        error: `Control character (ASCII ${charCode}) at position ${i}` 
       };
     }
   }
 
-  // Check for double-escaped sequences that indicate storage issues
+  // Check for double-escaped sequences
   if (pattern.includes('\\\\b') || pattern.includes('\\\\d') || pattern.includes('\\\\s')) {
     return {
       valid: false,
-      error: 'Pattern contains double-escaped sequences (\\\\b, \\\\d, \\\\s)'
+      error: 'Double-escaped sequences detected'
     };
   }
 
-  // Try to compile the regex
   try {
     new RegExp(pattern, 'gi');
     return { valid: true };
   } catch (e) {
     return { 
       valid: false, 
-      error: `Invalid regex syntax: ${e instanceof Error ? e.message : 'Unknown error'}` 
+      error: `Invalid regex: ${e instanceof Error ? e.message : 'Unknown'}` 
     };
   }
 }
+
+// ============================================================
+// MAIN HANDLER
+// ============================================================
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -307,95 +476,98 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Parse request body for options
+    // Parse options
     let useGroundTruth = true;
     let useSuggestions = true;
-    let minSamplesPerType = 3;
-    let minSuccessRate = 0.7;
+    let minSamplesPerCluster = 2;  // Lower threshold for clusters
+    let minSuccessRate = 0.6;      // Lowered from 0.7 for cluster-specific patterns
     
     try {
       const body = await req.json();
       if (typeof body.useGroundTruth === 'boolean') useGroundTruth = body.useGroundTruth;
       if (typeof body.useSuggestions === 'boolean') useSuggestions = body.useSuggestions;
-      if (typeof body.minSamplesPerType === 'number') minSamplesPerType = body.minSamplesPerType;
+      if (typeof body.minSamplesPerCluster === 'number') minSamplesPerCluster = body.minSamplesPerCluster;
       if (typeof body.minSuccessRate === 'number') minSuccessRate = body.minSuccessRate;
     } catch {
-      // No body or invalid JSON - use defaults
+      // Use defaults
     }
 
-    console.log(`[GeneratePatterns] Starting with options: useGroundTruth=${useGroundTruth}, useSuggestions=${useSuggestions}, minSamples=${minSamplesPerType}, minSuccessRate=${minSuccessRate}`);
+    console.log(`[GeneratePatterns] ========================================`);
+    console.log(`[GeneratePatterns] ENHANCED VERSION - Starting pattern generation`);
+    console.log(`[GeneratePatterns] Options: groundTruth=${useGroundTruth}, suggestions=${useSuggestions}, minSamples=${minSamplesPerCluster}, minSuccess=${minSuccessRate}`);
 
-    // Pattern types that should NOT be auto-generated (use AI + known_venues instead)
     const SKIP_PATTERN_TYPES = ['venue', 'address'];
-
-    // Collect samples from pattern_suggestions (pending status with low attempt count)
     const samplesByType = new Map<string, Sample[]>();
 
+    // ========== FETCH ALL SUGGESTIONS (NO LIMIT) ==========
     if (useSuggestions) {
       const { data: suggestions, error: suggestionsError } = await supabase
         .from('pattern_suggestions')
         .select('*')
         .eq('status', 'pending')
-        .lt('attempt_count', 3)  // Skip suggestions that failed 3+ times
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .lt('attempt_count', 3)
+        .order('created_at', { ascending: false });  // NO LIMIT
 
       if (suggestionsError) {
-        console.error('Failed to fetch suggestions:', suggestionsError.message);
+        console.error('[GeneratePatterns] Failed to fetch suggestions:', suggestionsError.message);
       } else if (suggestions) {
-        console.log(`[GeneratePatterns] Found ${suggestions.length} pending suggestions`);
+        console.log(`[GeneratePatterns] Fetched ALL ${suggestions.length} pending suggestions`);
         
         for (const suggestion of suggestions as PatternSuggestion[]) {
           if (!suggestion.sample_text || !suggestion.expected_value) continue;
           
-          // Normalize pattern type (e.g., event_date -> date, event_time -> time)
           const patternType = fieldNameToPatternType(suggestion.pattern_type);
           if (!samplesByType.has(patternType)) {
             samplesByType.set(patternType, []);
           }
           
-          samplesByType.get(patternType)?.push({
+          const sample: Sample = {
             id: suggestion.id,
             sample_text: suggestion.sample_text,
             expected_value: suggestion.expected_value,
             source: 'suggestion',
-          });
+            detectedFormat: detectFormat(patternType, suggestion.expected_value),
+          };
+          
+          samplesByType.get(patternType)?.push(sample);
         }
       }
     }
 
-    // Collect samples from ground truth
+    // ========== FETCH ALL GROUND TRUTH (NO LIMIT) ==========
     if (useGroundTruth) {
       const { data: groundTruth, error: groundTruthError } = await supabase
         .from('extraction_ground_truth')
         .select('*')
         .eq('source', 'ai_high_confidence')
-        .order('created_at', { ascending: false })
-        .limit(200);
+        .order('created_at', { ascending: false });  // NO LIMIT
 
       if (groundTruthError) {
-        console.error('Failed to fetch ground truth:', groundTruthError.message);
+        console.error('[GeneratePatterns] Failed to fetch ground truth:', groundTruthError.message);
       } else if (groundTruth) {
-        console.log(`[GeneratePatterns] Found ${groundTruth.length} ground truth records`);
+        console.log(`[GeneratePatterns] Fetched ALL ${groundTruth.length} ground truth records`);
 
-        // For ground truth, we need to fetch the original caption
-        // Group by post_id first to minimize queries
         const postIds = [...new Set((groundTruth as GroundTruthRecord[]).map(gt => gt.post_id))];
         
-        // Fetch captions for these posts
-        const { data: posts } = await supabase
-          .from('instagram_posts')
-          .select('post_id, caption')
-          .in('post_id', postIds.slice(0, 50)); // Limit to avoid huge queries
-
+        // Fetch captions in batches of 200
         const captionMap = new Map<string, string>();
-        if (posts) {
-          for (const post of posts) {
-            if (post.caption && post.post_id) {
-              captionMap.set(post.post_id, post.caption);
+        for (let i = 0; i < postIds.length; i += 200) {
+          const batch = postIds.slice(i, i + 200);
+          const { data: posts } = await supabase
+            .from('instagram_posts')
+            .select('post_id, caption')
+            .in('post_id', batch);
+
+          if (posts) {
+            for (const post of posts) {
+              if (post.caption && post.post_id) {
+                captionMap.set(post.post_id, post.caption);
+              }
             }
           }
         }
+        
+        console.log(`[GeneratePatterns] Fetched captions for ${captionMap.size} posts`);
 
         for (const gt of groundTruth as GroundTruthRecord[]) {
           const caption = captionMap.get(gt.post_id);
@@ -406,7 +578,7 @@ Deno.serve(async (req) => {
             samplesByType.set(patternType, []);
           }
 
-          // Extract a relevant snippet around the value
+          // Extract snippet around value
           const normalizedCaption = caption.toLowerCase();
           const normalizedValue = gt.ground_truth_value.toLowerCase();
           const idx = normalizedCaption.indexOf(normalizedValue);
@@ -417,233 +589,280 @@ Deno.serve(async (req) => {
             const end = Math.min(caption.length, idx + gt.ground_truth_value.length + 100);
             snippet = caption.substring(start, end);
           } else {
-            // Value not found directly - use first 300 chars
             snippet = caption.substring(0, 300);
           }
 
-          samplesByType.get(patternType)?.push({
+          const sample: Sample = {
             id: gt.id,
             sample_text: snippet,
             expected_value: gt.ground_truth_value,
             source: 'ground_truth',
-          });
+            detectedFormat: detectFormat(patternType, gt.ground_truth_value),
+          };
+
+          samplesByType.get(patternType)?.push(sample);
         }
       }
     }
 
-    // Log sample counts
+    // Log totals by type
+    console.log(`[GeneratePatterns] ----------------------------------------`);
+    console.log(`[GeneratePatterns] SAMPLE TOTALS BY TYPE:`);
     for (const [type, samples] of samplesByType.entries()) {
-      console.log(`[GeneratePatterns] ${type}: ${samples.length} samples`);
+      console.log(`[GeneratePatterns]   ${type}: ${samples.length} total samples`);
     }
 
-    // Generate patterns for each type with enough samples
+    // ========== PROCESS EACH TYPE WITH CLUSTERING ==========
     let patternsGenerated = 0;
     let patternsRejected = 0;
-    let suggestionsSkipped = 0;
-    const results: Array<{ patternType: string; status: string; pattern?: string; reason?: string }> = [];
+    let clustersProcessed = 0;
+    const results: ClusterResult[] = [];
 
     for (const [patternType, samples] of samplesByType.entries()) {
-      // Skip pattern types that shouldn't be auto-generated (handled by AI + DB)
+      // Skip venue/address
       if (SKIP_PATTERN_TYPES.includes(patternType)) {
-        console.log(`[GeneratePatterns] Skipping ${patternType} - handled by AI + known_venues DB`);
+        console.log(`[GeneratePatterns] Skipping ${patternType} - handled by AI + known_venues`);
         
-        // Mark these suggestions as "not_applicable" so they're not retried
-        const suggestionIds = samples
-          .filter(s => s.source === 'suggestion')
-          .map(s => s.id);
-        
+        const suggestionIds = samples.filter(s => s.source === 'suggestion').map(s => s.id);
         if (suggestionIds.length > 0) {
           await supabase
             .from('pattern_suggestions')
             .update({ status: 'not_applicable' })
             .in('id', suggestionIds);
-          
           console.log(`[GeneratePatterns] Marked ${suggestionIds.length} ${patternType} suggestions as not_applicable`);
-          suggestionsSkipped += suggestionIds.length;
         }
         
         results.push({
           patternType,
+          cluster: 'all',
+          samplesInCluster: samples.length,
+          samplesUsed: 0,
+          generatedRegex: null,
+          validationResult: null,
           status: 'skipped',
-          reason: 'Pattern type handled by AI extraction + known venues database',
+          reason: 'Handled by AI + known_venues DB',
         });
         continue;
       }
 
-      if (samples.length < minSamplesPerType) {
-        console.log(`[GeneratePatterns] Skipping ${patternType} - only ${samples.length} samples (need ${minSamplesPerType})`);
-        results.push({
-          patternType,
-          status: 'skipped',
-          reason: `Only ${samples.length} samples (need ${minSamplesPerType})`,
-        });
-        continue;
+      // ========== CLUSTER BY FORMAT ==========
+      const clusters = new Map<string, Sample[]>();
+      for (const sample of samples) {
+        const format = sample.detectedFormat || 'other';
+        if (!clusters.has(format)) {
+          clusters.set(format, []);
+        }
+        clusters.get(format)?.push(sample);
       }
 
-      // Use up to 10 samples for generation
-      const samplesToUse = samples.slice(0, 10);
-      
-      console.log(`[GeneratePatterns] Generating pattern for ${patternType} from ${samplesToUse.length} samples`);
-      
-      const generated = await generatePatternFromSamples(patternType, samplesToUse, geminiApiKey);
-
-      if (!generated || !generated.regex) {
-        console.log(`[GeneratePatterns] Failed to generate pattern for ${patternType}`);
-        results.push({
-          patternType,
-          status: 'generation_failed',
-          reason: 'AI failed to generate pattern',
-        });
-        patternsRejected++;
-        continue;
+      console.log(`[GeneratePatterns] ----------------------------------------`);
+      console.log(`[GeneratePatterns] ${patternType.toUpperCase()} - ${clusters.size} format clusters:`);
+      for (const [cluster, clusterSamples] of clusters.entries()) {
+        console.log(`[GeneratePatterns]   ${cluster}: ${clusterSamples.length} samples`);
       }
 
-      const regexValidation = isValidRegex(generated.regex);
-      if (!regexValidation.valid) {
-        console.log(`[GeneratePatterns] Invalid regex for ${patternType}: ${generated.regex} - ${regexValidation.error}`);
-        results.push({
-          patternType,
-          status: 'invalid_regex',
-          pattern: generated.regex,
-          reason: regexValidation.error || 'Generated regex is invalid',
-        });
-        patternsRejected++;
-        continue;
-      }
-
-      // Validate against all samples
-      const validation = validatePatternAgainstSamples(generated.regex, samples);
-
-      if (validation.successRate < minSuccessRate) {
-        console.log(`[GeneratePatterns] Pattern for ${patternType} failed validation: ${(validation.successRate * 100).toFixed(1)}% success rate (need ${minSuccessRate * 100}%)`);
+      // Process each cluster
+      for (const [cluster, clusterSamples] of clusters.entries()) {
+        clustersProcessed++;
         
-        // Increment attempt count for failed suggestions
-        const failedSuggestionIds = samples
+        if (clusterSamples.length < minSamplesPerCluster) {
+          console.log(`[GeneratePatterns] Skipping ${patternType}/${cluster} - only ${clusterSamples.length} samples`);
+          results.push({
+            patternType,
+            cluster,
+            samplesInCluster: clusterSamples.length,
+            samplesUsed: 0,
+            generatedRegex: null,
+            validationResult: null,
+            status: 'skipped',
+            reason: `Only ${clusterSamples.length} samples (need ${minSamplesPerCluster})`,
+          });
+          continue;
+        }
+
+        // Use up to 25 samples for generation
+        const samplesToUse = clusterSamples.slice(0, 25);
+        
+        console.log(`[GeneratePatterns] Generating pattern for ${patternType}/${cluster} from ${samplesToUse.length} samples...`);
+        
+        // Add delay between Gemini calls to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        const generated = await generatePatternFromCluster(patternType, cluster, samplesToUse, geminiApiKey);
+
+        if (!generated || !generated.regex) {
+          console.log(`[GeneratePatterns] ❌ Failed to generate for ${patternType}/${cluster}`);
+          results.push({
+            patternType,
+            cluster,
+            samplesInCluster: clusterSamples.length,
+            samplesUsed: samplesToUse.length,
+            generatedRegex: null,
+            validationResult: null,
+            status: 'generation_failed',
+            reason: 'AI failed to generate pattern',
+          });
+          patternsRejected++;
+          continue;
+        }
+
+        // Validate regex syntax
+        const regexValidation = isValidRegex(generated.regex);
+        if (!regexValidation.valid) {
+          console.log(`[GeneratePatterns] ❌ Invalid regex for ${patternType}/${cluster}: ${regexValidation.error}`);
+          results.push({
+            patternType,
+            cluster,
+            samplesInCluster: clusterSamples.length,
+            samplesUsed: samplesToUse.length,
+            generatedRegex: generated.regex,
+            validationResult: null,
+            status: 'invalid_regex',
+            reason: regexValidation.error,
+          });
+          patternsRejected++;
+          continue;
+        }
+
+        // Validate against cluster samples (not all samples)
+        const validation = validatePatternAgainstSamples(generated.regex, clusterSamples);
+
+        if (validation.successRate < minSuccessRate) {
+          console.log(`[GeneratePatterns] ❌ ${patternType}/${cluster} failed validation: ${(validation.successRate * 100).toFixed(1)}% (need ${minSuccessRate * 100}%)`);
+          results.push({
+            patternType,
+            cluster,
+            samplesInCluster: clusterSamples.length,
+            samplesUsed: samplesToUse.length,
+            generatedRegex: generated.regex,
+            validationResult: {
+              testedAgainst: validation.totalCount,
+              matched: validation.successCount,
+              successRate: validation.successRate,
+            },
+            status: 'validation_failed',
+            reason: `${(validation.successRate * 100).toFixed(1)}% success rate`,
+          });
+          patternsRejected++;
+          continue;
+        }
+
+        // Check for duplicate
+        const { data: existingPatterns } = await supabase
+          .from('extraction_patterns')
+          .select('id')
+          .eq('pattern_regex', generated.regex)
+          .limit(1);
+
+        if (existingPatterns && existingPatterns.length > 0) {
+          console.log(`[GeneratePatterns] ⚠️ Duplicate pattern for ${patternType}/${cluster}`);
+          results.push({
+            patternType,
+            cluster,
+            samplesInCluster: clusterSamples.length,
+            samplesUsed: samplesToUse.length,
+            generatedRegex: generated.regex,
+            validationResult: {
+              testedAgainst: validation.totalCount,
+              matched: validation.successCount,
+              successRate: validation.successRate,
+            },
+            status: 'duplicate',
+            reason: 'Pattern already exists in database',
+          });
+          continue;
+        }
+
+        // Insert new pattern
+        const { error: insertError } = await supabase
+          .from('extraction_patterns')
+          .insert({
+            pattern_type: patternType,
+            pattern_regex: generated.regex,
+            pattern_description: `${generated.description} [${cluster} format]`,
+            confidence_score: Math.min(validation.successRate, generated.confidence),
+            source: 'ai_learned',
+            is_active: true,
+            priority: 120,
+            success_count: validation.successCount,
+            failure_count: validation.totalCount - validation.successCount,
+          });
+
+        if (insertError) {
+          console.error(`[GeneratePatterns] ❌ Insert failed for ${patternType}/${cluster}: ${insertError.message}`);
+          results.push({
+            patternType,
+            cluster,
+            samplesInCluster: clusterSamples.length,
+            samplesUsed: samplesToUse.length,
+            generatedRegex: generated.regex,
+            validationResult: {
+              testedAgainst: validation.totalCount,
+              matched: validation.successCount,
+              successRate: validation.successRate,
+            },
+            status: 'validation_failed',
+            reason: `DB insert failed: ${insertError.message}`,
+          });
+          patternsRejected++;
+          continue;
+        }
+
+        console.log(`[GeneratePatterns] ✅ CREATED: ${patternType}/${cluster} - ${(validation.successRate * 100).toFixed(1)}% success`);
+        console.log(`[GeneratePatterns]    Regex: ${generated.regex}`);
+        
+        results.push({
+          patternType,
+          cluster,
+          samplesInCluster: clusterSamples.length,
+          samplesUsed: samplesToUse.length,
+          generatedRegex: generated.regex,
+          validationResult: {
+            testedAgainst: validation.totalCount,
+            matched: validation.successCount,
+            successRate: validation.successRate,
+          },
+          status: 'created',
+        });
+        patternsGenerated++;
+
+        // Mark suggestions as processed
+        const suggestionIds = clusterSamples
           .filter(s => s.source === 'suggestion')
           .map(s => s.id);
-        
-        if (failedSuggestionIds.length > 0) {
-          // Fetch current attempt counts
-          const { data: currentSuggestions } = await supabase
+
+        if (suggestionIds.length > 0) {
+          await supabase
             .from('pattern_suggestions')
-            .select('id, attempt_count')
-            .in('id', failedSuggestionIds);
-          
-          if (currentSuggestions) {
-            // Increment attempt count for each and check if should mark as failed
-            for (const suggestion of currentSuggestions) {
-              const newAttemptCount = (suggestion.attempt_count || 0) + 1;
-              const updateData: { attempt_count: number; status?: string } = { 
-                attempt_count: newAttemptCount 
-              };
-              
-              // Mark as generation_failed after 3 attempts
-              if (newAttemptCount >= 3) {
-                updateData.status = 'generation_failed';
-                console.log(`[GeneratePatterns] Marking suggestion ${suggestion.id} as generation_failed after ${newAttemptCount} attempts`);
-              }
-              
-              await supabase
-                .from('pattern_suggestions')
-                .update(updateData)
-                .eq('id', suggestion.id);
-            }
-            
-            console.log(`[GeneratePatterns] Incremented attempt count for ${currentSuggestions.length} suggestions`);
-          }
+            .update({ status: 'generated' })
+            .in('id', suggestionIds);
         }
-        
-        results.push({
-          patternType,
-          status: 'validation_failed',
-          pattern: generated.regex,
-          reason: `Only ${(validation.successRate * 100).toFixed(1)}% success rate (need ${minSuccessRate * 100}%)`,
-        });
-        patternsRejected++;
-        continue;
-      }
-
-      // Check for duplicate pattern
-      const { data: existingPatterns } = await supabase
-        .from('extraction_patterns')
-        .select('id')
-        .eq('pattern_regex', generated.regex)
-        .limit(1);
-
-      if (existingPatterns && existingPatterns.length > 0) {
-        console.log(`[GeneratePatterns] Pattern already exists for ${patternType}`);
-        results.push({
-          patternType,
-          status: 'duplicate',
-          pattern: generated.regex,
-          reason: 'Pattern already exists',
-        });
-        continue;
-      }
-
-      // Save to extraction_patterns
-      const { error: insertError } = await supabase
-        .from('extraction_patterns')
-        .insert({
-          pattern_type: patternType,
-          pattern_regex: generated.regex,
-          pattern_description: generated.description,
-          confidence_score: Math.min(validation.successRate, generated.confidence),
-          source: 'ai_learned', // AI-generated from ground truth and suggestions
-          is_active: true, // Enable immediately since it passed validation
-          priority: 120, // Medium-high priority (default patterns are 100-150)
-          success_count: validation.successCount,
-          failure_count: validation.totalCount - validation.successCount,
-        });
-
-      if (insertError) {
-        console.error(`[GeneratePatterns] Failed to insert pattern: ${insertError.message}`);
-        results.push({
-          patternType,
-          status: 'insert_failed',
-          pattern: generated.regex,
-          reason: insertError.message,
-        });
-        patternsRejected++;
-        continue;
-      }
-
-      console.log(`[GeneratePatterns] ✅ Created pattern for ${patternType}: ${generated.regex} (${(validation.successRate * 100).toFixed(1)}% success)`);
-      results.push({
-        patternType,
-        status: 'created',
-        pattern: generated.regex,
-      });
-      patternsGenerated++;
-
-      // Mark suggestions as processed
-      const suggestionIds = samples
-        .filter(s => s.source === 'suggestion')
-        .map(s => s.id);
-
-      if (suggestionIds.length > 0) {
-        await supabase
-          .from('pattern_suggestions')
-          .update({ status: 'generated' })
-          .in('id', suggestionIds);
-        
-        console.log(`[GeneratePatterns] Marked ${suggestionIds.length} suggestions as generated`);
       }
     }
+
+    // ========== FINAL SUMMARY ==========
+    console.log(`[GeneratePatterns] ========================================`);
+    console.log(`[GeneratePatterns] FINAL SUMMARY:`);
+    console.log(`[GeneratePatterns]   Patterns Generated: ${patternsGenerated}`);
+    console.log(`[GeneratePatterns]   Patterns Rejected: ${patternsRejected}`);
+    console.log(`[GeneratePatterns]   Clusters Processed: ${clustersProcessed}`);
+    console.log(`[GeneratePatterns]   Total Types: ${samplesByType.size}`);
+    console.log(`[GeneratePatterns] ========================================`);
 
     return new Response(
       JSON.stringify({
         success: true,
         patternsGenerated,
         patternsRejected,
-        totalTypesProcessed: samplesByType.size,
+        clustersProcessed,
+        totalTypes: samplesByType.size,
         results,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Generate patterns error:', error);
+    console.error('[GeneratePatterns] Fatal error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     return new Response(
