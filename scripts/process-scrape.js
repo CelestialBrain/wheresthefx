@@ -205,6 +205,23 @@ CRITICAL VALIDATION RULES:
   ❌ "This weekend" (NOT recurring - one-time)
 - If eventDate and eventEndDate are just 2-3 days apart, is_recurring MUST be false
 
+MULTI-DAY EVENT TIME HANDLING:
+- For multi-day events (festivals, markets, conventions, fairs), the schedule usually REPEATS each day
+- eventTime = daily opening/start time
+- endTime = daily closing/end time  
+- If you see multiple times (e.g., "4PM" and "6:30PM"), these are likely:
+  ✅ Daily hours: opens 4PM, last session at 6:30PM
+  ✅ Multiple sessions/screenings per day (both times apply to ALL days)
+  ❌ NOT different hours on different days (rare - only if explicitly stated like "Fri 4PM, Sat 6PM")
+
+Example interpretations:
+- "Dec 12-13, 4PM-9PM" → eventTime: "16:00", endTime: "21:00" (SAME schedule both days)
+- "Film festival Dec 12-13, screenings at 4PM and 6:30PM" → eventTime: "16:00", endTime: null, priceNotes: "Screenings at 4PM and 6:30PM daily"
+- "Friday 8PM, Saturday 2PM" → DIFFERENT times per day (explicit), note in priceNotes
+
+⚠️ COMMON MISTAKE:
+When you see two times in a multi-day event post, do NOT assign them to different days unless the post EXPLICITLY says "Friday at X, Saturday at Y"
+
 CONFIDENCE GUIDELINES:
 - Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible in BOTH image AND caption
 - Set confidence 0.8-0.89 if fields are clear in either image OR caption
@@ -225,6 +242,17 @@ TIME EXTRACTION:
 - TIME AMBIGUITY - Infer AM/PM from context:
   * Bar/club/party/concert: 8, 9, 10 → PM (20:00, 21:00, 22:00)
   * Market/fair/yoga/run: 7, 8, 9 → AM (07:00, 08:00, 09:00)
+
+END TIME EXTRACTION:
+- Always try to extract end time if visible in the image or caption
+- If not visible, infer based on event type:
+  * Film screening: ~2-3 hours after start (e.g., 4PM start → 6:30PM or 7PM end)
+  * Concert/gig: ~3-4 hours after start (e.g., 8PM start → 11PM or midnight end)
+  * Market/fair: typically until 9-10 PM if afternoon/evening event
+  * Workshop: ~2-3 hours after start
+- If inferring end time, set confidence lower and add note to reasoning
+- Format: "HH:MM" (24-hour)
+- For multi-day events, endTime represents the daily closing time, NOT the last day's time
 
 VENUE/LOCATION - ⚠️ STRICT RULES:
 - Extract the ACTUAL venue name from the post content
@@ -388,6 +416,16 @@ CRITICAL VALIDATION RULES:
 - Contains operating hours without a specific date
 - Says "Every [day]" without a specific date
 - Generic promo: "Visit us", "Come check out"
+
+MULTI-DAY EVENT TIME HANDLING:
+- For multi-day events, the schedule usually REPEATS each day
+- If you see multiple times, they likely apply to ALL days (not different times per day)
+- Only assign different times to different days if EXPLICITLY stated (e.g., "Fri 4PM, Sat 6PM")
+
+END TIME EXTRACTION:
+- Try to extract end time from caption
+- If not visible, infer based on event type (film: +2-3hrs, concert: +3-4hrs, market: until 9-10PM)
+- Lower confidence if inferring
 
 CONFIDENCE GUIDELINES:
 - Set confidence 0.5-0.7 for caption-only extraction (no image available)
