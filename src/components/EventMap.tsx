@@ -55,6 +55,9 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       inertiaDeceleration: 3000,
       inertiaMaxSpeed: Infinity,
       worldCopyJump: false,
+      zoomSnap: 0,              // Allow fractional zoom levels (smooth zooming)
+      zoomDelta: 0.5,           // Smoother zoom increments
+      wheelPxPerZoomLevel: 120, // Smoother mouse wheel zoom
     });
 
     const tileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
