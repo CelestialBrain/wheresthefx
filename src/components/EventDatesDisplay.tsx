@@ -94,7 +94,7 @@ export function EventDatesDisplay({
   // Single day event
   if (additionalDates.length === 0) {
     return (
-      <div className="flex items-center gap-4 text-sm">
+      <div className="flex items-center gap-4 text-xs">
         {primaryDate && (
           <div className="flex items-center gap-1.5">
             <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -144,7 +144,7 @@ export function EventDatesDisplay({
       {/* Summary row - clickable */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 text-sm w-full text-left hover:bg-muted/50 -mx-1 px-1 py-0.5 rounded transition-colors"
+        className="flex items-center gap-2 text-xs w-full text-left hover:bg-muted/50 -mx-1 px-1 py-0.5 rounded transition-colors"
       >
         <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         <span className="font-medium">{formatDateRange(firstDate.event_date, lastDate.event_date)}</span>
@@ -160,12 +160,11 @@ export function EventDatesDisplay({
           {allDates.map((date, index) => (
             <div 
               key={`${date.event_date}-${index}`}
-              className="flex items-center justify-between text-sm px-2 py-1"
+              className="flex items-center justify-between text-xs px-2 py-1"
             >
               <span className="text-foreground">
                 {formatDate(date.event_date)}
               </span>
-              <span className="text-muted-foreground/30 flex-1 mx-3 border-b border-dotted border-muted-foreground/30" />
               {date.event_time && (
                 <span className="flex items-center gap-1 text-muted-foreground">
                   <Clock className="h-3 w-3" />

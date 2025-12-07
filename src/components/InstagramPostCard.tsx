@@ -275,20 +275,21 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
         {/* Date & Time - use EventDatesDisplay for multi-day support */}
         {post.is_event && post.event_date && (
           <EventDatesDisplay
-            eventId={post.id}
+            eventId={post.published_event_id || post.id}
             primaryDate={post.event_date}
             primaryTime={post.event_time}
             primaryVenue={post.location_name}
+            isPublishedEvent={!!post.published_event_id}
           />
         )}
 
         {/* Location + Distance */}
         {post.is_event && post.location_name && (
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <MapPin className="h-4 w-4 flex-shrink-0" />
             <span className="truncate flex-1">{post.location_name}</span>
             {post.distance !== undefined && (
-              <span className="text-primary text-sm font-medium whitespace-nowrap ml-1">
+              <span className="text-primary text-xs font-medium whitespace-nowrap ml-1">
                 {formatDistance(post.distance)}
               </span>
             )}
@@ -338,11 +339,11 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
-                onClick={() => handleSave(post.id)}
+                onClick={() => handleSave(post.published_event_id || post.id)}
               >
                 <Bookmark
                   className={`h-3.5 w-3.5 ${
-                    savedEvents.has(post.id) ? "fill-accent text-accent" : ""
+                    savedEvents.has(post.published_event_id || post.id) ? "fill-accent text-accent" : ""
                   }`}
                 />
               </Button>
