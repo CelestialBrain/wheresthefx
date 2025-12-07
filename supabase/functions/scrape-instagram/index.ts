@@ -797,7 +797,7 @@ Deno.serve(async (req) => {
     }
 
     // Parse request body
-    let body: { datasetId?: string; automated?: boolean; forceImport?: boolean; mode?: string; posts?: unknown[]; runId?: string; isFirstBatch?: boolean; isLastBatch?: boolean; batchNumber?: number; totalBatches?: number } = {};
+    let body: { datasetId?: string; automated?: boolean; forceImport?: boolean; mode?: string; posts?: unknown[]; runId?: string; isFirstBatch?: boolean; isLastBatch?: boolean; batchNumber?: number; totalBatches?: number; preFilterRejections?: Array<{ reason: string; rawData: Record<string, unknown> }> } = {};
     try {
       body = await req.json();
     } catch {
@@ -860,6 +860,25 @@ Deno.serve(async (req) => {
           totalBatches,
           datasetId: body.datasetId || 'unknown',
         });
+        
+        // Log pre-filter rejections if any were provided
+        const preFilterRejections = body.preFilterRejections || [];
+        
+        if (preFilterRejections.length > 0) {
+          await ingestLogger?.info('pre_filter', `${preFilterRejections.length} posts skipped before AI processing`, {
+            totalSkipped: preFilterRejections.length,
+          });
+          
+          // Log each rejection individually for visibility
+          for (const rejection of preFilterRejections) {
+            await ingestLogger?.log({
+              log_level: 'warn',
+              stage: 'pre_filter',
+              message: `Post skipped: ${rejection.reason}`,
+              data: rejection.rawData,
+            });
+          }
+        }
       }
       
       await ingestLogger?.info('fetch', `Processing batch ${batchNumber}/${totalBatches}`, { 

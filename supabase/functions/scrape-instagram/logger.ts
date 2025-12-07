@@ -5,7 +5,7 @@ export interface LogEntry {
   post_id?: string;
   instagram_post_id?: string;
   log_level: 'info' | 'warn' | 'error' | 'debug' | 'success';
-  stage: 'fetch' | 'ocr' | 'parse' | 'extraction' | 'validation' | 'save' | 'skip' | 'rejection' | 'geocache' | 'image';
+  stage: 'fetch' | 'ocr' | 'parse' | 'extraction' | 'validation' | 'save' | 'skip' | 'rejection' | 'geocache' | 'image' | 'pre_filter';
   message: string;
   data?: any;
   duration_ms?: number;

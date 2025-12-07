@@ -243,6 +243,7 @@ export const ScraperLogs = () => {
       case 'image': return 'bg-pink-500/10 text-pink-500';
       case 'geocache': return 'bg-emerald-500/10 text-emerald-500';
       case 'rejection': return 'bg-red-500/10 text-red-500';
+      case 'pre_filter': return 'bg-amber-500/10 text-amber-500';
       default: return 'bg-muted text-muted-foreground';
     }
   };
@@ -307,6 +308,7 @@ export const ScraperLogs = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Stages</SelectItem>
+                <SelectItem value="pre_filter">Pre-Filter</SelectItem>
                 <SelectItem value="fetch">Fetch</SelectItem>
                 <SelectItem value="ocr">OCR</SelectItem>
                 <SelectItem value="parse">Parse</SelectItem>
