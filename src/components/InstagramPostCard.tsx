@@ -327,10 +327,10 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 hover:text-red-500"
+                className="h-6 w-6 text-muted-foreground hover:text-destructive"
                 onClick={() => onReport(post.id)}
               >
-                <Flag className="h-3 w-3" />
+                <Flag className="h-3.5 w-3.5" />
               </Button>
             )}
             {post.is_event && (
@@ -341,7 +341,7 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
                 onClick={() => handleSave(post.id)}
               >
                 <Bookmark
-                  className={`h-3 w-3 ${
+                  className={`h-3.5 w-3.5 ${
                     savedEvents.has(post.id) ? "fill-accent text-accent" : ""
                   }`}
                 />
@@ -353,7 +353,7 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
               className="h-6 w-6"
               onClick={() => window.open(post.post_url, '_blank', 'noopener,noreferrer')}
             >
-              <ExternalLink className="h-3 w-3" />
+              <ExternalLink className="h-3.5 w-3.5" />
             </Button>
             {post.is_event && post.category && CATEGORY_LABELS[post.category] && (
               <Badge 

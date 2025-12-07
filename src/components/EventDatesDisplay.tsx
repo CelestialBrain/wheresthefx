@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Calendar, Clock, MapPin, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface EventDate {
@@ -64,6 +63,25 @@ export function EventDatesDisplay({
     });
   };
 
+  const formatDateShort = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const weekday = date.toLocaleDateString('en-PH', { weekday: 'short' });
+    const day = date.getDate();
+    return `${weekday} ${day}`;
+  };
+
+  const formatDateRange = (first: string, last: string) => {
+    const f = new Date(first);
+    const l = new Date(last);
+    const fMonth = f.toLocaleDateString('en-PH', { month: 'short' });
+    const lMonth = l.toLocaleDateString('en-PH', { month: 'short' });
+    
+    if (fMonth === lMonth) {
+      return `${fMonth} ${f.getDate()}-${l.getDate()}`;
+    }
+    return `${fMonth} ${f.getDate()} - ${lMonth} ${l.getDate()}`;
+  };
+
   const formatTime = (timeStr: string | null) => {
     if (!timeStr) return null;
     const [hours, minutes] = timeStr.split(':');
@@ -76,10 +94,10 @@ export function EventDatesDisplay({
   // Single day event
   if (additionalDates.length === 0) {
     return (
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 text-sm">
         {primaryDate && (
           <div className="flex items-center gap-1.5">
-            <Calendar className="h-4 w-4 text-primary" />
+            <Calendar className="h-4 w-4 text-muted-foreground" />
             <span>{formatDate(primaryDate)}</span>
           </div>
         )}
@@ -120,51 +138,41 @@ export function EventDatesDisplay({
   };
   
   const daySpan = calculateDaySpan(firstDate.event_date, lastDate.event_date);
+  const uniqueDays = daySpan;
 
   return (
     <div className="space-y-2">
-      {/* Summary row */}
-      <div className="flex items-center gap-2">
-        <Calendar className="h-4 w-4 text-primary" />
-        <span className="font-medium">
-          {formatDate(firstDate.event_date)} - {formatDate(lastDate.event_date)}
+      {/* Summary row - clickable */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-2 text-sm w-full text-left hover:bg-muted/50 -mx-1 px-1 py-0.5 rounded transition-colors"
+      >
+        <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <span className="font-medium">{formatDateRange(firstDate.event_date, lastDate.event_date)}</span>
+        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-medium">
+          {uniqueDays}d
         </span>
-        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-          {daySpan} {daySpan === 1 ? 'day' : 'days'}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 text-xs"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? (
-            <>Hide details <ChevronUp className="h-3 w-3 ml-1" /></>
-          ) : (
-            <>Show all dates <ChevronDown className="h-3 w-3 ml-1" /></>
-          )}
-        </Button>
-      </div>
+        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+      </button>
 
       {/* Expanded date list */}
       {isExpanded && (
-        <div className="ml-6 space-y-1.5 border-l-2 border-primary/20 pl-4">
+        <div className="ml-5 space-y-1 text-sm">
           {allDates.map((date, index) => (
             <div 
               key={`${date.event_date}-${index}`}
-              className="flex items-center gap-4 text-sm py-1"
+              className="flex items-center gap-3 text-muted-foreground py-0.5"
             >
-              <span className="font-medium min-w-[100px]">
-                {formatDate(date.event_date)}
-              </span>
+              <div className="w-1 h-1 rounded-full bg-muted-foreground/50 flex-shrink-0" />
+              <span className="w-16">{formatDateShort(date.event_date)}</span>
               {date.event_time && (
-                <span className="text-muted-foreground flex items-center gap-1">
+                <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {formatTime(date.event_time)}
                 </span>
               )}
               {date.venue_name && date.venue_name !== primaryVenue && (
-                <span className="text-muted-foreground flex items-center gap-1">
+                <span className="flex items-center gap-1">
                   <MapPin className="h-3 w-3" />
                   {date.venue_name}
                 </span>
