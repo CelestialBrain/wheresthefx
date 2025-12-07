@@ -161,6 +161,20 @@ CRITICAL VALIDATION RULES:
 - Generic promo: "Visit us", "Come check out", "Be in the loop"
 - Describes regular venue operations, not a unique event
 
+⚠️ RECURRING VS MULTI-DAY - CRITICAL DISTINCTION:
+- MULTI-DAY EVENT (is_recurring: false): "Nov 8-9", "Dec 27-30", "This weekend"
+  These are ONE-TIME events that span multiple consecutive days
+  → Set eventDate to first day, eventEndDate to last day
+- RECURRING EVENT (is_recurring: true): ONLY if explicit pattern language exists:
+  ✅ "Every Friday"
+  ✅ "Weekly"
+  ✅ "Monthly"
+  ✅ "First Saturday of every month"
+  ❌ "Friday and Saturday" (NOT recurring - just two days)
+  ❌ "Nov 8-9" (NOT recurring - one-time multi-day)
+  ❌ "This weekend" (NOT recurring - one-time)
+- If eventDate and eventEndDate are just 2-3 days apart, is_recurring MUST be false
+
 CONFIDENCE GUIDELINES:
 - Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible in BOTH image AND caption
 - Set confidence 0.8-0.89 if fields are clear in either image OR caption
@@ -196,6 +210,10 @@ PRICE EXTRACTION (ENHANCED):
 - Tiered pricing: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
 - Conditional: "Free before 10PM, ₱300 after" → priceMin: 0, priceMax: 300, priceNotes: "Free before 10PM, ₱300 after", isFree: true
 - "FREE", "LIBRE", "Walang bayad" → isFree: true, price: 0, priceMin: 0, priceMax: 0
+- ⚠️ is_free rules:
+  - ONLY set isFree: true if explicit free language found: "FREE", "LIBRE", "Free entry", "No cover"
+  - If you see prices, tickets, presale, door charge → isFree: false
+  - If unsure, default to isFree: false
 
 Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
 
@@ -214,7 +232,7 @@ Respond in JSON only:
   "priceMin": 0,
   "priceMax": 0,
   "priceNotes": "tier details or null",
-  "isFree": true,
+  "isFree": false,
   "category": "nightlife",
   "confidence": 0.85,
   "isRecurring": false,
