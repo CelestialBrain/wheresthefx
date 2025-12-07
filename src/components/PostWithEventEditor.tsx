@@ -108,24 +108,76 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
   // Multi-day schedule mode
   const [isMultiDay, setIsMultiDay] = useState(false);
   const [scheduleData, setScheduleData] = useState<ScheduleDay[]>([]);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
 
-  // Auto-detect multi-day from AI extraction
+  // Auto-detect multi-day from AI extraction OR load from database
   useEffect(() => {
-    if (post.event_end_date && post.event_date && post.event_end_date !== post.event_date) {
-      setIsMultiDay(true);
-      // Initialize schedule with start and end dates
-      const initialSchedule: ScheduleDay[] = [
-        { date: post.event_date, timeSlots: [{ time: post.event_time || "", label: "" }] },
-      ];
-      if (post.event_end_date !== post.event_date) {
-        initialSchedule.push({ 
-          date: post.event_end_date, 
-          timeSlots: [{ time: post.end_time || post.event_time || "", label: "" }] 
-        });
+    const loadExistingSchedule = async () => {
+      if (!post.id) return;
+      
+      setIsLoadingSchedule(true);
+      try {
+        // Check if there are existing event_dates for this post
+        const { data: existingDates, error } = await supabase
+          .from('event_dates')
+          .select('*')
+          .eq('instagram_post_id', post.id)
+          .order('event_date', { ascending: true });
+        
+        if (error) {
+          console.error('Failed to load event dates:', error);
+          return;
+        }
+        
+        if (existingDates && existingDates.length > 0) {
+          // Convert database records to ScheduleDay format
+          const grouped: Record<string, ScheduleDay> = {};
+          
+          for (const record of existingDates) {
+            const dateKey = record.event_date;
+            if (!grouped[dateKey]) {
+              grouped[dateKey] = {
+                date: dateKey,
+                timeSlots: [],
+                venueName: record.venue_name || undefined,
+                venueAddress: record.venue_address || undefined,
+              };
+            }
+            grouped[dateKey].timeSlots.push({
+              time: record.event_time || '',
+              label: record.venue_name || '', // venue_name stores screening/label
+            });
+          }
+          
+          const loadedSchedule = Object.values(grouped);
+          if (loadedSchedule.length > 0) {
+            setIsMultiDay(true);
+            setScheduleData(loadedSchedule);
+            return;
+          }
+        }
+        
+        // Fallback: auto-detect from AI extraction if no DB records
+        if (post.event_end_date && post.event_date && post.event_end_date !== post.event_date) {
+          setIsMultiDay(true);
+          const initialSchedule: ScheduleDay[] = [
+            { date: post.event_date, timeSlots: [{ time: post.event_time || "", label: "" }] },
+          ];
+          if (post.event_end_date !== post.event_date) {
+            initialSchedule.push({ 
+              date: post.event_end_date, 
+              timeSlots: [{ time: post.end_time || post.event_time || "", label: "" }] 
+            });
+          }
+          setScheduleData(initialSchedule);
+        }
+      } finally {
+        setIsLoadingSchedule(false);
       }
-      setScheduleData(initialSchedule);
-    }
-  }, []);
+    };
+    
+    loadExistingSchedule();
+  }, [post.id]);
 
   const handleLocationSave = (correction: any) => {
     setLocationCorrection(correction);
