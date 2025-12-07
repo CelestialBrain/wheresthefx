@@ -1407,6 +1407,7 @@ Deno.serve(async (req) => {
             category: validation.correctedCategory || category,
             ocr_text: post.aiExtraction?.ocrText,
             ai_confidence: post.aiExtraction?.confidence,
+            ai_reasoning: (post.aiExtraction as any)?.reasoning || null,
             ocr_processed: true,
             extraction_method: 'github_actions_gemini_vision',
             needs_review: post.aiExtraction?.isEvent || false,
