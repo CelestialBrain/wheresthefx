@@ -22,6 +22,7 @@ export function CategoryFilter({ activeCategory, onCategoryChange }: CategoryFil
           <span 
             className="w-2 h-2 rounded-full flex-shrink-0"
             style={{ backgroundColor: cat.color }}
+            aria-hidden="true"
           />
           {cat.label}
         </button>
