@@ -10,6 +10,8 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const BATCH_SIZE = 10;
 const DELAY_BETWEEN_BATCHES_MS = 2000;
+const IMAGE_FETCH_TIMEOUT_MS = 15000;
+const IMAGE_FETCH_RETRIES = 2;
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -26,15 +28,85 @@ const results = {
 };
 
 /**
+ * Fetch image with timeout and retry
+ */
+async function fetchImageWithRetry(imageUrl, retries = IMAGE_FETCH_RETRIES) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+      
+      const response = await fetch(imageUrl, { 
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      clearTimeout(timeout);
+      
+      if (response.ok) {
+        return response;
+      }
+      
+      if (attempt < retries - 1) {
+        console.log(`    ⚠️ Image fetch attempt ${attempt + 1} failed (${response.status}), retrying...`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    } catch (err) {
+      if (attempt < retries - 1) {
+        console.log(`    ⚠️ Image fetch attempt ${attempt + 1} failed (${err.message}), retrying...`);
+        await new Promise(r => setTimeout(r, 1000));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error(`Failed to fetch image after ${retries} attempts`);
+}
+
+/**
+ * Parse JSON with cleanup for common AI response issues
+ */
+function parseJSONWithCleanup(text) {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  
+  let jsonStr = jsonMatch[0];
+  
+  // First attempt: direct parse
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    // Cleanup common JSON issues
+    let cleaned = jsonStr
+      // Remove control characters (ASCII 0-31 except newlines/tabs)
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
+      // Fix unescaped newlines in strings
+      .replace(/(?<!\\)\n/g, '\\n')
+      // Remove trailing commas before } or ]
+      .replace(/,\s*}/g, '}')
+      .replace(/,\s*]/g, ']')
+      // Fix single quotes to double quotes (careful with apostrophes)
+      .replace(/:\s*'([^']*)'/g, ':"$1"')
+      // Fix unquoted keys
+      .replace(/(\{|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+    
+    try {
+      return JSON.parse(cleaned);
+    } catch (e2) {
+      // Last resort: try to extract key fields manually
+      console.log(`    ⚠️ JSON cleanup failed: ${e2.message}`);
+      return null;
+    }
+  }
+}
+
+/**
  * Extract event data from image using Gemini Vision
  */
 async function extractWithGeminiVision(imageUrl, caption, post = {}) {
   try {
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      console.log(`    ⚠️ Failed to fetch image: ${imageResponse.status}`);
-      return null;
-    }
+    const imageResponse = await fetchImageWithRetry(imageUrl);
     
     const imageBuffer = await imageResponse.arrayBuffer();
     const base64Image = Buffer.from(imageBuffer).toString('base64');
@@ -163,11 +235,13 @@ Respond in JSON only:
     ]);
 
     const text = result.response.text();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const parsed = parseJSONWithCleanup(text);
     
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+    if (parsed) {
+      return parsed;
     }
+    
+    console.log(`    ⚠️ Could not parse JSON from vision response`);
   } catch (err) {
     console.log(`    ⚠️ Vision extraction failed: ${err.message}`);
   }
@@ -220,34 +294,40 @@ async function processPost(post) {
   
   // Post-process AI result for historical posts
   if (aiResult) {
-    // If AI marked as historical or event date is in the past, mark as not an event
+    // If AI marked as historical, mark as not an event
     if (aiResult.isHistoricalPost) {
       aiResult.isEvent = false;
       console.log(`    📜 Historical post detected - marking as not event`);
     }
     
-    // Double-check: if event date is before post date and post is old, it's historical
+    // Smart historical detection using eventEndDate for multi-day events
     if (aiResult.eventDate && post.timestamp) {
       const eventDate = new Date(aiResult.eventDate);
+      // Use eventEndDate if available (for multi-day events), otherwise use eventDate
+      const effectiveEndDate = aiResult.eventEndDate 
+        ? new Date(aiResult.eventEndDate) 
+        : eventDate;
       const postDate = new Date(post.timestamp);
       const today = new Date();
+      today.setHours(23, 59, 59, 999); // End of today for fair comparison
       
-      // If event date is before post date, this is definitely a historical reference
-      if (eventDate < postDate) {
+      const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Only mark as historical if the event has COMPLETELY ENDED (using effectiveEndDate)
+      // AND the event end date is before TODAY (not before post date - same-day posts are valid!)
+      if (effectiveEndDate < today && effectiveEndDate < postDate) {
+        // Event ended before the post was made - this is definitely a recap/historical post
         aiResult.isEvent = false;
         aiResult.isHistoricalPost = true;
-        aiResult.reasoning = (aiResult.reasoning || '') + ' [Auto-detected: Event date before post date = historical]';
-        console.log(`    📜 Event date (${aiResult.eventDate}) before post date - marking as historical`);
+        aiResult.reasoning = (aiResult.reasoning || '') + ' [Auto-detected: Event ended before post date = historical recap]';
+        console.log(`    📜 Event end date (${aiResult.eventEndDate || aiResult.eventDate}) before post date - marking as historical`);
       }
       
-      // If event date is in the past relative to today and post is old (>30 days), it's historical
-      const postAgeInDays = Math.floor((today - postDate) / (1000 * 60 * 60 * 24));
-      const eventAgeInDays = Math.floor((today - eventDate) / (1000 * 60 * 60 * 24));
-      
-      if (eventAgeInDays > 0 && postAgeInDays > 30) {
+      // Safety net: If post is OLD (>30 days) AND event has completely passed, it's historical
+      if (postAgeInDays > 30 && effectiveEndDate < today) {
         aiResult.isEvent = false;
         aiResult.isHistoricalPost = true;
-        aiResult.reasoning = (aiResult.reasoning || '') + ` [Auto-detected: Old post (${postAgeInDays} days) with past event date = historical]`;
+        aiResult.reasoning = (aiResult.reasoning || '') + ` [Auto-detected: Old post (${postAgeInDays} days) with completed event = historical]`;
         console.log(`    📜 Old post with past event date - marking as historical`);
       }
     }
@@ -317,19 +397,37 @@ async function main() {
     process.exit(1);
   }
   
-  results.total = posts.length;
-  console.log(`✅ Fetched ${posts.length} posts\n`);
+  // Filter out posts without valid identifiers or images
+  const validPosts = posts.filter(post => {
+    const hasIdentifier = post.shortCode || post.id;
+    const hasImage = post.displayUrl || post.imageUrl;
+    if (!hasIdentifier) {
+      console.log(`  ⚠️ Skipping post without identifier`);
+    }
+    if (!hasImage) {
+      console.log(`  ⚠️ Skipping post without image: ${post.shortCode || post.id || 'unknown'}`);
+    }
+    return hasIdentifier && hasImage;
+  });
+  
+  const skippedCount = posts.length - validPosts.length;
+  if (skippedCount > 0) {
+    console.log(`  ⚠️ Skipped ${skippedCount} posts without valid identifier or image`);
+  }
+  
+  results.total = validPosts.length;
+  console.log(`✅ Fetched ${posts.length} posts (${validPosts.length} valid)\n`);
   
   // Generate a single run ID for all batches
   const runId = crypto.randomUUID();
   console.log(`📋 Run ID: ${runId}`);
   
   // Process in batches
-  const totalBatches = Math.ceil(posts.length / BATCH_SIZE);
+  const totalBatches = Math.ceil(validPosts.length / BATCH_SIZE);
   
-  for (let i = 0; i < posts.length; i += BATCH_SIZE) {
+  for (let i = 0; i < validPosts.length; i += BATCH_SIZE) {
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const batch = posts.slice(i, i + BATCH_SIZE);
+    const batch = validPosts.slice(i, i + BATCH_SIZE);
     
     console.log(`\n📦 Batch ${batchNum}/${totalBatches} (${batch.length} posts)`);
     console.log('─'.repeat(50));
@@ -338,7 +436,8 @@ async function main() {
     const processedPosts = [];
     for (const post of batch) {
       try {
-        console.log(`  🔍 Processing: ${post.shortCode || post.id}`);
+        const postIdentifier = post.shortCode || post.id || `unknown-${Date.now()}`;
+        console.log(`  🔍 Processing: ${postIdentifier}`);
         const processed = await processPost(post);
         processedPosts.push(processed);
         
@@ -371,7 +470,7 @@ async function main() {
     console.log(`\n📊 Progress: ${results.processed}/${results.total}`);
     
     // Delay between batches (except last)
-    if (i + BATCH_SIZE < posts.length) {
+    if (i + BATCH_SIZE < validPosts.length) {
       console.log(`⏳ Waiting ${DELAY_BETWEEN_BATCHES_MS / 1000}s before next batch...`);
       await new Promise(r => setTimeout(r, DELAY_BETWEEN_BATCHES_MS));
     }
