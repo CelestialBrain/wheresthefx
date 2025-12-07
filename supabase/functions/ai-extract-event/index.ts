@@ -156,10 +156,39 @@ async function extractWithGeminiVision(
   
   const cleanedCaption = cleanCaptionForExtraction(caption);
   
-  let prompt = `You are an expert at extracting event information from Filipino Instagram event posters.
+let prompt = `You are an expert at extracting event information from Filipino Instagram event posters.
 
 TODAY'S DATE: ${today}
 ${postDate ? `POST TIMESTAMP: ${postDate}` : ''}
+
+=== DATA SOURCE PRIORITY (CRITICAL - follow this order) ===
+1. POSTER/IMAGE TEXT (OCR) - Most authoritative for event details
+   - Dates, times, venues, prices visible in poster are MOST RELIABLE
+   
+2. CAPTION TEXT - Secondary, often promotional
+   - May confirm or supplement poster details
+   - Often just hashtags with minimal info
+   
+3. NEVER MAKE UP DETAILS - If not found, set to null
+   - If date not visible → eventDate: null (DO NOT guess)
+   - If time not visible → eventTime: null (DO NOT default to "21:00")
+   - If price not visible → price: null (DO NOT invent)
+   - If venue not visible → locationName: null (DO NOT assume from account)
+   
+When OCR/poster and caption conflict → PREFER poster/image text
+When detail appears nowhere → set to NULL, lower confidence to 0.5
+
+=== DATE FORMAT RULES (CRITICAL) ===
+Filipino/European format: DD.MM.YYYY or DD/MM/YYYY (day first)
+- "05.12.2025" = December 5, 2025 (NOT May 12!)
+- "12.05.2025" = May 12, 2025
+- "03/12" in December = December 3 (NOT March 12)
+
+American format: MM/DD/YYYY - ONLY if explicitly labeled "MM/DD"
+
+VALIDATION: Cross-check day of week if mentioned
+- "Freaky Friday 05.12.2025" → verify Dec 5, 2025 is a Friday ✓
+- If date doesn't match day of week, recalculate!
 
 INSTAGRAM CAPTION (may be incomplete):
 """
@@ -279,6 +308,24 @@ Examples of NOT events:
 - "Drink Menu: Beer ₱100, Cocktails ₱200" → rate sheet, NOT an event
 - "Coming soon to BGC!" → teaser, no date/venue
 - "Amazing night last Saturday!" → past event, EVENT_ENDED
+
+=== RECURRING EVENT DETECTION ===
+Weekly venue events should be marked recurring:
+- "Freaky Friday" at a bar/club → is_recurring: true, recurrence_pattern: "weekly:friday"
+- "Taco Tuesday", "Wine Wednesday" → weekly events
+- "First Saturday market" → recurrence_pattern: "monthly:first-saturday"
+- Look for day-of-week in event name as strong indicator
+For recurring events, eventDate = the NEXT occurrence from ${today}
+
+=== CONFIDENCE SCORING (BE CONSERVATIVE) ===
+- 90%+ ONLY if ALL core fields are explicitly visible in image AND caption
+- 80-89% if fields are clearly visible in image OR caption (one source)
+- 60-79% if fields require interpretation (date format, time inference)
+- 40-59% if fields are inferred from context or patterns
+- <40% if guessing → set field to NULL instead
+
+Example: date "05.12.2025" requiring DD.MM interpretation → max 75% confidence
+Example: time inferred from "club event" context → max 70% confidence
 
 FILIPINO DATE/TIME WORDS:
 - Date: "bukas" = tomorrow, "mamaya" = later today, "ngayon" = today
@@ -443,7 +490,27 @@ function buildExtractionPrompt(
 TODAY'S DATE: ${today}
 ${postDate ? `POST TIMESTAMP: ${postDate}` : ''}
 
-CRITICAL VALIDATION RULES:
+=== DATA SOURCE PRIORITY (CRITICAL - follow this order) ===
+1. POSTER/IMAGE TEXT (via OCR) - Most authoritative
+   - Dates, times, venues, prices in poster are MOST RELIABLE
+2. CAPTION TEXT - Secondary, often promotional
+3. NEVER MAKE UP DETAILS - If not found anywhere, set to null
+   - If date not found → eventDate: null (DO NOT guess)
+   - If time not found → eventTime: null (DO NOT default to "21:00")
+   - If price not found → price: null (DO NOT invent)
+   
+When caption and poster conflict → PREFER poster text
+
+=== DATE FORMAT RULES (CRITICAL) ===
+Filipino/European format: DD.MM.YYYY or DD/MM/YYYY (day first)
+- "05.12.2025" = December 5, 2025 (NOT May 12!)
+- "12.05.2025" = May 12, 2025
+- "03/12" in December = December 3
+
+VALIDATION: Cross-check day of week if mentioned
+- "Freaky Friday 05.12.2025" → verify Dec 5, 2025 is a Friday ✓
+
+=== CRITICAL VALIDATION RULES ===
 1. eventDate MUST be on or after today (${today})
 2. eventDate MUST be within 6 months of today  
 3. eventDate year MUST be ${currentYear} or ${currentYear + 1}
@@ -452,11 +519,18 @@ CRITICAL VALIDATION RULES:
 6. DO NOT extract years as times (e.g., 2025 is NOT a time)
 7. Prices in Philippines are typically ₱100-₱5000 for events
 
-CONFIDENCE GUIDELINES:
-- Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible
-- Set confidence 0.7-0.89 if most fields are clear but some are inferred
-- Set confidence 0.5-0.69 if you're making educated guesses
-- Set confidence < 0.5 if you're very uncertain
+=== CONFIDENCE SCORING (BE CONSERVATIVE) ===
+- 90%+ ONLY if ALL core fields explicitly visible in image AND caption
+- 80-89% if fields clearly visible in ONE source
+- 60-79% if fields require interpretation (date format conversion, time inference)
+- 40-59% if fields inferred from context
+- <40% if guessing → set field to NULL instead
+
+=== RECURRING EVENT DETECTION ===
+Weekly venue events:
+- "Freaky Friday" → is_recurring: true, recurrence_pattern: "weekly:friday"
+- "Taco Tuesday" → recurrence_pattern: "weekly:tuesday"
+For recurring, eventDate = the NEXT occurrence from ${today}
 
 COMMON MISTAKES TO AVOID:
 - "@photographer_name" is NOT a venue - it's a credit/mention
