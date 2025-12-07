@@ -12,6 +12,36 @@ const BATCH_SIZE = 10;
 const DELAY_BETWEEN_BATCHES_MS = 2000;
 const IMAGE_FETCH_TIMEOUT_MS = 15000;
 const IMAGE_FETCH_RETRIES = 2;
+// Minimum caption length for caption-only extraction
+// Below this threshold, captions lack enough context for reliable event extraction
+const MIN_CAPTION_LENGTH_FOR_EXTRACTION = 100;
+
+// Expected JSON schema for Gemini responses
+const EXPECTED_JSON_SCHEMA = `{
+  "ocrText": "string or null",
+  "isEvent": true,
+  "eventTitle": "string",
+  "eventDate": "YYYY-MM-DD",
+  "eventEndDate": "YYYY-MM-DD or null",
+  "eventTime": "HH:MM",
+  "endTime": "HH:MM or null",
+  "venueName": "string or null",
+  "venueAddress": "string or null",
+  "price": 0,
+  "priceMin": 0,
+  "priceMax": 0,
+  "priceNotes": "string or null",
+  "isFree": false,
+  "signupUrl": "string or null",
+  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
+  "category": "nightlife",
+  "confidence": 0.85,
+  "isRecurring": false,
+  "recurrencePattern": "string or null",
+  "rsvpDeadline": "YYYY-MM-DD or null",
+  "isHistoricalPost": false,
+  "reasoning": "string"
+}`;
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -213,7 +243,15 @@ PRICE EXTRACTION (ENHANCED):
 - ⚠️ is_free rules:
   - ONLY set isFree: true if explicit free language found: "FREE", "LIBRE", "Free entry", "No cover"
   - If you see prices, tickets, presale, door charge → isFree: false
-  - If unsure, default to isFree: false
+  - If price information is unclear or ambiguous, set isFree: null and add priceNotes: "Price not specified"
+
+URL/LINK EXTRACTION:
+- Look for registration, ticket, or RSVP links in BOTH caption AND image
+- Extract formats: "https://...", "bit.ly/...", "tinyurl.com/...", "tickelo.com/...", "eventbrite.com/...", "lnk.to/...", "forms.gle/..."
+- If "link in bio" mentioned but no URL visible, set urlType to "link_in_bio"
+- Priority: ticket purchase > registration > general info
+- DO NOT extract @mentions, sponsor URLs, or the Instagram post URL itself
+- DO NOT extract venue websites unless they're specifically for registration/tickets
 
 Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
 
@@ -233,6 +271,8 @@ Respond in JSON only:
   "priceMax": 0,
   "priceNotes": "tier details or null",
   "isFree": false,
+  "signupUrl": "full URL or null",
+  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
   "category": "nightlife",
   "confidence": 0.85,
   "isRecurring": false,
@@ -253,15 +293,148 @@ Respond in JSON only:
     ]);
 
     const text = result.response.text();
-    const parsed = parseJSONWithCleanup(text);
+    let parsed = parseJSONWithCleanup(text);
+    
+    // Retry with stricter JSON formatting instructions if initial parse failed
+    if (!parsed) {
+      console.log(`    🔄 Initial JSON parse failed, retrying with stricter prompt...`);
+      try {
+        const retryPrompt = `The previous response was not valid JSON. Please extract the same information but respond with ONLY valid JSON - no markdown, no code blocks, no extra text. Ensure all strings are properly escaped and all fields match this exact schema:
+
+${EXPECTED_JSON_SCHEMA}
+
+Extract information from the same image and caption as before.`;
+
+        const retryResult = await model.generateContent([
+          { text: retryPrompt },
+          {
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: base64Image,
+            },
+          },
+        ]);
+        
+        const retryText = retryResult.response.text();
+        parsed = parseJSONWithCleanup(retryText);
+        
+        if (parsed) {
+          console.log(`    ✅ Retry successful - got valid JSON`);
+        }
+      } catch (retryErr) {
+        console.log(`    ⚠️ Retry also failed: ${retryErr.message}`);
+      }
+    }
     
     if (parsed) {
       return parsed;
     }
     
-    console.log(`    ⚠️ Could not parse JSON from vision response`);
+    console.log(`    ⚠️ Could not parse JSON from vision response after retry`);
   } catch (err) {
     console.log(`    ⚠️ Vision extraction failed: ${err.message}`);
+  }
+  
+  return null;
+}
+
+/**
+ * Extract event data from caption only (fallback when image fetch fails)
+ */
+async function extractFromCaptionOnly(caption, post = {}) {
+  try {
+    // Get today's date for context
+    const today = new Date().toISOString().split('T')[0];
+    const currentYear = new Date().getFullYear();
+    
+    // Calculate post age to detect historical posts
+    const postTimestamp = post?.timestamp;
+    const postDate = postTimestamp ? new Date(postTimestamp) : new Date();
+    const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
+    const isOldPost = postAgeInDays > 30;
+    
+    const prompt = `You are an expert at extracting event information from Filipino Instagram captions.
+
+TODAY'S DATE: ${today}
+INSTAGRAM POST DATE: ${postDate.toISOString().split('T')[0]} (${postAgeInDays} days ago)${isOldPost ? ' ⚠️ OLD POST - likely historical' : ''}
+
+INSTAGRAM CAPTION:
+"""
+${caption || '(no caption)'}
+"""
+
+⚠️ NOTE: No image is available - extract information from caption text only.
+
+Determine if this caption describes an event announcement.
+
+⚠️ CRITICAL: HISTORICAL POST DETECTION
+- This post was made ${postAgeInDays} days ago
+- If the extracted event date is BEFORE the post date, this is a HISTORICAL POST about a past event
+- DO NOT increment the year! A "May 3" post from May 2025 is NOT a May 2026 event
+- If the event date has already passed, set isEvent: false and note "Historical post - event already occurred"
+
+CRITICAL VALIDATION RULES:
+1. eventDate MUST be on or after the POST date (${postDate.toISOString().split('T')[0]}), not today
+2. If an event date is in the past relative to TODAY (${today}), it's already passed - set isEvent: false
+3. DO NOT auto-increment year for past dates
+4. eventDate year MUST be ${currentYear} or ${currentYear + 1}
+5. If you see past dates, check if it's a recurring event - if so, calculate the NEXT occurrence
+
+⚠️ NOT AN EVENT - Set isEvent: false if:
+- THANK YOU / RECAP post (contains "thank you", "merci", "what a night", "until next time")
+- THROWBACK post (contains "#tbt", "#throwback", "look back", "memories")
+- VENUE PROMO (contains "host your events", "book our space", "private events", "for bookings")
+- PRODUCT/MENU post (contains "new on the menu", "now serving", "try our")
+- Contains operating hours without a specific date
+- Says "Every [day]" without a specific date
+- Generic promo: "Visit us", "Come check out"
+
+CONFIDENCE GUIDELINES:
+- Set confidence 0.5-0.7 for caption-only extraction (no image available)
+- Lower confidence if date, time, or venue is unclear
+
+Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
+
+Respond in JSON only:
+{
+  "ocrText": null,
+  "isEvent": true,
+  "eventTitle": "...",
+  "eventDate": "YYYY-MM-DD",
+  "eventEndDate": "YYYY-MM-DD or null",
+  "eventTime": "HH:MM",
+  "endTime": "HH:MM or null",
+  "venueName": "venue name only, or null if unclear",
+  "venueAddress": "full address if visible",
+  "price": 0,
+  "priceMin": 0,
+  "priceMax": 0,
+  "priceNotes": "tier details or null",
+  "isFree": false,
+  "signupUrl": "full URL or null",
+  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
+  "category": "nightlife",
+  "confidence": 0.6,
+  "isRecurring": false,
+  "recurrencePattern": "weekly:friday or null",
+  "rsvpDeadline": "YYYY-MM-DD if RSVP deadline mentioned, null otherwise",
+  "isHistoricalPost": false,
+  "reasoning": "Explain what indicators you found (from caption only) or why this is NOT an event."
+}`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const parsed = parseJSONWithCleanup(text);
+    
+    if (parsed) {
+      // Mark that this was caption-only extraction
+      parsed.captionOnlyExtraction = true;
+      return parsed;
+    }
+    
+    console.log(`    ⚠️ Could not parse JSON from caption-only response`);
+  } catch (err) {
+    console.log(`    ⚠️ Caption-only extraction failed: ${err.message}`);
   }
   
   return null;
@@ -310,6 +483,15 @@ async function processPost(post) {
   let aiResult = null;
   if (imageUrl) {
     aiResult = await extractWithGeminiVision(imageUrl, caption, post);
+  }
+  
+  // Caption-only fallback: If image fetch failed but caption is substantial, try caption-only extraction
+  if (!aiResult && !imageUrl && caption && caption.length > MIN_CAPTION_LENGTH_FOR_EXTRACTION) {
+    console.log(`    🔄 No image available, attempting caption-only extraction...`);
+    aiResult = await extractFromCaptionOnly(caption, post);
+  } else if (!aiResult && imageUrl && caption && caption.length > MIN_CAPTION_LENGTH_FOR_EXTRACTION) {
+    console.log(`    🔄 Image extraction failed, attempting caption-only fallback...`);
+    aiResult = await extractFromCaptionOnly(caption, post);
   }
   
   // Post-process AI result for historical posts

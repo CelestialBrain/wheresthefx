@@ -705,31 +705,59 @@ async function parseEventFromCaption(
   return regexResult;
 }
 
+/**
+ * Generate a fallback event title when AI extraction doesn't provide one
+ * Format: "[Category] at [Venue]" or just category/venue if only one available
+ * @param category - Event category (e.g., "nightlife", "music")
+ * @param venueName - Venue name (e.g., "Circuit Makati")
+ * @returns Generated title or null if neither category nor venue available
+ */
+function generateFallbackTitle(category: string | null | undefined, venueName: string | null | undefined): string | null {
+  if (!category && !venueName) return null;
+  
+  // Capitalize and format category (e.g., "art_culture" -> "Art Culture")
+  const formattedCategory = category 
+    ? category.charAt(0).toUpperCase() + category.slice(1).replace(/_/g, ' ')
+    : 'Event';
+  
+  if (venueName) {
+    return `${formattedCategory} at ${venueName}`;
+  }
+  
+  return formattedCategory;
+}
+
 // Check if event has ended (considering time and Philippine timezone UTC+8)
 function isEventInPast(
   eventDateStr: string | undefined, 
   eventEndDateStr?: string | undefined,
-  eventTimeStr?: string | undefined
+  eventTimeStr?: string | undefined,
+  endTimeStr?: string | undefined
 ): boolean {
   if (!eventDateStr) return false;
   
   try {
     const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
     
     // Use end date if available, otherwise start date
-    const checkDateStr = eventEndDateStr || eventDateStr;
+    const targetDateStr = eventEndDateStr || eventDateStr;
     
-    // If we have a time, create full datetime; otherwise assume end of day
-    // All events are in Philippine Time (UTC+8)
-    let eventDateTime: Date;
-    if (eventTimeStr) {
-      eventDateTime = new Date(`${checkDateStr}T${eventTimeStr}+08:00`);
-    } else {
-      // No time = assume event runs until end of day in PHT
-      eventDateTime = new Date(`${checkDateStr}T23:59:59+08:00`);
+    // If event is TODAY (in UTC), check end time, not start time
+    // Note: Event times are already in 24-hour format and dates are YYYY-MM-DD
+    // This comparison works because both now and endDateTime use the same timezone (system/UTC)
+    if (targetDateStr === todayStr) {
+      if (endTimeStr) {
+        const [hours, minutes] = endTimeStr.split(':').map(Number);
+        const endDateTime = new Date();
+        endDateTime.setHours(hours, minutes, 0, 0);
+        return now > endDateTime;
+      }
+      return false; // No end time = valid until midnight
     }
     
-    return eventDateTime < now;
+    // For past dates, check if date has passed
+    return new Date(targetDateStr) < new Date(todayStr);
   } catch {
     return false;
   }
@@ -1379,6 +1407,10 @@ Deno.serve(async (req) => {
             else urgencyScore = 10; // Future
           }
           
+          // Generate fallback title if AI didn't extract one
+          const eventTitle = post.aiExtraction?.eventTitle || 
+            (isEvent ? generateFallbackTitle(category, canonicalVenue) : null);
+          
           // Upsert the post with enriched data + validation fields
           const { error, data: upsertedPost } = await supabase.from('instagram_posts').upsert({
             post_id: post.postId,
@@ -1393,7 +1425,7 @@ Deno.serve(async (req) => {
             location_lat: locationLat,
             location_lng: locationLng,
             is_event: isEvent, // Use corrected isEvent (after non-event/historical checks)
-            event_title: post.aiExtraction?.eventTitle,
+            event_title: eventTitle,
             event_date: validation.correctedData.eventDate,
             event_end_date: post.aiExtraction?.eventEndDate || null,
             event_time: validation.correctedData.eventTime,
@@ -1403,6 +1435,7 @@ Deno.serve(async (req) => {
             category: validation.correctedCategory || category,
             ocr_text: post.aiExtraction?.ocrText,
             ai_confidence: post.aiExtraction?.confidence,
+            ai_reasoning: (post.aiExtraction as any)?.reasoning || null,
             ocr_processed: true,
             extraction_method: 'github_actions_gemini_vision',
             needs_review: post.aiExtraction?.isEvent || false,
@@ -2278,7 +2311,7 @@ Deno.serve(async (req) => {
 
         // Skip events that have ended (unless force import)
         if (eventInfo.eventDate && !forceImport) {
-          if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate ?? undefined, eventInfo.eventTime ?? undefined)) {
+          if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate ?? undefined, eventInfo.eventTime ?? undefined, eventInfo.endTime ?? undefined)) {
             totalSkipped++;
             await logger.logSkip(postId, 'Event has ended', { 
               eventDate: eventInfo.eventDate,
@@ -2898,7 +2931,7 @@ Deno.serve(async (req) => {
             }
 
             // Skip events that have ended in direct scraping
-            if (eventInfo.eventDate && isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate, eventInfo.eventTime)) {
+            if (eventInfo.eventDate && isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate, eventInfo.eventTime, eventInfo.endTime)) {
               totalSkipped++;
               console.log(`Skipping post ${postId} - event has ended. Start: ${eventInfo.eventDate}, End: ${eventInfo.eventEndDate || 'N/A'}`);
               continue;

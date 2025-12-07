@@ -566,6 +566,25 @@ const recurringPatterns = [
   /\b\d{1,2}\s*(am|pm)\s*[-–—]\s*(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)(day)?\s*(to|[-–—])\s*(mon|tues?|wed(nes)?|thurs?|fri|sat(ur)?|sun)(day)?\b/i,
 ];
 
+// Event-type keywords that should NOT be filtered even if they contain recurring patterns
+// These indicate actual recurring events (markets, DJ nights) rather than operating hours
+const eventTypeKeywords = [
+  /\bmarket\b/i,
+  /\bflea\s*market\b/i,
+  /\bnight\s*market\b/i,
+  /\bweekend\s*market\b/i,
+  /\b(dj|deejay)\b/i,
+  /\bparty\b/i,
+  /\bparties\b/i,
+  /\bgig\b/i,
+  /\bconcert\b/i,
+  /\blive\s*(music|band|performance)\b/i,
+  /\bshowcase\b/i,
+  /\bnight\s*life\b/i,
+  /\bsession\b/i,
+  /\bweekend\s*(event|series)\b/i,
+];
+
 /**
  * Check if text contains an explicit date (not relative)
  * e.g., "Dec 5", "January 10", "12/25", "2025-01-15"
@@ -599,6 +618,10 @@ export function hasExplicitDate(text: string): boolean {
  * - "Open daily 10AM-10PM" → operating hours
  * - "Visit us at our new location" → promo, not event
  * 
+ * WHITELISTED EXCEPTIONS:
+ * - Weekly markets (flea market, night market) with "Every Saturday" → ALLOWED (these are events)
+ * - DJ nights / live music events with "Every Friday" → ALLOWED (these are events)
+ * 
  * Returns true if the text looks like recurring schedule/promo (should NOT be classified as event)
  */
 export function isRecurringSchedulePost(text: string): boolean {
@@ -614,10 +637,15 @@ export function isRecurringSchedulePost(text: string): boolean {
   // If there IS a specific date, this might be a one-time event despite recurring language
   const hasSpecificDate = hasExplicitDate(text);
   
+  // Check for event-type keywords (markets, DJ nights, etc.)
+  // These are actual events even if they recur weekly
+  const hasEventTypeKeyword = eventTypeKeywords.some(p => p.test(text));
+  
   // It's a recurring schedule post if:
   // - Has recurring patterns (e.g., "Tues to Sat", "Every Friday")
   // - AND does NOT have a specific date (e.g., "Dec 5", "January 10")
-  return hasRecurringPattern && !hasSpecificDate;
+  // - AND does NOT have event-type keywords (markets, DJ nights, etc.)
+  return hasRecurringPattern && !hasSpecificDate && !hasEventTypeKeyword;
 }
 
 /**
