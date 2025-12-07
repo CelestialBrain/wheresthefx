@@ -31,23 +31,49 @@ export interface TierAssignment {
  */
 const VALID_CATEGORIES = ['nightlife', 'music', 'art_culture', 'markets', 'food', 'workshops', 'community', 'comedy', 'other'];
 
-// Vague venue patterns that should be rejected
+// Vague venue patterns that should be flagged (but not nulled - keep for reference)
 const VAGUE_VENUE_PATTERNS = [
+  // Explicit TBA/TBD
   /^tba$/i,
   /^tbd$/i,
   /^to be announced$/i,
+  /^location tba/i,
+  /^venue tbd/i,
+  /^will announce/i,
+  
+  // Bio/DM references
   /^check bio/i,
   /^dm for/i,
   /^message for/i,
   /^see bio/i,
   /^link in bio/i,
   /^details in bio/i,
+  
+  // Secret/undisclosed
   /^secret location/i,
   /^undisclosed/i,
   /^private location/i,
-  /^location tba/i,
-  /^venue tbd/i,
-  /^will announce/i,
+  
+  // Generic single words that are too vague
+  /^my\s+\w{2,8}$/i,          // "my bar", "my den", "my place", "my spot"
+  /^the\s+\w{2,8}$/i,         // "the venue", "the bar", "the spot" (but NOT "The Fifth at Rockwell")
+  /^(a|an)\s+\w{2,8}$/i,      // "a cafe", "an art space"
+  /^(cafe|bar|restaurant|bakery|club|lounge|venue|space|place|spot|den)$/i, // Single generic words
+  /^(somewhere|anywhere|location)$/i,
+  
+  // Generic area references without specific venue
+  /^\w+\s*(area|district|zone)$/i,  // "Makati area", "BGC district"
+];
+
+// Patterns that indicate this is NOT an actual venue name (should be nulled)
+const INVALID_VENUE_PATTERNS = [
+  /^[@#]/,                    // Starts with @ or # (handle/hashtag)
+  /^[\d\s\-+()]+$/,          // Just phone numbers
+  /^(various|multiple)\s*(venue|location)s?$/i, // "Various Venues"
+  /^online$/i,               // "Online" is not a physical venue
+  /^virtual$/i,
+  /^zoom$/i,
+  /^streaming$/i,
 ];
 
 export function validateExtractedData(data: {
@@ -145,22 +171,26 @@ export function validateExtractedData(data: {
       corrected.locationName = corrected.locationName.substring(0, 100).trim();
     }
     
-    // Check for garbage patterns (all caps hashtags, @mentions only, etc.)
-    if (/^[@#]/.test(corrected.locationName) && !corrected.locationName.includes(' ')) {
-      warnings.push('venue_looks_like_handle');
-    }
-    
-    // Check for phone numbers mistaken as venues
-    if (/^[\d\s\-+()]+$/.test(corrected.locationName.replace(/\s/g, ''))) {
-      warnings.push('venue_looks_like_phone');
+    // Check for invalid venue patterns (should be nulled)
+    const isInvalidVenue = INVALID_VENUE_PATTERNS.some(pattern => pattern.test(corrected.locationName!.trim()));
+    if (isInvalidVenue) {
+      warnings.push('venue_invalid_pattern');
       corrected.locationName = null;
     }
     
-    // Check for vague venue patterns (TBA, DM for location, etc.)
-    const isVagueVenue = VAGUE_VENUE_PATTERNS.some(pattern => pattern.test(corrected.locationName!.trim()));
-    if (isVagueVenue) {
-      warnings.push('venue_vague');
-      // Don't null it out - keep for reference but flag it
+    // Check for vague venue patterns (flag but keep for reference)
+    if (corrected.locationName) {
+      const isVagueVenue = VAGUE_VENUE_PATTERNS.some(pattern => pattern.test(corrected.locationName!.trim()));
+      if (isVagueVenue) {
+        warnings.push('venue_vague');
+        // Keep for reference but flagged - let UI handle display
+      }
+    }
+    
+    // Check for phone numbers mistaken as venues
+    if (corrected.locationName && /^[\d\s\-+()]+$/.test(corrected.locationName.replace(/\s/g, ''))) {
+      warnings.push('venue_looks_like_phone');
+      corrected.locationName = null;
     }
   }
 
@@ -210,14 +240,24 @@ export function validateExtractedData(data: {
     correctedCategory = 'other';
   }
 
-  // 9. is_free/price consistency check
+  // 9. is_free/price consistency check - IMPROVED LOGIC
   if (data.isFree === false && (!data.price || data.price === 0)) {
+    // Not free but no price specified - set price to null (unknown) not 0
     warnings.push('not_free_but_no_price');
+    corrected.price = null; // Explicitly null instead of 0 to indicate unknown
   }
   if (data.isFree === true && data.price && data.price > 0) {
     warnings.push('free_but_has_price');
     // Auto-correct: if there's a price, it's probably not free
     corrected.price = data.price;
+    // Don't change isFree here - let the UI handle the conflict
+  }
+  // If isFree is null/undefined but price is 0, assume free
+  if (data.isFree === null || data.isFree === undefined) {
+    if (!data.price || data.price === 0) {
+      // Leave as-is, but this is ambiguous
+      warnings.push('free_status_unclear');
+    }
   }
 
   // Determine if valid (severe warnings = not valid)
