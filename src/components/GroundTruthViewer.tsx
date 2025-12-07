@@ -1,17 +1,19 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Database, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Database, Download, ChevronLeft, ChevronRight, RefreshCw, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 
 interface GroundTruthEntry {
   id: string;
   post_id: string | null;
   field_name: string;
   ground_truth_value: string;
+  original_text: string | null;
   source: string | null;
   created_at: string | null;
 }
@@ -20,7 +22,9 @@ export const GroundTruthViewer = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedField, setSelectedField] = useState<string>("all");
   const [page, setPage] = useState(0);
+  const [isBackfilling, setIsBackfilling] = useState(false);
   const pageSize = 50;
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["ground-truth", selectedField, page],
@@ -40,6 +44,38 @@ export const GroundTruthViewer = () => {
       return { entries: data as GroundTruthEntry[], total: count || 0 };
     },
   });
+
+  // Count entries missing original_text
+  const { data: missingCount } = useQuery({
+    queryKey: ["ground-truth-missing-original"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("extraction_ground_truth")
+        .select("*", { count: "exact", head: true })
+        .is("original_text", null);
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  const handleBackfill = async () => {
+    try {
+      setIsBackfilling(true);
+      const { data, error } = await supabase.functions.invoke("backfill-ground-truth", {
+        body: {},
+      });
+
+      if (error) throw error;
+
+      toast.success(`Backfilled ${data.updated}/${data.processed} records. ${data.remaining > 0 ? `${data.remaining} remaining` : 'Complete!'}`);
+      queryClient.invalidateQueries({ queryKey: ["ground-truth"] });
+      queryClient.invalidateQueries({ queryKey: ["ground-truth-missing-original"] });
+    } catch (error: any) {
+      toast.error(error.message || "Failed to backfill");
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
 
   const fieldTypes = ["all", "event_title", "event_date", "event_time", "venue", "price", "category"];
 
@@ -89,6 +125,28 @@ export const GroundTruthViewer = () => {
 
   return (
     <div className="space-y-4">
+      {/* Backfill Alert */}
+      {missingCount && missingCount > 0 && (
+        <div className="flex items-center justify-between p-3 bg-amber-500/10 border border-amber-500/30 rounded-md">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <span className="text-sm text-amber-700">
+              {missingCount} records missing original_text - pattern learning won't work until backfilled
+            </span>
+          </div>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={handleBackfill}
+            disabled={isBackfilling}
+            className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10"
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${isBackfilling ? 'animate-spin' : ''}`} />
+            {isBackfilling ? 'Backfilling...' : 'Backfill Now'}
+          </Button>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
         <div className="flex items-center gap-2">
           <Database className="h-4 w-4 text-muted-foreground" />
@@ -141,8 +199,15 @@ export const GroundTruthViewer = () => {
                     {entry.field_name}
                   </Badge>
                   
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <p className="font-medium text-sm truncate">{entry.ground_truth_value}</p>
+                    {entry.original_text ? (
+                      <p className="text-xs text-muted-foreground truncate" title={entry.original_text}>
+                        📝 Raw: "{entry.original_text}"
+                      </p>
+                    ) : (
+                      <p className="text-xs text-amber-600">⚠️ Missing original text</p>
+                    )}
                   </div>
                   
                   <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
