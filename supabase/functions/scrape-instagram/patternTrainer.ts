@@ -33,8 +33,79 @@ function fieldToPatternType(fieldName: string): string {
 }
 
 /**
+ * Parse time string to HH:MM format for validation
+ */
+function parseTimeToHHMM(timeStr: string): string | null {
+  if (!timeStr) return null;
+  
+  const lower = timeStr.toLowerCase().trim();
+  
+  // Handle midnight
+  if (lower.includes('midnight') || lower.includes('12mn') || lower === '12 mn') {
+    return '00:00';
+  }
+  
+  // Handle noon
+  if (lower === 'noon' || lower === '12 noon' || lower === '12nn') {
+    return '12:00';
+  }
+  
+  // Parse standard time formats
+  const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!timeMatch) return null;
+  
+  let hour = parseInt(timeMatch[1], 10);
+  const minute = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+  const period = timeMatch[3]?.toLowerCase();
+  
+  if (period === 'pm' && hour < 12) hour += 12;
+  if (period === 'am' && hour === 12) hour = 0;
+  
+  return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Validate that original_text logically matches the normalized value
+ */
+function validateGroundTruth(
+  fieldName: string, 
+  originalText: string | null, 
+  normalizedValue: string
+): boolean {
+  if (!originalText || !normalizedValue) return false;
+  
+  // For time fields, verify the parsed time matches
+  if (fieldName === 'endTime' || fieldName === 'eventTime') {
+    const parsedTime = parseTimeToHHMM(originalText);
+    const normalizedHHMM = normalizedValue.substring(0, 5); // Handle HH:MM:SS format
+    
+    if (parsedTime && parsedTime !== normalizedHHMM) {
+      console.warn(`[PatternTrainer] Validation failed for ${fieldName}: "${originalText}" parses to ${parsedTime}, expected ${normalizedHHMM}`);
+      return false;
+    }
+  }
+  
+  // For date fields, we do a basic sanity check (contains right day number)
+  if (fieldName === 'eventDate' || fieldName === 'eventEndDate') {
+    const dayMatch = normalizedValue.match(/-(\d{2})$/);
+    if (dayMatch) {
+      const expectedDay = parseInt(dayMatch[1], 10);
+      const foundDays = originalText.match(/\d{1,2}/g);
+      if (foundDays && !foundDays.some(d => parseInt(d, 10) === expectedDay)) {
+        console.warn(`[PatternTrainer] Validation failed for ${fieldName}: "${originalText}" doesn't contain day ${expectedDay}`);
+        return false;
+      }
+    }
+  }
+  
+  return true;
+}
+
+/**
  * Find the original raw text in caption that corresponds to a normalized value
  * Returns the actual text found (e.g., "Dec 6" instead of "2025-12-06")
+ * 
+ * CRITICAL: For range fields (endTime, eventEndDate), extract the END value, not the start
  */
 function findOriginalTextInCaption(
   caption: string, 
@@ -45,33 +116,122 @@ function findOriginalTextInCaption(
   
   const text = caption;
   
-  // Date patterns - look for various date formats
-  if (fieldName === 'eventDate' || fieldName === 'eventEndDate') {
-    // Try to match date patterns in the caption
+  // ============================================
+  // END TIME - Extract the SECOND value in time ranges
+  // ============================================
+  if (fieldName === 'endTime') {
+    // Handle special time words first
+    const lower = text.toLowerCase();
+    if (lower.includes('midnight') || lower.includes('12mn') || lower.includes('12 mn')) {
+      if (normalizedValue === '00:00' || normalizedValue === '00:00:00') {
+        return 'midnight';
+      }
+    }
+    
+    // Time range patterns - capture END time (group 2)
+    const timeRangePatterns = [
+      // "10AM-9PM", "10AM - 9PM", "10AM to 9PM"
+      /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–to]+\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi,
+      // "10AM 'til 9PM", "10AM until 9PM"
+      /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s+(?:'til|until)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi,
+      // "doors 8PM, ends midnight"
+      /(?:ends?|closes?|until)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|midnight)/gi,
+    ];
+    
+    for (const pattern of timeRangePatterns) {
+      pattern.lastIndex = 0; // Reset regex state
+      const match = pattern.exec(text);
+      if (match) {
+        // Return the END part (group 2 if exists, else group 1 for single-capture patterns)
+        const endTime = match[2] || match[1];
+        if (endTime) {
+          const cleaned = endTime.trim();
+          // Validate it matches the normalized value
+          if (validateGroundTruth(fieldName, cleaned, normalizedValue)) {
+            return cleaned;
+          }
+        }
+      }
+    }
+    
+    // Fall through to regular time patterns but skip if we have a range
+    // (to avoid returning the start time)
+    if (text.match(/\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*[-–to]+\s*\d{1,2}/i)) {
+      return null; // Has a range but we couldn't extract - don't fallback to first time
+    }
+  }
+  
+  // ============================================
+  // END DATE - Extract the SECOND value in date ranges
+  // ============================================
+  if (fieldName === 'eventEndDate') {
+    // Date range patterns - capture END date
+    const dateRangePatterns = [
+      // "December 27-30" or "Dec 27-30" → return "December 30"
+      /((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[.\s]*)(\d{1,2})\s*[-–]\s*(\d{1,2})/gi,
+      // "Dec. 19–21" → return "Dec. 21"
+      /((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[.\s]+)(\d{1,2})\s*[-–]\s*(\d{1,2})/gi,
+      // "27-30 December" → return "30 December"
+      /(\d{1,2})\s*[-–]\s*(\d{1,2})\s+((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?))/gi,
+    ];
+    
+    for (const pattern of dateRangePatterns) {
+      pattern.lastIndex = 0;
+      const match = pattern.exec(text);
+      if (match) {
+        let endDateText: string;
+        
+        if (match[3] && match[3].match(/\d/)) {
+          // Pattern: "Month startDay-endDay" → "Month endDay"
+          endDateText = `${match[1].trim()} ${match[3]}`;
+        } else if (match[3] && !match[3].match(/\d/)) {
+          // Pattern: "startDay-endDay Month" → "endDay Month"
+          endDateText = `${match[2]} ${match[3].trim()}`;
+        } else {
+          endDateText = `${match[1].trim()} ${match[3]}`;
+        }
+        
+        if (validateGroundTruth(fieldName, endDateText, normalizedValue)) {
+          return endDateText;
+        }
+      }
+    }
+    
+    // Don't fall back to first date if there's a range
+    if (text.match(/\d{1,2}\s*[-–]\s*\d{1,2}/)) {
+      return null;
+    }
+  }
+  
+  // ============================================
+  // Regular date patterns (for eventDate, not endDate)
+  // ============================================
+  if (fieldName === 'eventDate') {
     const datePatterns = [
       // Month name formats: "Dec 6", "December 6", "Dec. 6"
       /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[.\s]+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*\d{4})?\b/gi,
       // Day first: "6 Dec", "6th December"
       /\b(\d{1,2})(?:st|nd|rd|th)?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b/gi,
-      // Numeric: "12/6", "12-06", "12.06"
-      /\b(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?\b/g,
       // Filipino months
       /\b(Enero|Pebrero|Marso|Abril|Mayo|Hunyo|Hulyo|Agosto|Setyembre|Oktubre|Nobyembre|Disyembre)\s+(\d{1,2})\b/gi,
     ];
     
     for (const pattern of datePatterns) {
-      const matches = text.matchAll(pattern);
-      for (const match of matches) {
-        // Return the first matching date text
-        if (match[0]) {
-          return match[0].trim();
+      pattern.lastIndex = 0;
+      const match = pattern.exec(text);
+      if (match && match[0]) {
+        const dateText = match[0].trim();
+        if (validateGroundTruth(fieldName, dateText, normalizedValue)) {
+          return dateText;
         }
       }
     }
   }
   
-  // Time patterns - look for various time formats
-  if (fieldName === 'eventTime' || fieldName === 'endTime') {
+  // ============================================
+  // Regular time patterns (for eventTime, not endTime)
+  // ============================================
+  if (fieldName === 'eventTime') {
     const timePatterns = [
       // Standard time: "6:00 PM", "6pm", "18:00"
       /\b(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)?\b/g,
@@ -81,16 +241,20 @@ function findOriginalTextInCaption(
     ];
     
     for (const pattern of timePatterns) {
-      const matches = text.matchAll(pattern);
-      for (const match of matches) {
-        if (match[0]) {
-          return match[0].trim();
+      pattern.lastIndex = 0;
+      const match = pattern.exec(text);
+      if (match && match[0]) {
+        const timeText = match[0].trim();
+        if (validateGroundTruth(fieldName, timeText, normalizedValue)) {
+          return timeText;
         }
       }
     }
   }
   
+  // ============================================
   // Price patterns
+  // ============================================
   if (fieldName === 'price') {
     const pricePatterns = [
       // PHP formats: "₱500", "PHP 500", "P500", "500 pesos"
@@ -102,16 +266,17 @@ function findOriginalTextInCaption(
     ];
     
     for (const pattern of pricePatterns) {
-      const matches = text.matchAll(pattern);
-      for (const match of matches) {
-        if (match[0]) {
-          return match[0].trim();
-        }
+      pattern.lastIndex = 0;
+      const match = pattern.exec(text);
+      if (match && match[0]) {
+        return match[0].trim();
       }
     }
   }
   
+  // ============================================
   // URL patterns
+  // ============================================
   if (fieldName === 'signupUrl') {
     const urlPatterns = [
       /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi,
@@ -119,31 +284,44 @@ function findOriginalTextInCaption(
     ];
     
     for (const pattern of urlPatterns) {
-      const matches = text.matchAll(pattern);
-      for (const match of matches) {
-        if (match[0]) {
-          return match[0].trim();
-        }
+      pattern.lastIndex = 0;
+      const match = pattern.exec(text);
+      if (match && match[0]) {
+        return match[0].trim();
       }
     }
   }
   
-  // Venue/location - look for 📍 emoji or "at" patterns
+  // ============================================
+  // Venue/location - stricter matching
+  // ============================================
   if (fieldName === 'locationName') {
-    const venuePatterns = [
-      /📍\s*([^\n]+?)(?:\n|$)/g,
-      /(?:at|@)\s+([A-Z][^\n,]+?)(?:\n|,|$)/g,
-      /venue:\s*([^\n]+?)(?:\n|$)/gi,
-    ];
+    // Priority 1: Check if normalized value appears EXACTLY in caption
+    if (caption.includes(normalizedValue)) {
+      return normalizedValue;
+    }
     
-    for (const pattern of venuePatterns) {
-      const matches = text.matchAll(pattern);
-      for (const match of matches) {
-        if (match[1]) {
-          return match[1].trim();
-        }
+    // Priority 2: Look for 📍 emoji pattern
+    const pinMatch = text.match(/📍\s*([^\n,]+?)(?:\n|,|$)/);
+    if (pinMatch && pinMatch[1]) {
+      const venue = pinMatch[1].trim();
+      // Only return if it looks like a venue (not hashtags/handles)
+      if (!venue.startsWith('#') && !venue.startsWith('@') && venue.length >= 3 && venue.length <= 80) {
+        return venue;
       }
     }
+    
+    // Priority 3: Look for "at [Venue]" or "sa [Venue]" patterns
+    const atMatch = text.match(/(?:^|\s)(?:at|sa)\s+([A-Z][A-Za-z0-9\s&']+?)(?:\n|[,.]|$)/m);
+    if (atMatch && atMatch[1]) {
+      const venue = atMatch[1].trim();
+      if (venue.length >= 3 && venue.length <= 60) {
+        return venue;
+      }
+    }
+    
+    // DON'T fall back to random text - return null instead
+    return null;
   }
   
   return null;
@@ -172,17 +350,7 @@ function extractRelevantSnippet(text: string, value: string, windowSize: number 
  * Save high-confidence AI results to extraction_ground_truth table
  * Now stores BOTH the normalized value AND the original raw text from caption
  * 
- * DB Schema:
- * - post_id: text (Instagram post ID)
- * - field_name: text
- * - ground_truth_value: text (normalized value, e.g., "2025-12-06")
- * - original_text: text (raw text from caption, e.g., "Dec 6")
- * - source: text (default 'admin_correction')
- * 
- * @param postId Post ID
- * @param caption Raw caption text
- * @param mergedResult Merged extraction result
- * @param supabase Supabase client
+ * CRITICAL: Validates that original_text matches normalized value before saving
  */
 export async function saveGroundTruth(
   postId: string,
@@ -220,37 +388,44 @@ export async function saveGroundTruth(
   // Handle price separately (numeric)
   if (mergedResult.price !== null && mergedResult.price !== undefined) {
     const originalText = findOriginalTextInCaption(caption, String(mergedResult.price), 'price');
-    records.push({
-      post_id: postId,
-      field_name: 'price',
-      ground_truth_value: String(mergedResult.price),
-      original_text: originalText,
-      source: 'ai_high_confidence',
-    });
-  }
-
-  // Add string fields
-  for (const field of fieldsToSave) {
-    if (field.value !== null && field.value !== undefined && field.value !== '') {
-      const originalText = findOriginalTextInCaption(caption, String(field.value), field.name);
+    if (originalText) {
       records.push({
         post_id: postId,
-        field_name: field.name,
-        ground_truth_value: String(field.value),
+        field_name: 'price',
+        ground_truth_value: String(mergedResult.price),
         original_text: originalText,
         source: 'ai_high_confidence',
       });
     }
   }
 
+  // Add string fields - only if validation passes
+  for (const field of fieldsToSave) {
+    if (field.value !== null && field.value !== undefined && field.value !== '') {
+      const originalText = findOriginalTextInCaption(caption, String(field.value), field.name);
+      
+      // Only save if we found valid original text that matches the normalized value
+      if (originalText && validateGroundTruth(field.name, originalText, String(field.value))) {
+        records.push({
+          post_id: postId,
+          field_name: field.name,
+          ground_truth_value: String(field.value),
+          original_text: originalText,
+          source: 'ai_high_confidence',
+        });
+      } else {
+        console.log(`[PatternTrainer] Skipping ${field.name} - no valid original_text found for "${field.value}"`);
+      }
+    }
+  }
+
   if (records.length === 0) {
-    console.log(`[PatternTrainer] No fields to save for post ${postId} (confidence: ${confidence})`);
+    console.log(`[PatternTrainer] No valid fields to save for post ${postId} (confidence: ${confidence})`);
     return;
   }
 
   // Log what we're about to insert for debugging
-  console.log(`[PatternTrainer] Attempting to save ${records.length} ground truth records for post ${postId}`);
-  console.log(`[PatternTrainer] Records with original_text:`, JSON.stringify(records, null, 2));
+  console.log(`[PatternTrainer] Saving ${records.length} validated ground truth records for post ${postId}`);
 
   try {
     const { data, error } = await supabase
@@ -260,10 +435,8 @@ export async function saveGroundTruth(
 
     if (error) {
       console.error(`[PatternTrainer] Failed to save ground truth for ${postId}:`, error.message);
-      console.error(`[PatternTrainer] Error details:`, JSON.stringify(error, null, 2));
     } else {
-      const withOriginal = records.filter(r => r.original_text).length;
-      console.log(`[PatternTrainer] ✅ Saved ${records.length} ground truth records for post ${postId} (${withOriginal} with original_text)`);
+      console.log(`[PatternTrainer] ✅ Saved ${records.length} ground truth records for post ${postId}`);
     }
   } catch (err) {
     console.error('[PatternTrainer] Exception saving ground truth:', err);
@@ -272,22 +445,6 @@ export async function saveGroundTruth(
 
 /**
  * Train patterns by comparing regex results to AI results
- * 
- * - If regex matched AI → increment pattern success_count
- * - If regex was wrong → increment pattern failure_count
- * - If no pattern but AI found value → queue pattern suggestion
- * 
- * DB Schema for pattern_suggestions:
- * - pattern_type: text
- * - suggested_regex: text (required - use placeholder)
- * - sample_text: text (the ORIGINAL raw text, not normalized)
- * - expected_value: text (normalized value for validation)
- * - status: text (default 'pending')
- * 
- * @param postId Post ID
- * @param caption Raw caption text
- * @param mergedResult Merged extraction result
- * @param supabase Supabase client
  */
 export async function trainPatternsFromComparison(
   postId: string,
@@ -345,21 +502,20 @@ export async function trainPatternsFromComparison(
       // No pattern matched, but AI found a value
       // Find the ORIGINAL text in caption for this value
       const originalText = findOriginalTextInCaption(caption, String(finalValue), String(field.valueKey));
-      const patternType = fieldToPatternType(String(field.valueKey));
       
-      // Use original text for sample_text if found, otherwise use a snippet
-      const sampleText = originalText || extractRelevantSnippet(caption, String(finalValue));
-      
-      patternSuggestions.push({
-        pattern_type: patternType,
-        suggested_regex: 'NEEDS_GENERATION',
-        sample_text: sampleText,
-        expected_value: String(finalValue),
-        status: 'pending',
-      });
-      
-      if (originalText) {
-        console.log(`[PatternTrainer] Found original text "${originalText}" for ${field.valueKey}="${finalValue}"`);
+      // Only create suggestion if we found valid original text
+      if (originalText && validateGroundTruth(String(field.valueKey), originalText, String(finalValue))) {
+        const patternType = fieldToPatternType(String(field.valueKey));
+        
+        patternSuggestions.push({
+          pattern_type: patternType,
+          suggested_regex: 'NEEDS_GENERATION',
+          sample_text: originalText,
+          expected_value: String(finalValue),
+          status: 'pending',
+        });
+        
+        console.log(`[PatternTrainer] Queuing suggestion: "${originalText}" → "${finalValue}" (${field.valueKey})`);
       }
     }
   }
@@ -367,10 +523,8 @@ export async function trainPatternsFromComparison(
   // Update pattern stats
   for (const update of patternUpdates) {
     try {
-      // Increment success or failure count
       const column = update.success ? 'success_count' : 'failure_count';
       
-      // Fetch current counts
       const { data: pattern, error: fetchError } = await supabase
         .from('extraction_patterns')
         .select('id, success_count, failure_count, is_active')
@@ -405,19 +559,15 @@ export async function trainPatternsFromComparison(
         updateData.is_active = false;
         console.log(
           `[PatternTrainer] Auto-disabled failing pattern ${pattern.id} ` +
-          `(${newSuccessCount} successes, ${newFailureCount} failures, ` +
-          `${((newFailureCount / totalAttempts) * 100).toFixed(1)}% failure rate)`
+          `(${newSuccessCount} successes, ${newFailureCount} failures)`
         );
       }
 
-      const { error: updateError } = await supabase
+      await supabase
         .from('extraction_patterns')
         .update(updateData)
         .eq('id', update.patternId);
 
-      if (updateError) {
-        console.error(`Failed to update pattern ${update.patternId}:`, updateError.message);
-      }
     } catch (err) {
       console.error(`Error updating pattern ${update.patternId}:`, err);
     }
@@ -425,34 +575,20 @@ export async function trainPatternsFromComparison(
 
   // Queue pattern suggestions
   if (patternSuggestions.length > 0) {
-    console.log(`[PatternTrainer] Attempting to queue ${patternSuggestions.length} pattern suggestions with original text`);
-    console.log(`[PatternTrainer] Suggestions:`, JSON.stringify(patternSuggestions, null, 2));
+    console.log(`[PatternTrainer] Queueing ${patternSuggestions.length} validated pattern suggestions`);
     
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('pattern_suggestions')
-        .insert(patternSuggestions)
-        .select();
+        .insert(patternSuggestions);
 
       if (error) {
-        console.error(`[PatternTrainer] Failed to queue pattern suggestions:`, error.message);
-        console.error(`[PatternTrainer] Error details:`, JSON.stringify(error, null, 2));
+        console.error(`[PatternTrainer] Failed to queue suggestions:`, error.message);
       } else {
-        console.log(`[PatternTrainer] ✅ Queued ${patternSuggestions.length} pattern suggestions for post ${postId}`);
+        console.log(`[PatternTrainer] ✅ Queued ${patternSuggestions.length} suggestions for post ${postId}`);
       }
     } catch (err) {
-      console.error('[PatternTrainer] Exception queuing pattern suggestions:', err);
+      console.error('[PatternTrainer] Exception queuing suggestions:', err);
     }
-  }
-
-  const successUpdates = patternUpdates.filter(u => u.success).length;
-  const failureUpdates = patternUpdates.filter(u => !u.success).length;
-  
-  if (patternUpdates.length > 0 || patternSuggestions.length > 0) {
-    console.log(
-      `[PatternTrainer] Training for ${postId}: ` +
-      `${successUpdates} successes, ${failureUpdates} failures, ` +
-      `${patternSuggestions.length} suggestions`
-    );
   }
 }
