@@ -112,6 +112,16 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                 is_event: true,
                 published_event_id: event.id,
                 category: event.category,
+                // New fields from published_events
+                is_free: event.is_free,
+                price: event.price,
+                price_min: event.price_min,
+                price_max: event.price_max,
+                price_notes: event.price_notes,
+                event_status: event.event_status,
+                availability_status: event.availability_status,
+                is_recurring: event.is_recurring,
+                recurrence_pattern: event.recurrence_pattern,
                 instagram_accounts: {
                   username: event.instagram_account_username || event.instagram_accounts?.username || 'unknown',
                   display_name: null,

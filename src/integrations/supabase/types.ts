@@ -1192,6 +1192,7 @@ export type Database = {
       }
       published_events: {
         Row: {
+          availability_status: string | null
           caption: string | null
           category: string | null
           comments_count: number | null
@@ -1201,6 +1202,7 @@ export type Database = {
           end_time: string | null
           event_date: string
           event_end_date: string | null
+          event_status: string | null
           event_time: string | null
           event_title: string
           id: string
@@ -1216,6 +1218,9 @@ export type Database = {
           location_lng: number
           location_name: string
           price: number | null
+          price_max: number | null
+          price_min: number | null
+          price_notes: string | null
           recurrence_pattern: string | null
           signup_url: string | null
           source_event_id: string | null
@@ -1227,6 +1232,7 @@ export type Database = {
           verified: boolean | null
         }
         Insert: {
+          availability_status?: string | null
           caption?: string | null
           category?: string | null
           comments_count?: number | null
@@ -1236,6 +1242,7 @@ export type Database = {
           end_time?: string | null
           event_date: string
           event_end_date?: string | null
+          event_status?: string | null
           event_time?: string | null
           event_title: string
           id?: string
@@ -1251,6 +1258,9 @@ export type Database = {
           location_lng: number
           location_name: string
           price?: number | null
+          price_max?: number | null
+          price_min?: number | null
+          price_notes?: string | null
           recurrence_pattern?: string | null
           signup_url?: string | null
           source_event_id?: string | null
@@ -1262,6 +1272,7 @@ export type Database = {
           verified?: boolean | null
         }
         Update: {
+          availability_status?: string | null
           caption?: string | null
           category?: string | null
           comments_count?: number | null
@@ -1271,6 +1282,7 @@ export type Database = {
           end_time?: string | null
           event_date?: string
           event_end_date?: string | null
+          event_status?: string | null
           event_time?: string | null
           event_title?: string
           id?: string
@@ -1286,6 +1298,9 @@ export type Database = {
           location_lng?: number
           location_name?: string
           price?: number | null
+          price_max?: number | null
+          price_min?: number | null
+          price_notes?: string | null
           recurrence_pattern?: string | null
           signup_url?: string | null
           source_event_id?: string | null
