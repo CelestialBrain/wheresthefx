@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Eye, EyeOff, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Eye, CalendarDays } from "lucide-react";
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { EventScheduleEditor, ScheduleDay } from "./EventScheduleEditor";
+import { Switch } from "@/components/ui/switch";
 
 // Helper component to compare extracted vs current values
 const CompareValue = ({ extracted, current }: { extracted: any; current: any }) => {
@@ -102,6 +104,28 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     lat: number | null;
     lng: number | null;
   } | null>(null);
+
+  // Multi-day schedule mode
+  const [isMultiDay, setIsMultiDay] = useState(false);
+  const [scheduleData, setScheduleData] = useState<ScheduleDay[]>([]);
+
+  // Auto-detect multi-day from AI extraction
+  useEffect(() => {
+    if (post.event_end_date && post.event_date && post.event_end_date !== post.event_date) {
+      setIsMultiDay(true);
+      // Initialize schedule with start and end dates
+      const initialSchedule: ScheduleDay[] = [
+        { date: post.event_date, timeSlots: [{ time: post.event_time || "", label: "" }] },
+      ];
+      if (post.event_end_date !== post.event_date) {
+        initialSchedule.push({ 
+          date: post.event_end_date, 
+          timeSlots: [{ time: post.end_time || post.event_time || "", label: "" }] 
+        });
+      }
+      setScheduleData(initialSchedule);
+    }
+  }, []);
 
   const handleLocationSave = (correction: any) => {
     setLocationCorrection(correction);
@@ -203,14 +227,25 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       // Log all field corrections for pattern learning
       await logCorrections(location);
 
+      // Determine dates based on mode
+      const primaryDate = isMultiDay && scheduleData.length > 0 
+        ? scheduleData[0].date 
+        : eventData.event_date;
+      const primaryTime = isMultiDay && scheduleData.length > 0 && scheduleData[0].timeSlots.length > 0
+        ? scheduleData[0].timeSlots[0].time
+        : eventData.event_time;
+      const endDate = isMultiDay && scheduleData.length > 1
+        ? scheduleData[scheduleData.length - 1].date
+        : eventData.event_end_date;
+
       // Update post with all event data
       const { error: updateError } = await supabase
         .from("instagram_posts")
         .update({
           event_title: eventData.event_title,
-          event_date: eventData.event_date,
-          event_time: eventData.event_time || null,
-          event_end_date: eventData.event_end_date || null,
+          event_date: primaryDate,
+          event_time: primaryTime || null,
+          event_end_date: endDate || null,
           end_time: eventData.end_time || null,
           location_name: location.venueName,
           location_address: location.streetAddress,
@@ -226,6 +261,34 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         .eq("id", post.id);
 
       if (updateError) throw updateError;
+
+      // Save multi-day schedule to event_dates table
+      if (isMultiDay && scheduleData.length > 0) {
+        // First delete any existing event_dates for this post
+        await supabase.from("event_dates").delete().eq("instagram_post_id", post.id);
+        
+        // Insert all schedule entries
+        const eventDatesInserts = scheduleData.flatMap(day => 
+          day.timeSlots.map(slot => ({
+            instagram_post_id: post.id,
+            event_date: day.date,
+            event_time: slot.time || null,
+            venue_name: day.venueName || location.venueName,
+            venue_address: day.venueAddress || location.streetAddress,
+          }))
+        );
+
+        if (eventDatesInserts.length > 0) {
+          const { error: datesError } = await supabase
+            .from("event_dates")
+            .insert(eventDatesInserts);
+          
+          if (datesError) {
+            console.error("Failed to save event dates:", datesError);
+            // Don't block publish, just log
+          }
+        }
+      }
 
       // Now publish to published_events table
       const { error: publishError } = await supabase.functions.invoke("publish-event", {
@@ -252,14 +315,25 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       lng: post.location_lng,
     };
 
+    // Determine dates based on mode
+    const primaryDate = isMultiDay && scheduleData.length > 0 
+      ? scheduleData[0].date 
+      : eventData.event_date;
+    const primaryTime = isMultiDay && scheduleData.length > 0 && scheduleData[0].timeSlots.length > 0
+      ? scheduleData[0].timeSlots[0].time
+      : eventData.event_time;
+    const endDate = isMultiDay && scheduleData.length > 1
+      ? scheduleData[scheduleData.length - 1].date
+      : eventData.event_end_date;
+
     try {
       const { error } = await supabase
         .from("instagram_posts")
         .update({
           event_title: eventData.event_title,
-          event_date: eventData.event_date,
-          event_time: eventData.event_time || null,
-          event_end_date: eventData.event_end_date || null,
+          event_date: primaryDate,
+          event_time: primaryTime || null,
+          event_end_date: endDate || null,
           end_time: eventData.end_time || null,
           location_name: location.venueName,
           location_address: location.streetAddress,
@@ -276,6 +350,25 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
 
       if (error) throw error;
 
+      // Save multi-day schedule to event_dates table
+      if (isMultiDay && scheduleData.length > 0) {
+        await supabase.from("event_dates").delete().eq("instagram_post_id", post.id);
+        
+        const eventDatesInserts = scheduleData.flatMap(day => 
+          day.timeSlots.map(slot => ({
+            instagram_post_id: post.id,
+            event_date: day.date,
+            event_time: slot.time || null,
+            venue_name: day.venueName || location.venueName,
+            venue_address: day.venueAddress || location.streetAddress,
+          }))
+        );
+
+        if (eventDatesInserts.length > 0) {
+          await supabase.from("event_dates").insert(eventDatesInserts);
+        }
+      }
+
       toast.success("Saved changes");
     } catch (error: any) {
       toast.error(`Failed to save: ${error.message}`);
@@ -284,9 +377,13 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     }
   };
 
+  const hasValidDate = isMultiDay 
+    ? scheduleData.length > 0 && scheduleData.some(d => d.date)
+    : !!eventData.event_date;
+
   const isValid = 
     eventData.event_title.trim() &&
-    eventData.event_date &&
+    hasValidDate &&
     (locationCorrection || (post.location_lat && post.location_lng));
 
   return (
@@ -417,78 +514,116 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
             />
           </div>
 
-          {/* Start Date & Time */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="date">Start Date *</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="date"
-                  type="date"
-                  className="pl-10"
-                  value={eventData.event_date}
-                  onChange={(e) => {
-                    const newDate = e.target.value;
-                    setEventData({ 
-                      ...eventData, 
-                      event_date: newDate,
-                      // Clear end date if it's before start date
-                      event_end_date: eventData.event_end_date && newDate > eventData.event_end_date 
-                        ? "" 
-                        : eventData.event_end_date
-                    });
-                  }}
-                />
-              </div>
+          {/* Schedule Mode Toggle */}
+          <div className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-md">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-muted-foreground" />
+              <Label htmlFor="multi-day-toggle" className="text-sm font-medium cursor-pointer">
+                Multi-day event
+              </Label>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="time">Start Time</Label>
-              <div className="relative">
-                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="time"
-                  type="time"
-                  className="pl-10"
-                  value={eventData.event_time}
-                  onChange={(e) => setEventData({ ...eventData, event_time: e.target.value })}
-                />
-              </div>
-            </div>
+            <Switch
+              id="multi-day-toggle"
+              checked={isMultiDay}
+              onCheckedChange={(checked) => {
+                setIsMultiDay(checked);
+                if (checked && scheduleData.length === 0 && eventData.event_date) {
+                  // Initialize schedule from current single date
+                  setScheduleData([{
+                    date: eventData.event_date,
+                    timeSlots: [{ time: eventData.event_time || "", label: "" }]
+                  }]);
+                }
+              }}
+            />
           </div>
 
-          {/* End Date & Time */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="end-date">End Date (optional)</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="end-date"
-                  type="date"
-                  className="pl-10"
-                  value={eventData.event_end_date}
-                  min={eventData.event_date}
-                  onChange={(e) => setEventData({ ...eventData, event_end_date: e.target.value })}
-                />
-              </div>
-            </div>
+          {/* Single Day Mode */}
+          {!isMultiDay && (
+            <>
+              {/* Start Date & Time */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="date">Start Date *</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="date"
+                      type="date"
+                      className="pl-10"
+                      value={eventData.event_date}
+                      onChange={(e) => {
+                        const newDate = e.target.value;
+                        setEventData({ 
+                          ...eventData, 
+                          event_date: newDate,
+                          event_end_date: eventData.event_end_date && newDate > eventData.event_end_date 
+                            ? "" 
+                            : eventData.event_end_date
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="end-time">End Time (optional)</Label>
-              <div className="relative">
-                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="end-time"
-                  type="time"
-                  className="pl-10"
-                  value={eventData.end_time}
-                  onChange={(e) => setEventData({ ...eventData, end_time: e.target.value })}
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="time">Start Time</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="time"
+                      type="time"
+                      className="pl-10"
+                      value={eventData.event_time}
+                      onChange={(e) => setEventData({ ...eventData, event_time: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+
+              {/* End Date & Time */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="end-date">End Date (optional)</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="end-date"
+                      type="date"
+                      className="pl-10"
+                      value={eventData.event_end_date}
+                      min={eventData.event_date}
+                      onChange={(e) => setEventData({ ...eventData, event_end_date: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="end-time">End Time (optional)</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="end-time"
+                      type="time"
+                      className="pl-10"
+                      value={eventData.end_time}
+                      onChange={(e) => setEventData({ ...eventData, end_time: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Multi-Day Mode - Schedule Editor */}
+          {isMultiDay && (
+            <EventScheduleEditor
+              schedule={scheduleData}
+              onScheduleChange={setScheduleData}
+              defaultVenue={locationCorrection?.venueName || post.location_name || ""}
+              defaultAddress={locationCorrection?.streetAddress || post.location_address || ""}
+            />
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
