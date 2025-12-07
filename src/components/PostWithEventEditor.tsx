@@ -5,11 +5,32 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Image as ImageIcon } from "lucide-react";
+import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Eye, EyeOff, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+// Helper component to compare extracted vs current values
+const CompareValue = ({ extracted, current }: { extracted: any; current: any }) => {
+  const extractedStr = extracted?.toString() || '(null)';
+  const currentStr = current?.toString() || '(null)';
+  const matches = extractedStr === currentStr || 
+    (extracted === null && current === null) ||
+    (extracted === undefined && current === undefined);
+  
+  return (
+    <span className={`font-mono ${matches ? 'text-green-600' : 'text-amber-600'}`}>
+      {extractedStr}
+      {!matches && (
+        <span className="ml-1 text-muted-foreground">
+          → {currentStr}
+        </span>
+      )}
+    </span>
+  );
+};
 
 interface PostWithEventEditorProps {
   post: {
@@ -29,6 +50,11 @@ interface PostWithEventEditorProps {
     location_lng: number | null;
     signup_url: string | null;
     ocr_confidence: number | null;
+    ocr_text?: string | null;
+    ai_extraction?: any;
+    ai_confidence?: number | null;
+    ai_reasoning?: string | null;
+    extraction_method?: string | null;
     instagram_account: { username: string } | null;
     // Price fields - read from database
     is_free?: boolean;
@@ -289,6 +315,96 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Source Comparison View - OCR vs Caption vs Extracted */}
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-between">
+              <span className="flex items-center gap-2">
+                <Eye className="w-4 h-4" />
+                Source Comparison (Debug)
+              </span>
+              <Badge variant="secondary" className="text-xs">
+                {post.extraction_method || 'unknown'}
+              </Badge>
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3 space-y-3">
+            {/* OCR Text */}
+            {post.ocr_text && (
+              <div className="rounded-md border p-3 bg-muted/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline" className="text-xs">📷 OCR Text</Badge>
+                  {post.ocr_confidence && (
+                    <span className="text-xs text-muted-foreground">
+                      {(post.ocr_confidence * 100).toFixed(0)}% confidence
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+                  {post.ocr_text}
+                </p>
+              </div>
+            )}
+            
+            {/* Caption */}
+            <div className="rounded-md border p-3 bg-muted/30">
+              <Badge variant="outline" className="text-xs mb-2">📝 Caption</Badge>
+              <p className="text-xs font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+                {post.caption || '(No caption)'}
+              </p>
+            </div>
+            
+            {/* AI Extraction Results */}
+            {post.ai_extraction && (
+              <div className="rounded-md border p-3 bg-muted/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline" className="text-xs">🤖 AI Extracted</Badge>
+                  {post.ai_confidence && (
+                    <span className={`text-xs ${post.ai_confidence >= 0.8 ? 'text-green-600' : post.ai_confidence >= 0.6 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {(post.ai_confidence * 100).toFixed(0)}% confidence
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">Date:</span>
+                    <CompareValue 
+                      extracted={post.ai_extraction?.eventDate} 
+                      current={eventData.event_date}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">Time:</span>
+                    <CompareValue 
+                      extracted={post.ai_extraction?.eventTime} 
+                      current={eventData.event_time}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">Venue:</span>
+                    <CompareValue 
+                      extracted={post.ai_extraction?.locationName} 
+                      current={post.location_name}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">Price:</span>
+                    <CompareValue 
+                      extracted={post.ai_extraction?.price} 
+                      current={eventData.price}
+                    />
+                  </div>
+                </div>
+                {post.ai_reasoning && (
+                  <p className="text-xs text-muted-foreground mt-2 italic">
+                    {post.ai_reasoning}
+                  </p>
+                )}
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+
         {/* Event Details */}
         <div className="space-y-3">
           <div className="space-y-2">
