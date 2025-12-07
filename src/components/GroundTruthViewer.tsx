@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Database, Download, ChevronLeft, ChevronRight, RefreshCw, AlertCircle } from "lucide-react";
+import { Search, Database, Download, ChevronLeft, ChevronRight, RefreshCw, AlertCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface GroundTruthEntry {
@@ -23,6 +23,7 @@ export const GroundTruthViewer = () => {
   const [selectedField, setSelectedField] = useState<string>("all");
   const [page, setPage] = useState(0);
   const [isBackfilling, setIsBackfilling] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const pageSize = 50;
   const queryClient = useQueryClient();
 
@@ -74,6 +75,32 @@ export const GroundTruthViewer = () => {
       toast.error(error.message || "Failed to backfill");
     } finally {
       setIsBackfilling(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm("Are you sure you want to delete ALL ground truth records and pattern suggestions? This cannot be undone.")) {
+      return;
+    }
+    
+    try {
+      setIsClearing(true);
+      
+      // Delete ground truth and pattern suggestions
+      const { error: gtError } = await supabase.from("extraction_ground_truth").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (gtError) throw gtError;
+      
+      const { error: psError } = await supabase.from("pattern_suggestions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (psError) throw psError;
+      
+      toast.success("Cleared all ground truth and pattern suggestions");
+      queryClient.invalidateQueries({ queryKey: ["ground-truth"] });
+      queryClient.invalidateQueries({ queryKey: ["ground-truth-missing-original"] });
+      queryClient.invalidateQueries({ queryKey: ["pattern-suggestions"] });
+    } catch (error: any) {
+      toast.error(error.message || "Failed to clear data");
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -179,6 +206,16 @@ export const GroundTruthViewer = () => {
           <Button variant="outline" size="sm" onClick={handleExport} className="h-9">
             <Download className="h-4 w-4 mr-1" />
             Export
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleClearAll}
+            disabled={isClearing}
+            className="h-9 text-destructive hover:bg-destructive/10 border-destructive/30"
+          >
+            <Trash2 className={`h-4 w-4 mr-1 ${isClearing ? 'animate-spin' : ''}`} />
+            {isClearing ? 'Clearing...' : 'Clear All'}
           </Button>
         </div>
       </div>
