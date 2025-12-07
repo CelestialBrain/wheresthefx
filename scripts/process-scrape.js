@@ -270,7 +270,7 @@ Respond in JSON only:
 /**
  * Send batch of processed posts to Edge Function
  */
-async function sendBatchToEdgeFunction(posts, runId, batchNumber, totalBatches) {
+async function sendBatchToEdgeFunction(posts, runId, batchNumber, totalBatches, preFilterRejections = []) {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/scrape-instagram`, {
     method: 'POST',
     headers: {
@@ -285,6 +285,8 @@ async function sendBatchToEdgeFunction(posts, runId, batchNumber, totalBatches) 
       isLastBatch: batchNumber === totalBatches,
       batchNumber: batchNumber,
       totalBatches: totalBatches,
+      // Only include pre-filter rejections on first batch
+      ...(batchNumber === 1 && preFilterRejections.length > 0 && { preFilterRejections }),
     }),
   });
 
@@ -415,20 +417,35 @@ async function main() {
     process.exit(1);
   }
   
-  // Filter out posts without valid identifiers or images
+  // Filter out posts without valid identifiers or images, and collect rejections
+  const preFilterRejections = [];
   const validPosts = posts.filter(post => {
     const hasIdentifier = post.shortCode || post.id;
     const hasImage = post.displayUrl || post.imageUrl;
-    if (!hasIdentifier) {
-      console.log(`  ⚠️ Skipping post without identifier`);
+    
+    if (!hasIdentifier || !hasImage) {
+      const reason = !hasIdentifier ? 'MISSING_IDENTIFIER' : 'MISSING_IMAGE';
+      console.log(`  ⚠️ Skipping post: ${reason}`);
+      
+      // Collect rejection data for database logging
+      preFilterRejections.push({
+        reason: reason,
+        rawData: {
+          availableKeys: Object.keys(post).slice(0, 15), // First 15 keys for context
+          shortCode: post.shortCode || null,
+          id: post.id || null,
+          hasDisplayUrl: !!post.displayUrl,
+          hasImageUrl: !!post.imageUrl,
+          ownerUsername: post.ownerUsername || null,
+          type: post.type || null,
+        }
+      });
+      return false;
     }
-    if (!hasImage) {
-      console.log(`  ⚠️ Skipping post without image: ${post.shortCode || post.id || 'unknown'}`);
-    }
-    return hasIdentifier && hasImage;
+    return true;
   });
   
-  const skippedCount = posts.length - validPosts.length;
+  const skippedCount = preFilterRejections.length;
   if (skippedCount > 0) {
     console.log(`  ⚠️ Skipped ${skippedCount} posts without valid identifier or image`);
   }
@@ -477,7 +494,8 @@ async function main() {
     // Send batch to Edge Function for database storage
     try {
       console.log(`\n  📤 Sending batch ${batchNum}/${totalBatches} to Edge Function...`);
-      const response = await sendBatchToEdgeFunction(processedPosts, runId, batchNum, totalBatches);
+      // Pass preFilterRejections only on first batch
+      const response = await sendBatchToEdgeFunction(processedPosts, runId, batchNum, totalBatches, preFilterRejections);
       console.log(`  ✅ Batch saved: ${response.saved || 0} posts`);
     } catch (err) {
       console.log(`  ❌ Edge function error: ${err.message}`);
