@@ -33,6 +33,123 @@ function fieldToPatternType(fieldName: string): string {
 }
 
 /**
+ * Find the original raw text in caption that corresponds to a normalized value
+ * Returns the actual text found (e.g., "Dec 6" instead of "2025-12-06")
+ */
+function findOriginalTextInCaption(
+  caption: string, 
+  normalizedValue: string, 
+  fieldName: string
+): string | null {
+  if (!caption || !normalizedValue) return null;
+  
+  const text = caption;
+  
+  // Date patterns - look for various date formats
+  if (fieldName === 'eventDate' || fieldName === 'eventEndDate') {
+    // Try to match date patterns in the caption
+    const datePatterns = [
+      // Month name formats: "Dec 6", "December 6", "Dec. 6"
+      /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[.\s]+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*\d{4})?\b/gi,
+      // Day first: "6 Dec", "6th December"
+      /\b(\d{1,2})(?:st|nd|rd|th)?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b/gi,
+      // Numeric: "12/6", "12-06", "12.06"
+      /\b(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?\b/g,
+      // Filipino months
+      /\b(Enero|Pebrero|Marso|Abril|Mayo|Hunyo|Hulyo|Agosto|Setyembre|Oktubre|Nobyembre|Disyembre)\s+(\d{1,2})\b/gi,
+    ];
+    
+    for (const pattern of datePatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        // Return the first matching date text
+        if (match[0]) {
+          return match[0].trim();
+        }
+      }
+    }
+  }
+  
+  // Time patterns - look for various time formats
+  if (fieldName === 'eventTime' || fieldName === 'endTime') {
+    const timePatterns = [
+      // Standard time: "6:00 PM", "6pm", "18:00"
+      /\b(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)?\b/g,
+      /\b(\d{1,2})\s*(am|pm|AM|PM)\b/g,
+      // Filipino time: "alas-6", "alas 8 ng gabi"
+      /\balas[- ]?(\d{1,2})(?:\s*(?:ng\s*)?(umaga|gabi|hapon))?\b/gi,
+    ];
+    
+    for (const pattern of timePatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        if (match[0]) {
+          return match[0].trim();
+        }
+      }
+    }
+  }
+  
+  // Price patterns
+  if (fieldName === 'price') {
+    const pricePatterns = [
+      // PHP formats: "₱500", "PHP 500", "P500", "500 pesos"
+      /[₱P][\s]?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g,
+      /PHP[\s]?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/gi,
+      /(\d{1,3}(?:,\d{3})*)\s*(?:pesos?|php)/gi,
+      // Free indicators
+      /\bfree\s*(?:entry|entrance|admission)?\b/gi,
+    ];
+    
+    for (const pattern of pricePatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        if (match[0]) {
+          return match[0].trim();
+        }
+      }
+    }
+  }
+  
+  // URL patterns
+  if (fieldName === 'signupUrl') {
+    const urlPatterns = [
+      /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi,
+      /(?:bit\.ly|tinyurl\.com|forms\.gle|eventbrite\.com|fb\.me|linktr\.ee)[^\s<>"{}|\\^`\[\]]+/gi,
+    ];
+    
+    for (const pattern of urlPatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        if (match[0]) {
+          return match[0].trim();
+        }
+      }
+    }
+  }
+  
+  // Venue/location - look for 📍 emoji or "at" patterns
+  if (fieldName === 'locationName') {
+    const venuePatterns = [
+      /📍\s*([^\n]+?)(?:\n|$)/g,
+      /(?:at|@)\s+([A-Z][^\n,]+?)(?:\n|,|$)/g,
+      /venue:\s*([^\n]+?)(?:\n|$)/gi,
+    ];
+    
+    for (const pattern of venuePatterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        if (match[1]) {
+          return match[1].trim();
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Extract a short, relevant snippet from text around a value
  */
 function extractRelevantSnippet(text: string, value: string, windowSize: number = 100): string {
@@ -53,11 +170,13 @@ function extractRelevantSnippet(text: string, value: string, windowSize: number 
 
 /**
  * Save high-confidence AI results to extraction_ground_truth table
+ * Now stores BOTH the normalized value AND the original raw text from caption
  * 
  * DB Schema:
- * - post_id: uuid
+ * - post_id: text (Instagram post ID)
  * - field_name: text
- * - ground_truth_value: text (NOT correct_value)
+ * - ground_truth_value: text (normalized value, e.g., "2025-12-06")
+ * - original_text: text (raw text from caption, e.g., "Dec 6")
  * - source: text (default 'admin_correction')
  * 
  * @param postId Post ID
@@ -81,6 +200,7 @@ export async function saveGroundTruth(
     post_id: string;
     field_name: string;
     ground_truth_value: string;
+    original_text: string | null;
     source: string;
   }> = [];
 
@@ -99,10 +219,12 @@ export async function saveGroundTruth(
 
   // Handle price separately (numeric)
   if (mergedResult.price !== null && mergedResult.price !== undefined) {
+    const originalText = findOriginalTextInCaption(caption, String(mergedResult.price), 'price');
     records.push({
       post_id: postId,
       field_name: 'price',
       ground_truth_value: String(mergedResult.price),
+      original_text: originalText,
       source: 'ai_high_confidence',
     });
   }
@@ -110,10 +232,12 @@ export async function saveGroundTruth(
   // Add string fields
   for (const field of fieldsToSave) {
     if (field.value !== null && field.value !== undefined && field.value !== '') {
+      const originalText = findOriginalTextInCaption(caption, String(field.value), field.name);
       records.push({
         post_id: postId,
         field_name: field.name,
         ground_truth_value: String(field.value),
+        original_text: originalText,
         source: 'ai_high_confidence',
       });
     }
@@ -126,7 +250,7 @@ export async function saveGroundTruth(
 
   // Log what we're about to insert for debugging
   console.log(`[PatternTrainer] Attempting to save ${records.length} ground truth records for post ${postId}`);
-  console.log(`[PatternTrainer] Records:`, JSON.stringify(records, null, 2));
+  console.log(`[PatternTrainer] Records with original_text:`, JSON.stringify(records, null, 2));
 
   try {
     const { data, error } = await supabase
@@ -138,8 +262,8 @@ export async function saveGroundTruth(
       console.error(`[PatternTrainer] Failed to save ground truth for ${postId}:`, error.message);
       console.error(`[PatternTrainer] Error details:`, JSON.stringify(error, null, 2));
     } else {
-      console.log(`[PatternTrainer] ✅ Saved ${records.length} ground truth records for post ${postId}`);
-      console.log(`[PatternTrainer] Inserted data:`, JSON.stringify(data, null, 2));
+      const withOriginal = records.filter(r => r.original_text).length;
+      console.log(`[PatternTrainer] ✅ Saved ${records.length} ground truth records for post ${postId} (${withOriginal} with original_text)`);
     }
   } catch (err) {
     console.error('[PatternTrainer] Exception saving ground truth:', err);
@@ -156,8 +280,8 @@ export async function saveGroundTruth(
  * DB Schema for pattern_suggestions:
  * - pattern_type: text
  * - suggested_regex: text (required - use placeholder)
- * - sample_text: text (NOT raw_text)
- * - expected_value: text (NOT correct_value)
+ * - sample_text: text (the ORIGINAL raw text, not normalized)
+ * - expected_value: text (normalized value for validation)
  * - status: text (default 'pending')
  * 
  * @param postId Post ID
@@ -219,17 +343,24 @@ export async function trainPatternsFromComparison(
       }
     } else if (source === 'ai' && finalValue !== null && finalValue !== undefined) {
       // No pattern matched, but AI found a value
-      // Queue a pattern suggestion
+      // Find the ORIGINAL text in caption for this value
+      const originalText = findOriginalTextInCaption(caption, String(finalValue), String(field.valueKey));
       const patternType = fieldToPatternType(String(field.valueKey));
-      const snippet = extractRelevantSnippet(caption, String(finalValue));
+      
+      // Use original text for sample_text if found, otherwise use a snippet
+      const sampleText = originalText || extractRelevantSnippet(caption, String(finalValue));
       
       patternSuggestions.push({
         pattern_type: patternType,
-        suggested_regex: 'NEEDS_GENERATION', // Placeholder - will be reviewed by admin
-        sample_text: snippet,
+        suggested_regex: 'NEEDS_GENERATION',
+        sample_text: sampleText,
         expected_value: String(finalValue),
         status: 'pending',
       });
+      
+      if (originalText) {
+        console.log(`[PatternTrainer] Found original text "${originalText}" for ${field.valueKey}="${finalValue}"`);
+      }
     }
   }
 
@@ -294,7 +425,7 @@ export async function trainPatternsFromComparison(
 
   // Queue pattern suggestions
   if (patternSuggestions.length > 0) {
-    console.log(`[PatternTrainer] Attempting to queue ${patternSuggestions.length} pattern suggestions`);
+    console.log(`[PatternTrainer] Attempting to queue ${patternSuggestions.length} pattern suggestions with original text`);
     console.log(`[PatternTrainer] Suggestions:`, JSON.stringify(patternSuggestions, null, 2));
     
     try {
@@ -308,7 +439,6 @@ export async function trainPatternsFromComparison(
         console.error(`[PatternTrainer] Error details:`, JSON.stringify(error, null, 2));
       } else {
         console.log(`[PatternTrainer] ✅ Queued ${patternSuggestions.length} pattern suggestions for post ${postId}`);
-        console.log(`[PatternTrainer] Inserted suggestions:`, JSON.stringify(data, null, 2));
       }
     } catch (err) {
       console.error('[PatternTrainer] Exception queuing pattern suggestions:', err);
