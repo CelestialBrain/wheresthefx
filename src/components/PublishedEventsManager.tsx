@@ -754,7 +754,9 @@ export const PublishedEventsManager = () => {
                       <EventDatesDisplay
                         eventId={selectedEvent.source_post_id}
                         primaryDate={selectedEvent.event_date}
+                        primaryEndDate={selectedEvent.event_end_date}
                         primaryTime={selectedEvent.event_time}
+                        primaryEndTime={selectedEvent.end_time}
                         primaryVenue={selectedEvent.location_name}
                       />
                     )}

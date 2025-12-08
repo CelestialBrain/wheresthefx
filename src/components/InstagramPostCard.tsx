@@ -277,7 +277,9 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
           <EventDatesDisplay
             eventId={post.published_event_id || post.id}
             primaryDate={post.event_date}
+            primaryEndDate={post.event_end_date}
             primaryTime={post.event_time}
+            primaryEndTime={post.end_time}
             primaryVenue={post.location_name}
             isPublishedEvent={!!post.published_event_id}
           />
