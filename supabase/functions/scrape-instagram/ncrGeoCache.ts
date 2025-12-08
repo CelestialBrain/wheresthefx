@@ -1020,32 +1020,168 @@ export const NCR_VENUE_GEOCACHE: Record<string, VenueData> = {
   },
 };
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// Database venue cache (populated on first query)
+let dbVenueCache: Map<string, VenueData> | null = null;
+let dbAliasMappings: Map<string, string> | null = null;
+
 /**
- * Normalize venue name for lookup
+ * PHASE 1: Normalize venue name for lookup with apostrophe/quote handling
+ * - Unify all apostrophe/quote variants to standard
+ * - Remove punctuation
+ * - Collapse spaces
  * - Convert to lowercase
- * - Trim whitespace
- * - Remove common prefixes/suffixes
+ */
+function normalizeForLookup(name: string): string {
+  return (name || '')
+    .toLowerCase()
+    .trim()
+    // Unify all apostrophe/quote variants to standard single quote then remove
+    .replace(/[\u2018\u2019\u201A\u201B\u2032\u0027''`´]/g, '')
+    // Remove all punctuation except letters, numbers, spaces
+    .replace(/[^a-z0-9\s]/g, ' ')
+    // Collapse multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Legacy normalize for cache keys (backwards compatibility)
  */
 function normalizeVenueName(name: string): string {
   return name
     .toLowerCase()
     .trim()
-    .replace(/^(the|sm)\s+/i, '') // Remove "the" or "sm" prefix for broader matching
-    .replace(/\s+(mall|center|city|plaza)$/i, ''); // Remove common suffixes
+    .replace(/^(the|sm)\s+/i, '')
+    .replace(/\s+(mall|center|city|plaza)$/i, '');
 }
 
 /**
- * Direct lookup of NCR venue in cache
- * Returns venue data if exact match found, null otherwise
+ * PHASE 2 (Option C): Load venues from database on startup
+ * Populates dbVenueCache and dbAliasMappings from known_venues table
+ */
+async function loadDatabaseVenues(): Promise<void> {
+  if (dbVenueCache !== null) return; // Already loaded
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('[ncrGeoCache] Missing Supabase credentials, DB fallback disabled');
+    dbVenueCache = new Map();
+    dbAliasMappings = new Map();
+    return;
+  }
+  
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data: venues, error } = await supabase
+      .from('known_venues')
+      .select('name, aliases, lat, lng, city')
+      .not('lat', 'is', null)
+      .not('lng', 'is', null);
+    
+    if (error) {
+      console.error('[ncrGeoCache] Failed to load venues from DB:', error.message);
+      dbVenueCache = new Map();
+      dbAliasMappings = new Map();
+      return;
+    }
+    
+    dbVenueCache = new Map();
+    dbAliasMappings = new Map();
+    
+    for (const venue of venues || []) {
+      if (!venue.lat || !venue.lng) continue;
+      
+      const venueData: VenueData = {
+        lat: Number(venue.lat),
+        lng: Number(venue.lng),
+        city: venue.city || 'Metro Manila',
+        fullName: venue.name
+      };
+      
+      // Add normalized main name
+      const normalizedName = normalizeForLookup(venue.name);
+      dbVenueCache.set(normalizedName, venueData);
+      dbAliasMappings.set(normalizedName, venue.name);
+      
+      // Add all normalized aliases
+      if (Array.isArray(venue.aliases)) {
+        for (const alias of venue.aliases) {
+          if (typeof alias === 'string' && alias.trim()) {
+            const normalizedAlias = normalizeForLookup(alias);
+            if (!dbVenueCache.has(normalizedAlias)) {
+              dbVenueCache.set(normalizedAlias, venueData);
+              dbAliasMappings.set(normalizedAlias, venue.name);
+            }
+          }
+        }
+      }
+    }
+    
+    console.log(`[ncrGeoCache] Loaded ${dbVenueCache.size} venue entries from database`);
+  } catch (err) {
+    console.error('[ncrGeoCache] Error loading DB venues:', err);
+    dbVenueCache = new Map();
+    dbAliasMappings = new Map();
+  }
+}
+
+/**
+ * Direct lookup of NCR venue in cache with normalization
+ * Tries: 1) Local cache, 2) Database cache (loaded on startup)
+ */
+export async function lookupNCRVenueAsync(venueName: string): Promise<VenueData | null> {
+  if (!venueName) return null;
+  
+  const normalized = normalizeForLookup(venueName);
+  const basicNormalized = venueName.toLowerCase().trim();
+  
+  // Try local cache with exact match first (for speed)
+  if (NCR_VENUE_GEOCACHE[basicNormalized]) {
+    return NCR_VENUE_GEOCACHE[basicNormalized];
+  }
+  
+  // Try local cache with normalized lookup
+  for (const [key, data] of Object.entries(NCR_VENUE_GEOCACHE)) {
+    if (normalizeForLookup(key) === normalized) {
+      return data;
+    }
+  }
+  
+  // Load and check database cache
+  await loadDatabaseVenues();
+  
+  if (dbVenueCache && dbVenueCache.has(normalized)) {
+    const data = dbVenueCache.get(normalized)!;
+    console.log(`[ncrGeoCache] DB cache hit: "${venueName}" -> "${dbAliasMappings?.get(normalized)}"`);
+    return data;
+  }
+  
+  return null;
+}
+
+/**
+ * Sync lookup (backwards compatible) - uses local cache only
  */
 export function lookupNCRVenue(venueName: string): VenueData | null {
   if (!venueName) return null;
   
-  const normalized = venueName.toLowerCase().trim();
+  const normalized = normalizeForLookup(venueName);
+  const basicNormalized = venueName.toLowerCase().trim();
   
   // Try exact match first
-  if (NCR_VENUE_GEOCACHE[normalized]) {
-    return NCR_VENUE_GEOCACHE[normalized];
+  if (NCR_VENUE_GEOCACHE[basicNormalized]) {
+    return NCR_VENUE_GEOCACHE[basicNormalized];
+  }
+  
+  // Try normalized lookup
+  for (const [key, data] of Object.entries(NCR_VENUE_GEOCACHE)) {
+    if (normalizeForLookup(key) === normalized) {
+      return data;
+    }
   }
   
   return null;
@@ -1053,7 +1189,6 @@ export function lookupNCRVenue(venueName: string): VenueData | null {
 
 /**
  * Fuzzy matching for venue names using string similarity
- * Uses Levenshtein-like approach for matching
  */
 function calculateSimilarity(str1: string, str2: string): number {
   const longer = str1.length > str2.length ? str1 : str2;
@@ -1061,18 +1196,18 @@ function calculateSimilarity(str1: string, str2: string): number {
   
   if (longer.length === 0) return 1.0;
   
-  // Simple contains check - if shorter is contained in longer, high score
+  // Simple contains check
   if (longer.includes(shorter)) {
     return shorter.length / longer.length;
   }
   
-  // Check for word-level matches
+  // Word-level matches
   const words1 = str1.split(/\s+/);
   const words2 = str2.split(/\s+/);
   
   let matchedWords = 0;
   for (const word1 of words1) {
-    if (word1.length < 3) continue; // Skip short words
+    if (word1.length < 3) continue;
     for (const word2 of words2) {
       if (word1 === word2) {
         matchedWords++;
@@ -1081,18 +1216,68 @@ function calculateSimilarity(str1: string, str2: string): number {
     }
   }
   
-  const wordScore = matchedWords / Math.max(words1.length, words2.length);
-  
-  return wordScore;
+  return matchedWords / Math.max(words1.length, words2.length);
 }
 
 /**
- * Fuzzy match venue name against cache
- * Returns best match if similarity >= threshold, null otherwise
- * 
- * @param venueName - Venue name to match
- * @param threshold - Similarity threshold (0-1), default 0.7
- * @returns Matched venue data with matched name, or null
+ * Fuzzy match venue with async DB fallback
+ */
+export async function fuzzyMatchVenueAsync(
+  venueName: string,
+  threshold: number = 0.7
+): Promise<{ lat: number; lng: number; city: string; matchedName: string } | null> {
+  if (!venueName || threshold < 0 || threshold > 1) return null;
+  
+  // First try async exact lookup (includes DB)
+  const exactMatch = await lookupNCRVenueAsync(venueName);
+  if (exactMatch) {
+    return {
+      lat: exactMatch.lat,
+      lng: exactMatch.lng,
+      city: exactMatch.city,
+      matchedName: exactMatch.fullName || venueName,
+    };
+  }
+  
+  const normalized = normalizeForLookup(venueName);
+  let bestMatch: { name: string; data: VenueData; score: number } | null = null;
+  
+  // Search local cache
+  for (const [cachedName, data] of Object.entries(NCR_VENUE_GEOCACHE)) {
+    const cachedNormalized = normalizeForLookup(cachedName);
+    const score = calculateSimilarity(normalized, cachedNormalized);
+    
+    if (score >= threshold && (!bestMatch || score > bestMatch.score)) {
+      bestMatch = { name: cachedName, data, score };
+    }
+  }
+  
+  // Search DB cache
+  await loadDatabaseVenues();
+  if (dbVenueCache) {
+    for (const [cachedNormalized, data] of dbVenueCache.entries()) {
+      const score = calculateSimilarity(normalized, cachedNormalized);
+      
+      if (score >= threshold && (!bestMatch || score > bestMatch.score)) {
+        bestMatch = { name: dbAliasMappings?.get(cachedNormalized) || cachedNormalized, data, score };
+      }
+    }
+  }
+  
+  if (bestMatch) {
+    return {
+      lat: bestMatch.data.lat,
+      lng: bestMatch.data.lng,
+      city: bestMatch.data.city,
+      matchedName: bestMatch.data.fullName || bestMatch.name,
+    };
+  }
+  
+  return null;
+}
+
+/**
+ * Sync fuzzy match (backwards compatible) - uses local cache only
  */
 export function fuzzyMatchVenue(
   venueName: string,
@@ -1100,18 +1285,15 @@ export function fuzzyMatchVenue(
 ): { lat: number; lng: number; city: string; matchedName: string } | null {
   if (!venueName || threshold < 0 || threshold > 1) return null;
   
-  const normalized = normalizeVenueName(venueName);
+  const normalized = normalizeForLookup(venueName);
   let bestMatch: { name: string; data: VenueData; score: number } | null = null;
   
-  // Iterate through cache and find best match
   for (const [cachedName, data] of Object.entries(NCR_VENUE_GEOCACHE)) {
-    const cachedNormalized = normalizeVenueName(cachedName);
+    const cachedNormalized = normalizeForLookup(cachedName);
     const score = calculateSimilarity(normalized, cachedNormalized);
     
-    if (score >= threshold) {
-      if (!bestMatch || score > bestMatch.score) {
-        bestMatch = { name: cachedName, data, score };
-      }
+    if (score >= threshold && (!bestMatch || score > bestMatch.score)) {
+      bestMatch = { name: cachedName, data, score };
     }
   }
   
