@@ -9,6 +9,7 @@ interface EventDate {
   published_event_id: string | null;
   event_date: string;
   event_time: string | null;
+  end_time: string | null;  // End time per day
   venue_name: string | null;
   venue_address: string | null;
   created_at: string;
@@ -226,28 +227,35 @@ export function EventDatesDisplay({
 
         {isExpanded && (
           <div className="mt-2 rounded-lg border border-border bg-muted/30 p-2 space-y-1">
-            {allDates.map((date, index) => (
-              <div 
-                key={`${date.event_date}-${index}`}
-                className="flex items-center justify-between text-xs px-2 py-1"
-              >
-                <span className="text-foreground">
-                  {formatDate(date.event_date)}
-                </span>
-                {timeRangeStr && (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    {timeRangeStr}
+            {allDates.map((date, index) => {
+              // Use per-day time range if available from DB, otherwise fall back to primary
+              const dayTimeRange = 'end_time' in date 
+                ? formatTimeRange(date.event_time, (date as EventDate).end_time)
+                : timeRangeStr;
+              
+              return (
+                <div 
+                  key={`${date.event_date}-${index}`}
+                  className="flex items-center justify-between text-xs px-2 py-1"
+                >
+                  <span className="text-foreground">
+                    {formatDate(date.event_date)}
                   </span>
-                )}
-                {date.venue_name && date.venue_name !== primaryVenue && (
-                  <span className="flex items-center gap-1 text-muted-foreground ml-2">
-                    <MapPin className="h-3 w-3" />
-                    {date.venue_name}
-                  </span>
-                )}
-              </div>
-            ))}
+                  {dayTimeRange && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {dayTimeRange}
+                    </span>
+                  )}
+                  {date.venue_name && date.venue_name !== primaryVenue && (
+                    <span className="flex items-center gap-1 text-muted-foreground ml-2">
+                      <MapPin className="h-3 w-3" />
+                      {date.venue_name}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
