@@ -186,7 +186,8 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
             }
             grouped[dateKey].timeSlots.push({
               time: record.event_time || '',
-              label: '', // Label should be empty - venue_name is for venue, not screening label
+              endTime: (record as any).end_time || '', // Include end_time from DB
+              label: '',
             });
           }
           
@@ -206,21 +207,15 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
           const { generateDateRange } = await import('@/utils/dateUtils');
           const allDates = generateDateRange(post.event_date, post.event_end_date);
           
-          const initialSchedule: ScheduleDay[] = allDates.map((dateStr, index) => {
-            const isFirstDay = index === 0;
-            const isLastDay = index === allDates.length - 1;
-            
-            // First day uses event_time, last day uses end_time (or event_time), middle days use event_time
-            let time = post.event_time || "";
-            if (isLastDay && post.end_time) {
-              time = post.end_time;
-            }
-            
-            return {
-              date: dateStr,
-              timeSlots: [{ time, label: "" }]
-            };
-          });
+          // ALL days get the SAME start time and end time from the primary event
+          const initialSchedule: ScheduleDay[] = allDates.map((dateStr) => ({
+            date: dateStr,
+            timeSlots: [{ 
+              time: post.event_time || "",      // Start time for ALL days
+              endTime: post.end_time || "",     // End time for ALL days
+              label: "" 
+            }]
+          }));
           
           setScheduleData(initialSchedule);
         }
@@ -462,12 +457,13 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         // First delete any existing event_dates for this post
         await supabase.from("event_dates").delete().eq("instagram_post_id", post.id);
         
-        // Insert all schedule entries
+        // Insert all schedule entries with start AND end times
         const eventDatesInserts = scheduleData.flatMap(day => 
           day.timeSlots.map(slot => ({
             instagram_post_id: post.id,
             event_date: day.date,
             event_time: slot.time || null,
+            end_time: slot.endTime || null,  // Save end time per slot
             venue_name: day.venueName || location.venueName,
             venue_address: day.venueAddress || location.streetAddress,
           }))

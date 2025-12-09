@@ -11,7 +11,8 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
 export interface TimeSlot {
-  time: string;
+  time: string;       // Start time
+  endTime?: string;   // End time
   label?: string;
 }
 
@@ -64,7 +65,7 @@ export const EventScheduleEditor = ({
     onScheduleChange(
       schedule.map(day =>
         day.date === dateStr
-          ? { ...day, timeSlots: [...day.timeSlots, { time: "", label: "" }] }
+          ? { ...day, timeSlots: [...day.timeSlots, { time: "", endTime: "", label: "" }] }
           : day
       )
     );
@@ -171,16 +172,24 @@ export const EventScheduleEditor = ({
                     <Clock className="w-3 h-3 text-muted-foreground" />
                     <Input
                       type="time"
-                      className="w-24 h-8 text-xs"
+                      className="w-20 h-8 text-xs"
                       value={slot.time}
                       onChange={(e) => updateTimeSlot(day.date, slotIndex, "time", e.target.value)}
-                      placeholder="Time"
+                      placeholder="Start"
+                    />
+                    <span className="text-muted-foreground text-xs">-</span>
+                    <Input
+                      type="time"
+                      className="w-20 h-8 text-xs"
+                      value={slot.endTime || ""}
+                      onChange={(e) => updateTimeSlot(day.date, slotIndex, "endTime", e.target.value)}
+                      placeholder="End"
                     />
                     <Input
                       className="flex-1 h-8 text-xs"
                       value={slot.label || ""}
                       onChange={(e) => updateTimeSlot(day.date, slotIndex, "label", e.target.value)}
-                      placeholder="Label (e.g., Screening name)"
+                      placeholder="Label (optional)"
                     />
                     {day.timeSlots.length > 1 && (
                       <Button
