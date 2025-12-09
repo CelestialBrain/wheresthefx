@@ -1142,6 +1142,14 @@ export type VenueMatchType = 'exact_name' | 'exact_alias' | 'normalized_name' | 
 /**
  * Check if all words from the shorter string appear in the longer string
  * Used for word-based venue matching
+ * 
+ * Examples:
+ * - "Odd Cafe" matches "Odd Cafe Makati" (all words from search appear in target)
+ * - "Fireside" matches "Fireside by Kettle" (all words from search appear in target)
+ * 
+ * @param normalizedSearch - The normalized search term
+ * @param normalizedTarget - The normalized target venue name
+ * @returns true if all words from the shorter string appear in the longer string
  */
 function checkWordMatch(normalizedSearch: string, normalizedTarget: string): boolean {
   const searchWords = normalizedSearch.split(/\s+/).filter(w => w.length >= 3);
@@ -1149,10 +1157,11 @@ function checkWordMatch(normalizedSearch: string, normalizedTarget: string): boo
   
   if (searchWords.length === 0) return false;
   
-  // Check if all words from shorter list appear in longer list
+  // Determine which is shorter and which is longer
   const shorterWords = searchWords.length <= targetWords.length ? searchWords : targetWords;
   const longerWordsSet = new Set(searchWords.length <= targetWords.length ? targetWords : searchWords);
   
+  // Check if all words from shorter list appear in longer list
   return shorterWords.every(word => longerWordsSet.has(word));
 }
 
