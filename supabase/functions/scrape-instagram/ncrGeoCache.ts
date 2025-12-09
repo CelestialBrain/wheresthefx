@@ -1130,6 +1130,129 @@ async function loadDatabaseVenues(): Promise<void> {
 }
 
 /**
+ * Lookup venues in the known_venues database FIRST with comprehensive matching
+ * This should be the PRIMARY venue lookup method
+ * 
+ * Matching strategy:
+ * 1. Exact name match (case-insensitive)
+ * 2. Exact alias match (case-insensitive) 
+ * 3. Partial/contains match on name and aliases
+ * 
+ * Returns matched venue with lat, lng, city, and canonical name
+ */
+export async function lookupKnownVenuesFirst(venueName: string): Promise<{
+  lat: number;
+  lng: number;
+  city: string;
+  canonicalName: string;
+  matchType: 'exact_name' | 'exact_alias' | 'partial_name' | 'partial_alias';
+} | null> {
+  if (!venueName) return null;
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('[lookupKnownVenuesFirst] Missing Supabase credentials');
+    return null;
+  }
+  
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Fetch ALL venues from known_venues (no limit)
+    const { data: venues, error } = await supabase
+      .from('known_venues')
+      .select('name, aliases, lat, lng, city')
+      .not('lat', 'is', null)
+      .not('lng', 'is', null);
+    
+    if (error || !venues || venues.length === 0) {
+      if (error) {
+        console.error('[lookupKnownVenuesFirst] Query error:', error.message);
+      }
+      return null;
+    }
+    
+    const searchTerm = venueName.toLowerCase().trim();
+    const normalizedSearch = normalizeForLookup(venueName);
+    
+    // 1. Try exact name match (case-insensitive)
+    for (const venue of venues) {
+      if (venue.name?.toLowerCase() === searchTerm) {
+        return {
+          lat: Number(venue.lat),
+          lng: Number(venue.lng),
+          city: venue.city || 'Metro Manila',
+          canonicalName: venue.name,
+          matchType: 'exact_name'
+        };
+      }
+    }
+    
+    // 2. Try exact alias match (case-insensitive)
+    for (const venue of venues) {
+      if (Array.isArray(venue.aliases)) {
+        for (const alias of venue.aliases) {
+          if (typeof alias === 'string' && alias.toLowerCase() === searchTerm) {
+            return {
+              lat: Number(venue.lat),
+              lng: Number(venue.lng),
+              city: venue.city || 'Metro Manila',
+              canonicalName: venue.name,
+              matchType: 'exact_alias'
+            };
+          }
+        }
+      }
+    }
+    
+    // 3. Try partial/contains match on name
+    for (const venue of venues) {
+      const venueLower = venue.name?.toLowerCase() || '';
+      // Check if one contains the other
+      if ((venueLower.includes(searchTerm) || searchTerm.includes(venueLower)) && 
+          venueLower.length > 0 && searchTerm.length > 0) {
+        return {
+          lat: Number(venue.lat),
+          lng: Number(venue.lng),
+          city: venue.city || 'Metro Manila',
+          canonicalName: venue.name,
+          matchType: 'partial_name'
+        };
+      }
+    }
+    
+    // 4. Try partial/contains match on aliases
+    for (const venue of venues) {
+      if (Array.isArray(venue.aliases)) {
+        for (const alias of venue.aliases) {
+          if (typeof alias === 'string') {
+            const aliasLower = alias.toLowerCase();
+            // Check if one contains the other
+            if ((aliasLower.includes(searchTerm) || searchTerm.includes(aliasLower)) && 
+                aliasLower.length > 0 && searchTerm.length > 0) {
+              return {
+                lat: Number(venue.lat),
+                lng: Number(venue.lng),
+                city: venue.city || 'Metro Manila',
+                canonicalName: venue.name,
+                matchType: 'partial_alias'
+              };
+            }
+          }
+        }
+      }
+    }
+    
+    return null;
+  } catch (err) {
+    console.error('[lookupKnownVenuesFirst] Error:', err);
+    return null;
+  }
+}
+
+/**
  * Direct lookup of NCR venue in cache with normalization
  * Tries: 1) Local cache, 2) Database cache (loaded on startup)
  */
@@ -1196,9 +1319,10 @@ function calculateSimilarity(str1: string, str2: string): number {
   
   if (longer.length === 0) return 1.0;
   
-  // Simple contains check
+  // Simple contains check - return HIGH score (0.85+) for full containment
+  // This is a strong match indicator
   if (longer.includes(shorter)) {
-    return shorter.length / longer.length;
+    return 0.85 + (shorter.length / longer.length) * 0.15;
   }
   
   // Word-level matches
@@ -1224,7 +1348,7 @@ function calculateSimilarity(str1: string, str2: string): number {
  */
 export async function fuzzyMatchVenueAsync(
   venueName: string,
-  threshold: number = 0.7
+  threshold: number = 0.5
 ): Promise<{ lat: number; lng: number; city: string; matchedName: string } | null> {
   if (!venueName || threshold < 0 || threshold > 1) return null;
   
@@ -1281,7 +1405,7 @@ export async function fuzzyMatchVenueAsync(
  */
 export function fuzzyMatchVenue(
   venueName: string,
-  threshold: number = 0.7
+  threshold: number = 0.5
 ): { lat: number; lng: number; city: string; matchedName: string } | null {
   if (!venueName || threshold < 0 || threshold > 1) return null;
   
