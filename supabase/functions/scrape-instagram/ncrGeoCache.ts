@@ -1175,7 +1175,6 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     }
     
     const searchTerm = venueName.toLowerCase().trim();
-    const normalizedSearch = normalizeForLookup(venueName);
     
     // 1. Try exact name match (case-insensitive)
     for (const venue of venues) {
@@ -1211,8 +1210,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     for (const venue of venues) {
       const venueLower = venue.name?.toLowerCase() || '';
       // Check if one contains the other
-      if ((venueLower.includes(searchTerm) || searchTerm.includes(venueLower)) && 
-          venueLower.length > 0 && searchTerm.length > 0) {
+      if (venueLower.includes(searchTerm) || searchTerm.includes(venueLower)) {
         return {
           lat: Number(venue.lat),
           lng: Number(venue.lng),
@@ -1230,8 +1228,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
           if (typeof alias === 'string') {
             const aliasLower = alias.toLowerCase();
             // Check if one contains the other
-            if ((aliasLower.includes(searchTerm) || searchTerm.includes(aliasLower)) && 
-                aliasLower.length > 0 && searchTerm.length > 0) {
+            if (aliasLower.includes(searchTerm) || searchTerm.includes(aliasLower)) {
               return {
                 lat: Number(venue.lat),
                 lng: Number(venue.lng),
@@ -1310,6 +1307,11 @@ export function lookupNCRVenue(venueName: string): VenueData | null {
   return null;
 }
 
+// Fuzzy matching constants
+export const SUBSTRING_BASE_SCORE = 0.85;  // Base score when one string contains another
+export const SUBSTRING_BONUS_RANGE = 0.15; // Additional bonus based on length ratio
+export const DEFAULT_FUZZY_THRESHOLD = 0.5; // Default threshold for fuzzy matching
+
 /**
  * Fuzzy matching for venue names using string similarity
  */
@@ -1322,7 +1324,7 @@ function calculateSimilarity(str1: string, str2: string): number {
   // Simple contains check - return HIGH score (0.85+) for full containment
   // This is a strong match indicator
   if (longer.includes(shorter)) {
-    return 0.85 + (shorter.length / longer.length) * 0.15;
+    return SUBSTRING_BASE_SCORE + (shorter.length / longer.length) * SUBSTRING_BONUS_RANGE;
   }
   
   // Word-level matches
@@ -1348,7 +1350,7 @@ function calculateSimilarity(str1: string, str2: string): number {
  */
 export async function fuzzyMatchVenueAsync(
   venueName: string,
-  threshold: number = 0.5
+  threshold: number = DEFAULT_FUZZY_THRESHOLD
 ): Promise<{ lat: number; lng: number; city: string; matchedName: string } | null> {
   if (!venueName || threshold < 0 || threshold > 1) return null;
   
@@ -1405,7 +1407,7 @@ export async function fuzzyMatchVenueAsync(
  */
 export function fuzzyMatchVenue(
   venueName: string,
-  threshold: number = 0.5
+  threshold: number = DEFAULT_FUZZY_THRESHOLD
 ): { lat: number; lng: number; city: string; matchedName: string } | null {
   if (!venueName || threshold < 0 || threshold > 1) return null;
   

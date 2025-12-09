@@ -20,7 +20,7 @@ import {
   cleanLocationName,
 } from './extractionUtils.ts';
 import { ScraperLogger, RejectedPostLogData } from './logger.ts';
-import { lookupNCRVenue, fuzzyMatchVenue, lookupKnownVenuesFirst } from './ncrGeoCache.ts';
+import { lookupNCRVenue, fuzzyMatchVenue, lookupKnownVenuesFirst, DEFAULT_FUZZY_THRESHOLD } from './ncrGeoCache.ts';
 import { fetchWithRetry, fetchWithTimeout } from './retryUtils.ts';
 import { saveGroundTruth, trainPatternsFromComparison } from './patternTrainer.ts';
 import { extractInParallel, mergeResults, MergedExtractionResult } from './parallelExtraction.ts';
@@ -1242,7 +1242,7 @@ Deno.serve(async (req) => {
             
             // 5. Fall back to fuzzy match in NCR cache
             if (!locationLat) {
-              const fuzzyMatch = fuzzyMatchVenue(searchName, 0.5);
+              const fuzzyMatch = fuzzyMatchVenue(searchName, DEFAULT_FUZZY_THRESHOLD);
               if (fuzzyMatch) {
                 locationLat = fuzzyMatch.lat;
                 locationLng = fuzzyMatch.lng;
