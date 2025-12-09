@@ -4,6 +4,7 @@
  */
 
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { SUBSTRING_BASE_SCORE, SUBSTRING_BONUS_RANGE } from "./ncrGeoCache.ts";
 
 // Test the calculateSimilarity function indirectly through fuzzyMatchVenue
 // We can't directly import it since it's not exported, but we can test the behavior
@@ -20,7 +21,7 @@ function testCalculateSimilarity(str1: string, str2: string): number {
   
   // Simple contains check - return HIGH score (0.85+) for full containment
   if (longer.includes(shorter)) {
-    return 0.85 + (shorter.length / longer.length) * 0.15;
+    return SUBSTRING_BASE_SCORE + (shorter.length / longer.length) * SUBSTRING_BONUS_RANGE;
   }
   
   // Word-level matches

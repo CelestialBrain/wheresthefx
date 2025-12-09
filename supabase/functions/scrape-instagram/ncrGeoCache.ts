@@ -1161,6 +1161,9 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Fetch ALL venues from known_venues (no limit)
+    // NOTE: This fetches all venues on every call. If the database grows significantly
+    // (e.g., beyond 500-1000 venues), consider implementing caching similar to 
+    // loadDatabaseVenues() or using database-side fuzzy matching with pg_trgm.
     const { data: venues, error } = await supabase
       .from('known_venues')
       .select('name, aliases, lat, lng, city')
@@ -1209,8 +1212,9 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     // 3. Try partial/contains match on name
     for (const venue of venues) {
       const venueLower = venue.name?.toLowerCase() || '';
-      // Check if one contains the other
-      if (venueLower.includes(searchTerm) || searchTerm.includes(venueLower)) {
+      // Check if one contains the other (with minimum length check to avoid false positives)
+      if (searchTerm.length >= 3 && venueLower.length >= 3 &&
+          (venueLower.includes(searchTerm) || searchTerm.includes(venueLower))) {
         return {
           lat: Number(venue.lat),
           lng: Number(venue.lng),
@@ -1227,8 +1231,9 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
         for (const alias of venue.aliases) {
           if (typeof alias === 'string') {
             const aliasLower = alias.toLowerCase();
-            // Check if one contains the other
-            if (aliasLower.includes(searchTerm) || searchTerm.includes(aliasLower)) {
+            // Check if one contains the other (with minimum length check to avoid false positives)
+            if (searchTerm.length >= 3 && aliasLower.length >= 3 &&
+                (aliasLower.includes(searchTerm) || searchTerm.includes(aliasLower))) {
               return {
                 lat: Number(venue.lat),
                 lng: Number(venue.lng),
