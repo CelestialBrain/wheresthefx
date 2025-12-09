@@ -1033,7 +1033,7 @@ let dbAliasMappings: Map<string, string> | null = null;
  * - Collapse spaces
  * - Convert to lowercase
  */
-function normalizeForLookup(name: string): string {
+export function normalizeForLookup(name: string): string {
   return (name || '')
     .toLowerCase()
     .trim()
@@ -1145,7 +1145,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
   lng: number;
   city: string;
   canonicalName: string;
-  matchType: 'exact_name' | 'exact_alias' | 'partial_name' | 'partial_alias';
+  matchType: 'exact_name' | 'exact_alias' | 'normalized_name' | 'normalized_alias' | 'word_match' | 'partial_name' | 'partial_alias' | 'fuzzy';
 } | null> {
   if (!venueName) return null;
   
@@ -1178,6 +1178,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     }
     
     const searchTerm = venueName.toLowerCase().trim();
+    const normalizedSearch = normalizeForLookup(venueName);
     
     // 1. Try exact name match (case-insensitive)
     for (const venue of venues) {
@@ -1209,7 +1210,91 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
       }
     }
     
-    // 3. Try partial/contains match on name
+    // 3. Try normalized exact name match
+    for (const venue of venues) {
+      const normalizedVenueName = normalizeForLookup(venue.name || '');
+      if (normalizedVenueName && normalizedVenueName === normalizedSearch) {
+        return {
+          lat: Number(venue.lat),
+          lng: Number(venue.lng),
+          city: venue.city || 'Metro Manila',
+          canonicalName: venue.name,
+          matchType: 'normalized_name'
+        };
+      }
+    }
+    
+    // 4. Try normalized exact alias match
+    for (const venue of venues) {
+      if (Array.isArray(venue.aliases)) {
+        for (const alias of venue.aliases) {
+          if (typeof alias === 'string') {
+            const normalizedAlias = normalizeForLookup(alias);
+            if (normalizedAlias && normalizedAlias === normalizedSearch) {
+              return {
+                lat: Number(venue.lat),
+                lng: Number(venue.lng),
+                city: venue.city || 'Metro Manila',
+                canonicalName: venue.name,
+                matchType: 'normalized_alias'
+              };
+            }
+          }
+        }
+      }
+    }
+    
+    // 5. Try word-based match (all words from one appear in the other)
+    const searchWords = normalizedSearch.split(/\s+/).filter(w => w.length >= 3);
+    if (searchWords.length > 0) {
+      for (const venue of venues) {
+        const normalizedVenueName = normalizeForLookup(venue.name || '');
+        const venueWords = normalizedVenueName.split(/\s+/).filter(w => w.length >= 3);
+        
+        // Check if all words from shorter list appear in longer list
+        const shorterWords = searchWords.length <= venueWords.length ? searchWords : venueWords;
+        const longerWords = searchWords.length <= venueWords.length ? venueWords : searchWords;
+        
+        const allWordsMatch = shorterWords.every(word => longerWords.includes(word));
+        if (allWordsMatch && shorterWords.length > 0) {
+          return {
+            lat: Number(venue.lat),
+            lng: Number(venue.lng),
+            city: venue.city || 'Metro Manila',
+            canonicalName: venue.name,
+            matchType: 'word_match'
+          };
+        }
+      }
+      
+      // Also check word match on aliases
+      for (const venue of venues) {
+        if (Array.isArray(venue.aliases)) {
+          for (const alias of venue.aliases) {
+            if (typeof alias === 'string') {
+              const normalizedAlias = normalizeForLookup(alias);
+              const aliasWords = normalizedAlias.split(/\s+/).filter(w => w.length >= 3);
+              
+              const shorterWords = searchWords.length <= aliasWords.length ? searchWords : aliasWords;
+              const longerWords = searchWords.length <= aliasWords.length ? aliasWords : searchWords;
+              
+              const allWordsMatch = shorterWords.every(word => longerWords.includes(word));
+              if (allWordsMatch && shorterWords.length > 0) {
+                return {
+                  lat: Number(venue.lat),
+                  lng: Number(venue.lng),
+                  city: venue.city || 'Metro Manila',
+                  canonicalName: venue.name,
+                  matchType: 'word_match'
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // 6. Try partial/contains match on name
     for (const venue of venues) {
       const venueLower = venue.name?.toLowerCase() || '';
       // Check if one contains the other (with minimum length check to avoid false positives)
@@ -1225,7 +1310,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
       }
     }
     
-    // 4. Try partial/contains match on aliases
+    // 7. Try partial/contains match on aliases
     for (const venue of venues) {
       if (Array.isArray(venue.aliases)) {
         for (const alias of venue.aliases) {
@@ -1245,6 +1330,43 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
           }
         }
       }
+    }
+    
+    // 8. Try fuzzy matching with higher threshold (0.75) for known venues
+    const KNOWN_VENUE_FUZZY_THRESHOLD = 0.75;
+    let bestFuzzyMatch: { venue: any; score: number } | null = null;
+    
+    for (const venue of venues) {
+      const normalizedVenueName = normalizeForLookup(venue.name || '');
+      const score = calculateSimilarity(normalizedSearch, normalizedVenueName);
+      
+      if (score >= KNOWN_VENUE_FUZZY_THRESHOLD && (!bestFuzzyMatch || score > bestFuzzyMatch.score)) {
+        bestFuzzyMatch = { venue, score };
+      }
+      
+      // Also check aliases
+      if (Array.isArray(venue.aliases)) {
+        for (const alias of venue.aliases) {
+          if (typeof alias === 'string') {
+            const normalizedAlias = normalizeForLookup(alias);
+            const aliasScore = calculateSimilarity(normalizedSearch, normalizedAlias);
+            
+            if (aliasScore >= KNOWN_VENUE_FUZZY_THRESHOLD && (!bestFuzzyMatch || aliasScore > bestFuzzyMatch.score)) {
+              bestFuzzyMatch = { venue, score: aliasScore };
+            }
+          }
+        }
+      }
+    }
+    
+    if (bestFuzzyMatch) {
+      return {
+        lat: Number(bestFuzzyMatch.venue.lat),
+        lng: Number(bestFuzzyMatch.venue.lng),
+        city: bestFuzzyMatch.venue.city || 'Metro Manila',
+        canonicalName: bestFuzzyMatch.venue.name,
+        matchType: 'fuzzy'
+      };
     }
     
     return null;

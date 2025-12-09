@@ -1200,8 +1200,12 @@ Deno.serve(async (req) => {
                 const matchTypeLabel = {
                   'exact_name': 'exact name match',
                   'exact_alias': 'alias match',
+                  'normalized_name': 'normalized name match',
+                  'normalized_alias': 'normalized alias match',
+                  'word_match': 'word match',
                   'partial_name': 'partial name match',
-                  'partial_alias': 'partial alias match'
+                  'partial_alias': 'partial alias match',
+                  'fuzzy': 'fuzzy match'
                 }[knownVenueMatch.matchType] || knownVenueMatch.matchType;
                 
                 await ingestLogger?.success('geocache', `[GEOCODE] known_venues ${matchTypeLabel}: "${searchName}" → "${knownVenueMatch.canonicalName}"`, {

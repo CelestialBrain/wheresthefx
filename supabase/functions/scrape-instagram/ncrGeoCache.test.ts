@@ -89,14 +89,107 @@ Deno.test("Venue matching priority - known_venues should be checked first", () =
   const correctOrder = [
     "1. Check known_venues database (exact name match)",
     "2. Check known_venues database (exact alias match)",
-    "3. Check known_venues database (partial/contains match)",
-    "4. Fall back to static NCR_VENUE_GEOCACHE",
-    "5. Fall back to fuzzy matching",
-    "6. Fall back to external geocoding API"
+    "3. Check known_venues database (normalized name match)",
+    "4. Check known_venues database (normalized alias match)",
+    "5. Check known_venues database (word-based match)",
+    "6. Check known_venues database (partial/contains match)",
+    "7. Check known_venues database (fuzzy match)",
+    "8. Fall back to static NCR_VENUE_GEOCACHE",
+    "9. Fall back to fuzzy matching with lower threshold",
+    "10. Fall back to external geocoding API"
   ];
   
   // This test just documents the expected order
-  assertEquals(correctOrder.length, 6);
+  assertEquals(correctOrder.length, 10);
+});
+
+// ============================================================
+// NORMALIZATION TESTS
+// ============================================================
+
+import { normalizeForLookup } from "./ncrGeoCache.ts";
+
+Deno.test("normalizeForLookup - should handle ampersands", () => {
+  const normalized = normalizeForLookup("Draft Restaurant & Brewery");
+  const normalized2 = normalizeForLookup("Draft Restaurant &amp; Brewery");
+  
+  // Both should normalize to the same thing
+  assertEquals(normalized, normalized2, "Ampersands should normalize the same");
+  assertEquals(normalized.includes("&"), false, "Should remove ampersand");
+});
+
+Deno.test("normalizeForLookup - should handle colons and spaces", () => {
+  const normalized1 = normalizeForLookup("K: ITA Cafe");
+  const normalized2 = normalizeForLookup("K:ITA Cafe");
+  
+  // Both should normalize to the same thing
+  assertEquals(normalized1, normalized2, "Colon variations should normalize the same");
+  assertEquals(normalized1.includes(":"), false, "Should remove colon");
+});
+
+Deno.test("normalizeForLookup - should handle apostrophes", () => {
+  const normalized1 = normalizeForLookup("70's Bistro");
+  const normalized2 = normalizeForLookup("70s Bistro");
+  
+  // Both should normalize to the same thing
+  assertEquals(normalized1, normalized2, "Apostrophe variations should normalize the same");
+  assertEquals(normalized1.includes("'"), false, "Should remove apostrophe");
+});
+
+Deno.test("normalizeForLookup - should collapse multiple spaces", () => {
+  const normalized = normalizeForLookup("The  Big   Space");
+  const expectedWords = normalized.split(/\s+/);
+  
+  // Should have single spaces only
+  assertEquals(expectedWords.length, 3, "Should have 3 words");
+  assertEquals(normalized, "the big space", "Should collapse to single spaces");
+});
+
+// ============================================================
+// FUZZY MATCHING TESTS FOR SPECIFIC FAILURES
+// ============================================================
+
+Deno.test("Fuzzy matching - Fireside should match Fireside by Kettle", () => {
+  const normalized1 = normalizeForLookup("Fireside");
+  const normalized2 = normalizeForLookup("Fireside by Kettle");
+  
+  const score = testCalculateSimilarity(normalized1, normalized2);
+  
+  // Should get high score because "fireside" is contained in "fireside by kettle"
+  assertEquals(score >= 0.75, true, `Expected score >= 0.75 for fuzzy match, got ${score}`);
+});
+
+Deno.test("Word matching - Odd Cafe should match Odd Cafe Makati", () => {
+  const words1 = normalizeForLookup("Odd Cafe").split(/\s+/).filter(w => w.length >= 3);
+  const words2 = normalizeForLookup("Odd Cafe Makati").split(/\s+/).filter(w => w.length >= 3);
+  
+  // All words from "Odd Cafe" should appear in "Odd Cafe Makati"
+  const allWordsMatch = words1.every(word => words2.includes(word));
+  
+  assertEquals(allWordsMatch, true, "All words from shorter string should appear in longer");
+});
+
+Deno.test("Normalization - Draft Restaurant &amp; Brewery should match after normalization", () => {
+  const normalized1 = normalizeForLookup("Draft Restaurant &amp; Brewery");
+  const normalized2 = normalizeForLookup("Draft Restaurant & Brewery");
+  
+  assertEquals(normalized1, normalized2, "HTML entity and symbol should normalize the same");
+});
+
+Deno.test("Normalization - K: ITA Cafe variations should match", () => {
+  const variations = [
+    "K: ITA Cafe",
+    "K:ITA Cafe",
+    "K : ITA Cafe",
+    "k:ita cafe"
+  ];
+  
+  const normalized = variations.map(v => normalizeForLookup(v));
+  
+  // All should normalize to the same value
+  for (let i = 1; i < normalized.length; i++) {
+    assertEquals(normalized[0], normalized[i], `Variation ${i} should match first`);
+  }
 });
 
 console.log("✓ All venue geocoding tests passed!");
