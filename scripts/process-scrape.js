@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -16,36 +16,87 @@ const IMAGE_FETCH_RETRIES = 2;
 // Below this threshold, captions lack enough context for reliable event extraction
 const MIN_CAPTION_LENGTH_FOR_EXTRACTION = 100;
 
-// Expected JSON schema for Gemini responses
-const EXPECTED_JSON_SCHEMA = `{
-  "ocrText": "string or null",
-  "isEvent": true,
-  "eventTitle": "string",
-  "eventDate": "YYYY-MM-DD",
-  "eventEndDate": "YYYY-MM-DD or null",
-  "eventTime": "HH:MM",
-  "endTime": "HH:MM or null",
-  "venueName": "string or null",
-  "venueAddress": "string or null",
-  "price": 0,
-  "priceMin": 0,
-  "priceMax": 0,
-  "priceNotes": "string or null",
-  "isFree": false,
-  "signupUrl": "string or null",
-  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
-  "category": "nightlife",
-  "confidence": 0.85,
-  "isRecurring": false,
-  "recurrencePattern": "string or null",
-  "rsvpDeadline": "YYYY-MM-DD or null",
-  "isHistoricalPost": false,
-  "reasoning": "string"
-}`;
+// Known venues list for venue matching (fetched from database or hardcoded fallback)
+const KNOWN_VENUES = [
+  "123 Block", "19 East", "225 Lounge", "3 Torre Lorenzo", "5G Coffee House",
+  "70's Bistro", "A.bode Space", "Alabang Town Center", "Alveo Central Plaza",
+  "Apotheka Manila", "Araneta City", "Artinformal Makati", "Ayala Malls Manila Bay",
+  "Ayala Malls Nuvali", "Ayala Malls TriNoma", "Ayala Triangle", "B-Side",
+  "Baked Studios", "Balcony Music House", "Bank Bar", "BAR IX", "Beat The Bar",
+  "Bench Tower", "Blackbox Katipunan", "Bonifacio Global City", "BGC",
+  "Burgos Circle Park", "Cafe 32nd St", "Capitol Commons", "Cine Adarna",
+  "Cinema 76", "City of Dreams Manila", "Clubhouse at The Palace", "Commune",
+  "Cubao Expo", "Draft Restaurant & Brewery", "East Wing Atrium", "Eastwood City",
+  "Estancia Mall", "Evia Lifestyle Center", "Festival Mall", "Finale Art File",
+  "Fireside", "Forbes Town Center", "Fred's Revolucion", "Galerie Stephanie",
+  "Gateway Mall", "Glorietta", "Gravity Art Space", "Greenbelt", "Gyud Food",
+  "Handlebar Bar and Grill", "Heyday Cafe", "INT.Bar / EXT.Cafe", "Intramuros",
+  "Jess & Pats", "K:ITA Cafe", "Kampai", "La Fuerza Plaza", "Lan Kwai Speakeasy",
+  "Legazpi Active Park", "Legazpi Sunday Market", "M Bakery", "Mall of Asia Arena",
+  "MOA Arena", "Mandala Park", "Market! Market!", "Matheus Bldg",
+  "Metrotent Convention Center", "Molito Lifestyle Center", "Mow's Bar",
+  "New Frontier Theater", "Newport Performing Arts Theater", "NoKal Manila",
+  "Odd Cafe", "Okada Manila", "Paseo Center", "Petite Bakery", "Philippine Arena",
+  "Playlist Cafe Antipolo", "Poblacion", "Power Plant Mall", "Quezon Club",
+  "Radius Katipunan", "Red Room", "Revel at The Palace", "Rizal Park",
+  "Robinsons Magnolia", "Rockwell", "SaGuijo Café + Bar", "Salcedo Market",
+  "Salcedo Park", "Samsung Hall", "Samsung Performing Arts Theater", "Silverlens",
+  "SINE POP", "SM City North EDSA", "SM Mall of Asia", "SM Megamall", "SM Southmall",
+  "Smart Araneta Coliseum", "Social House BGC", "Spruce Gallery", "Tago Jazz Cafe",
+  "The Fifth at Rockwell", "The Palace Manila", "The Pop Up Katipunan",
+  "Tipple and Slaw", "Ugly Duck", "UP Town Center", "Valkyrie at The Palace",
+  "Venice Grand Canal Mall", "Victor Bridgetowne", "Whisky Park", "XX XX", "Xylo"
+];
 
-// Initialize Gemini
+// JSON Schema for Gemini Structured Output (eliminates JSON parsing issues)
+const eventExtractionSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    ocrText: { type: SchemaType.STRING, nullable: true, description: "All text extracted from image" },
+    isEvent: { type: SchemaType.BOOLEAN, description: "Whether this is an event announcement" },
+    eventTitle: { type: SchemaType.STRING, nullable: true, description: "Event title/name" },
+    eventDate: { type: SchemaType.STRING, nullable: true, description: "Event date in YYYY-MM-DD format" },
+    eventEndDate: { type: SchemaType.STRING, nullable: true, description: "End date for multi-day events in YYYY-MM-DD format" },
+    eventTime: { type: SchemaType.STRING, nullable: true, description: "Event start time in HH:MM format (24-hour)" },
+    endTime: { type: SchemaType.STRING, nullable: true, description: "Event end time in HH:MM format (24-hour)" },
+    venueName: { type: SchemaType.STRING, nullable: true, description: "Venue name" },
+    venueAddress: { type: SchemaType.STRING, nullable: true, description: "Full venue address" },
+    price: { type: SchemaType.NUMBER, nullable: true, description: "Single price or starting price" },
+    priceMin: { type: SchemaType.NUMBER, nullable: true, description: "Minimum price for tiered pricing" },
+    priceMax: { type: SchemaType.NUMBER, nullable: true, description: "Maximum price for tiered pricing" },
+    priceNotes: { type: SchemaType.STRING, nullable: true, description: "Price tier details" },
+    isFree: { type: SchemaType.BOOLEAN, nullable: true, description: "Whether the event is free" },
+    signupUrl: { type: SchemaType.STRING, nullable: true, description: "Registration/ticket URL" },
+    urlType: { type: SchemaType.STRING, nullable: true, description: "Type of URL: tickets, registration, rsvp, info, link_in_bio" },
+    category: { type: SchemaType.STRING, description: "Event category: nightlife, music, art_culture, markets, food, workshops, community, comedy, other" },
+    confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-1" },
+    isRecurring: { type: SchemaType.BOOLEAN, description: "Whether this is a recurring event" },
+    recurrencePattern: { type: SchemaType.STRING, nullable: true, description: "Recurrence pattern e.g. weekly:friday" },
+    rsvpDeadline: { type: SchemaType.STRING, nullable: true, description: "RSVP deadline in YYYY-MM-DD format" },
+    isHistoricalPost: { type: SchemaType.BOOLEAN, description: "Whether this is about a past event" },
+    reasoning: { type: SchemaType.STRING, description: "Explanation of extraction decisions" }
+  },
+  required: ["isEvent", "category", "confidence", "isRecurring", "isHistoricalPost", "reasoning"]
+};
+
+// Initialize Gemini with JSON Schema mode
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+const model = genAI.getGenerativeModel({ 
+  model: 'gemini-2.0-flash',
+  generationConfig: {
+    responseMimeType: "application/json",
+    responseSchema: eventExtractionSchema
+  }
+});
+
+// Fallback model without schema (for caption-only)
+const modelCaptionOnly = genAI.getGenerativeModel({ 
+  model: 'gemini-2.0-flash',
+  generationConfig: {
+    responseMimeType: "application/json",
+    responseSchema: eventExtractionSchema
+  }
+});
 
 // Results tracking
 const results = {
@@ -95,63 +146,26 @@ async function fetchImageWithRetry(imageUrl, retries = IMAGE_FETCH_RETRIES) {
 }
 
 /**
- * Parse JSON with cleanup for common AI response issues
+ * Build the extraction prompt with all context
  */
-function parseJSONWithCleanup(text) {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
+function buildExtractionPrompt(caption, post, hasImage = true) {
+  // Get today's date for context
+  const today = new Date().toISOString().split('T')[0];
+  const currentYear = new Date().getFullYear();
   
-  let jsonStr = jsonMatch[0];
+  // Calculate post age to detect historical posts
+  const postTimestamp = post?.timestamp;
+  const postDate = postTimestamp ? new Date(postTimestamp) : new Date();
+  const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
+  const isOldPost = postAgeInDays > 30;
   
-  // First attempt: direct parse
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    // Cleanup common JSON issues
-    let cleaned = jsonStr
-      // Remove control characters (ASCII 0-31 except newlines/tabs)
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
-      // Fix unescaped newlines in strings
-      .replace(/(?<!\\)\n/g, '\\n')
-      // Remove trailing commas before } or ]
-      .replace(/,\s*}/g, '}')
-      .replace(/,\s*]/g, ']')
-      // Fix single quotes to double quotes (careful with apostrophes)
-      .replace(/:\s*'([^']*)'/g, ':"$1"')
-      // Fix unquoted keys
-      .replace(/(\{|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
-    
-    try {
-      return JSON.parse(cleaned);
-    } catch (e2) {
-      // Last resort: try to extract key fields manually
-      console.log(`    ⚠️ JSON cleanup failed: ${e2.message}`);
-      return null;
-    }
-  }
-}
+  // Build known venues context
+  const venueContext = `
+KNOWN VENUES (use exact spelling if venue matches one of these):
+${KNOWN_VENUES.slice(0, 60).join(', ')}
+... and more. If venue matches a known venue, use the exact spelling from this list.`;
 
-/**
- * Extract event data from image using Gemini Vision
- */
-async function extractWithGeminiVision(imageUrl, caption, post = {}) {
-  try {
-    const imageResponse = await fetchImageWithRetry(imageUrl);
-    
-    const imageBuffer = await imageResponse.arrayBuffer();
-    const base64Image = Buffer.from(imageBuffer).toString('base64');
-    
-    // Get today's date for context
-    const today = new Date().toISOString().split('T')[0];
-    const currentYear = new Date().getFullYear();
-    
-    // Calculate post age to detect historical posts
-    const postTimestamp = post?.timestamp;
-    const postDate = postTimestamp ? new Date(postTimestamp) : new Date();
-    const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
-    const isOldPost = postAgeInDays > 30;
-    
-    const prompt = `You are an expert at extracting event information from Filipino Instagram event posters.
+  return `You are an expert at extracting event information from Filipino Instagram event posters.
 
 TODAY'S DATE: ${today}
 INSTAGRAM POST DATE: ${postDate.toISOString().split('T')[0]} (${postAgeInDays} days ago)${isOldPost ? ' ⚠️ OLD POST - likely historical' : ''}
@@ -161,7 +175,9 @@ INSTAGRAM CAPTION:
 ${caption || '(no caption)'}
 """
 
-Extract ALL text visible in the image, then determine if this is an event announcement.
+${venueContext}
+
+${hasImage ? 'Extract ALL text visible in the image, then determine if this is an event announcement.' : '⚠️ NOTE: No image is available - extract information from caption text only.'}
 
 ⚠️ CRITICAL: HISTORICAL POST DETECTION
 - This post was made ${postAgeInDays} days ago
@@ -222,11 +238,20 @@ Example interpretations:
 ⚠️ COMMON MISTAKE:
 When you see two times in a multi-day event post, do NOT assign them to different days unless the post EXPLICITLY says "Friday at X, Saturday at Y"
 
+⚠️ NIGHTLIFE MIDNIGHT RULE:
+- In nightlife context (clubs, bars, parties, DJ events), times from 12MN to 4AM belong to the NIGHT of the previous date
+- "Dec 5 at 12MN" in nightlife context = night of Dec 5 (technically Dec 6 00:00), the party starts late on Dec 5
+- "2AM" for a party = the party runs INTO 2AM (it started the previous evening)
+- DO NOT create a new event date for 12MN-4AM times - they're part of the same night event
+- If you see "Party starts 10PM" and "Until 4AM", eventTime: "22:00", endTime: "04:00" (same event)
+
 CONFIDENCE GUIDELINES:
-- Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible in BOTH image AND caption
+${hasImage ? `- Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible in BOTH image AND caption
 - Set confidence 0.8-0.89 if fields are clear in either image OR caption
 - Set confidence 0.6-0.79 if you're interpreting date formats or inferring AM/PM
-- Set confidence < 0.6 if you're making educated guesses - consider setting field to null instead
+- Set confidence < 0.6 if you're making educated guesses - consider setting field to null instead` : 
+`- Set confidence 0.5-0.7 for caption-only extraction (no image available)
+- Lower confidence if date, time, or venue is unclear`}
 
 DATE EXTRACTION - ⚠️ CAREFUL WITH FORMATS:
 - European/Philippine format: 05.12.2025 = December 5 (day.month.year), NOT May 12
@@ -256,6 +281,7 @@ END TIME EXTRACTION:
 
 VENUE/LOCATION - ⚠️ STRICT RULES:
 - Extract the ACTUAL venue name from the post content
+- If venue matches a KNOWN VENUE from the list above, use that EXACT spelling
 - DO NOT use @mentions as venues (those are usually performers/sponsors)
 - DO NOT use the posting account username as venue
 - DO NOT guess or make up venue names - if unclear, set to null
@@ -283,32 +309,20 @@ URL/LINK EXTRACTION:
 
 Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
 
-Respond in JSON only:
-{
-  "ocrText": "all text extracted from image",
-  "isEvent": true,
-  "eventTitle": "...",
-  "eventDate": "YYYY-MM-DD",
-  "eventEndDate": "YYYY-MM-DD or null for multi-day",
-  "eventTime": "HH:MM",
-  "endTime": "HH:MM or null",
-  "venueName": "venue name only, or null if unclear",
-  "venueAddress": "full address if visible",
-  "price": 0,
-  "priceMin": 0,
-  "priceMax": 0,
-  "priceNotes": "tier details or null",
-  "isFree": false,
-  "signupUrl": "full URL or null",
-  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
-  "category": "nightlife",
-  "confidence": 0.85,
-  "isRecurring": false,
-  "recurrencePattern": "weekly:friday or null",
-  "rsvpDeadline": "YYYY-MM-DD if RSVP deadline mentioned, null otherwise",
-  "isHistoricalPost": false,
-  "reasoning": "Explain what indicators you found (date, time, venue, event-type words) or why this is NOT an event. If historical, explain why."
-}`;
+Extract the event information following the JSON schema provided.`;
+}
+
+/**
+ * Extract event data from image using Gemini Vision with JSON Schema mode
+ */
+async function extractWithGeminiVision(imageUrl, caption, post = {}) {
+  try {
+    const imageResponse = await fetchImageWithRetry(imageUrl);
+    
+    const imageBuffer = await imageResponse.arrayBuffer();
+    const base64Image = Buffer.from(imageBuffer).toString('base64');
+    
+    const prompt = buildExtractionPrompt(caption, post, true);
 
     const result = await model.generateContent([
       { text: prompt },
@@ -320,45 +334,15 @@ Respond in JSON only:
       },
     ]);
 
+    // With JSON Schema mode, response is guaranteed valid JSON
     const text = result.response.text();
-    let parsed = parseJSONWithCleanup(text);
-    
-    // Retry with stricter JSON formatting instructions if initial parse failed
-    if (!parsed) {
-      console.log(`    🔄 Initial JSON parse failed, retrying with stricter prompt...`);
-      try {
-        const retryPrompt = `The previous response was not valid JSON. Please extract the same information but respond with ONLY valid JSON - no markdown, no code blocks, no extra text. Ensure all strings are properly escaped and all fields match this exact schema:
-
-${EXPECTED_JSON_SCHEMA}
-
-Extract information from the same image and caption as before.`;
-
-        const retryResult = await model.generateContent([
-          { text: retryPrompt },
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: base64Image,
-            },
-          },
-        ]);
-        
-        const retryText = retryResult.response.text();
-        parsed = parseJSONWithCleanup(retryText);
-        
-        if (parsed) {
-          console.log(`    ✅ Retry successful - got valid JSON`);
-        }
-      } catch (retryErr) {
-        console.log(`    ⚠️ Retry also failed: ${retryErr.message}`);
-      }
-    }
-    
-    if (parsed) {
+    try {
+      const parsed = JSON.parse(text);
       return parsed;
+    } catch (parseErr) {
+      console.log(`    ⚠️ JSON parse failed despite schema mode: ${parseErr.message}`);
+      return null;
     }
-    
-    console.log(`    ⚠️ Could not parse JSON from vision response after retry`);
   } catch (err) {
     console.log(`    ⚠️ Vision extraction failed: ${err.message}`);
   }
@@ -371,106 +355,20 @@ Extract information from the same image and caption as before.`;
  */
 async function extractFromCaptionOnly(caption, post = {}) {
   try {
-    // Get today's date for context
-    const today = new Date().toISOString().split('T')[0];
-    const currentYear = new Date().getFullYear();
-    
-    // Calculate post age to detect historical posts
-    const postTimestamp = post?.timestamp;
-    const postDate = postTimestamp ? new Date(postTimestamp) : new Date();
-    const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
-    const isOldPost = postAgeInDays > 30;
-    
-    const prompt = `You are an expert at extracting event information from Filipino Instagram captions.
+    const prompt = buildExtractionPrompt(caption, post, false);
 
-TODAY'S DATE: ${today}
-INSTAGRAM POST DATE: ${postDate.toISOString().split('T')[0]} (${postAgeInDays} days ago)${isOldPost ? ' ⚠️ OLD POST - likely historical' : ''}
-
-INSTAGRAM CAPTION:
-"""
-${caption || '(no caption)'}
-"""
-
-⚠️ NOTE: No image is available - extract information from caption text only.
-
-Determine if this caption describes an event announcement.
-
-⚠️ CRITICAL: HISTORICAL POST DETECTION
-- This post was made ${postAgeInDays} days ago
-- If the extracted event date is BEFORE the post date, this is a HISTORICAL POST about a past event
-- DO NOT increment the year! A "May 3" post from May 2025 is NOT a May 2026 event
-- If the event date has already passed, set isEvent: false and note "Historical post - event already occurred"
-
-CRITICAL VALIDATION RULES:
-1. eventDate MUST be on or after the POST date (${postDate.toISOString().split('T')[0]}), not today
-2. If an event date is in the past relative to TODAY (${today}), it's already passed - set isEvent: false
-3. DO NOT auto-increment year for past dates
-4. eventDate year MUST be ${currentYear} or ${currentYear + 1}
-5. If you see past dates, check if it's a recurring event - if so, calculate the NEXT occurrence
-
-⚠️ NOT AN EVENT - Set isEvent: false if:
-- THANK YOU / RECAP post (contains "thank you", "merci", "what a night", "until next time")
-- THROWBACK post (contains "#tbt", "#throwback", "look back", "memories")
-- VENUE PROMO (contains "host your events", "book our space", "private events", "for bookings")
-- PRODUCT/MENU post (contains "new on the menu", "now serving", "try our")
-- Contains operating hours without a specific date
-- Says "Every [day]" without a specific date
-- Generic promo: "Visit us", "Come check out"
-
-MULTI-DAY EVENT TIME HANDLING:
-- For multi-day events, the schedule usually REPEATS each day
-- If you see multiple times, they likely apply to ALL days (not different times per day)
-- Only assign different times to different days if EXPLICITLY stated (e.g., "Fri 4PM, Sat 6PM")
-
-END TIME EXTRACTION:
-- Try to extract end time from caption
-- If not visible, infer based on event type (film: +2-3hrs, concert: +3-4hrs, market: until 9-10PM)
-- Lower confidence if inferring
-
-CONFIDENCE GUIDELINES:
-- Set confidence 0.5-0.7 for caption-only extraction (no image available)
-- Lower confidence if date, time, or venue is unclear
-
-Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
-
-Respond in JSON only:
-{
-  "ocrText": null,
-  "isEvent": true,
-  "eventTitle": "...",
-  "eventDate": "YYYY-MM-DD",
-  "eventEndDate": "YYYY-MM-DD or null",
-  "eventTime": "HH:MM",
-  "endTime": "HH:MM or null",
-  "venueName": "venue name only, or null if unclear",
-  "venueAddress": "full address if visible",
-  "price": 0,
-  "priceMin": 0,
-  "priceMax": 0,
-  "priceNotes": "tier details or null",
-  "isFree": false,
-  "signupUrl": "full URL or null",
-  "urlType": "tickets | registration | rsvp | info | link_in_bio | null",
-  "category": "nightlife",
-  "confidence": 0.6,
-  "isRecurring": false,
-  "recurrencePattern": "weekly:friday or null",
-  "rsvpDeadline": "YYYY-MM-DD if RSVP deadline mentioned, null otherwise",
-  "isHistoricalPost": false,
-  "reasoning": "Explain what indicators you found (from caption only) or why this is NOT an event."
-}`;
-
-    const result = await model.generateContent(prompt);
+    const result = await modelCaptionOnly.generateContent(prompt);
     const text = result.response.text();
-    const parsed = parseJSONWithCleanup(text);
     
-    if (parsed) {
+    try {
+      const parsed = JSON.parse(text);
       // Mark that this was caption-only extraction
       parsed.captionOnlyExtraction = true;
       return parsed;
+    } catch (parseErr) {
+      console.log(`    ⚠️ Caption-only JSON parse failed: ${parseErr.message}`);
+      return null;
     }
-    
-    console.log(`    ⚠️ Could not parse JSON from caption-only response`);
   } catch (err) {
     console.log(`    ⚠️ Caption-only extraction failed: ${err.message}`);
   }
@@ -616,6 +514,7 @@ async function main() {
 
   console.log('🚀 Starting Instagram scrape processing...\n');
   console.log(`📊 Dataset URL: ${datasetUrl}`);
+  console.log(`🏠 Using ${KNOWN_VENUES.length} known venues for matching\n`);
   
   // Fetch posts directly from Apify URL (no API key needed!)
   console.log('\n📥 Fetching posts from Apify...');
