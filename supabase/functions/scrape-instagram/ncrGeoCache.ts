@@ -1155,7 +1155,8 @@ function checkWordMatch(normalizedSearch: string, normalizedTarget: string): boo
   const searchWords = normalizedSearch.split(/\s+/).filter(w => w.length >= 3);
   const targetWords = normalizedTarget.split(/\s+/).filter(w => w.length >= 3);
   
-  if (searchWords.length === 0) return false;
+  // Both must have words for a valid match
+  if (searchWords.length === 0 || targetWords.length === 0) return false;
   
   // Determine which is shorter and which is longer
   const shorterWords = searchWords.length <= targetWords.length ? searchWords : targetWords;
