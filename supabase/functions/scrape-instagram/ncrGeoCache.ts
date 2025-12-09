@@ -1037,6 +1037,11 @@ export function normalizeForLookup(name: string): string {
   return (name || '')
     .toLowerCase()
     .trim()
+    // Decode common HTML entities first
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
     // Unify all apostrophe/quote variants to standard single quote then remove
     .replace(/[\u2018\u2019\u201A\u201B\u2032\u0027''`´]/g, '')
     // Remove all punctuation except letters, numbers, spaces
@@ -1334,7 +1339,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     
     // 8. Try fuzzy matching with higher threshold (0.75) for known venues
     const KNOWN_VENUE_FUZZY_THRESHOLD = 0.75;
-    let bestFuzzyMatch: { venue: any; score: number } | null = null;
+    let bestFuzzyMatch: { venue: { name: string; aliases?: string[]; lat: number; lng: number; city?: string }; score: number } | null = null;
     
     for (const venue of venues) {
       const normalizedVenueName = normalizeForLookup(venue.name || '');

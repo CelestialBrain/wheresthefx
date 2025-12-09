@@ -109,13 +109,20 @@ Deno.test("Venue matching priority - known_venues should be checked first", () =
 
 import { normalizeForLookup } from "./ncrGeoCache.ts";
 
-Deno.test("normalizeForLookup - should handle ampersands", () => {
-  const normalized = normalizeForLookup("Draft Restaurant & Brewery");
-  const normalized2 = normalizeForLookup("Draft Restaurant &amp; Brewery");
+Deno.test("normalizeForLookup - should handle HTML entities", () => {
+  const normalized1 = normalizeForLookup("Draft Restaurant &amp; Brewery");
+  const normalized2 = normalizeForLookup("Draft Restaurant & Brewery");
   
   // Both should normalize to the same thing
-  assertEquals(normalized, normalized2, "Ampersands should normalize the same");
+  assertEquals(normalized1, normalized2, "HTML entity and symbol should normalize the same");
+  assertEquals(normalized1, "draft restaurant brewery", "Should decode &amp; then remove &");
+});
+
+Deno.test("normalizeForLookup - should handle ampersands", () => {
+  const normalized = normalizeForLookup("Draft Restaurant & Brewery");
+  
   assertEquals(normalized.includes("&"), false, "Should remove ampersand");
+  assertEquals(normalized, "draft restaurant brewery", "Should have spaces between words");
 });
 
 Deno.test("normalizeForLookup - should handle colons and spaces", () => {
@@ -173,7 +180,9 @@ Deno.test("Normalization - Draft Restaurant &amp; Brewery should match after nor
   const normalized1 = normalizeForLookup("Draft Restaurant &amp; Brewery");
   const normalized2 = normalizeForLookup("Draft Restaurant & Brewery");
   
+  // Both should normalize to exact same string
   assertEquals(normalized1, normalized2, "HTML entity and symbol should normalize the same");
+  assertEquals(normalized1, "draft restaurant brewery", "Should decode &amp; then remove &");
 });
 
 Deno.test("Normalization - K: ITA Cafe variations should match", () => {
