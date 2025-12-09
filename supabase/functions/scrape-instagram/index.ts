@@ -20,7 +20,7 @@ import {
   cleanLocationName,
 } from './extractionUtils.ts';
 import { ScraperLogger, RejectedPostLogData } from './logger.ts';
-import { lookupNCRVenue, fuzzyMatchVenue } from './ncrGeoCache.ts';
+import { lookupNCRVenue, fuzzyMatchVenue, lookupKnownVenuesFirst, DEFAULT_FUZZY_THRESHOLD } from './ncrGeoCache.ts';
 import { fetchWithRetry, fetchWithTimeout } from './retryUtils.ts';
 import { saveGroundTruth, trainPatternsFromComparison } from './patternTrainer.ts';
 import { extractInParallel, mergeResults, MergedExtractionResult } from './parallelExtraction.ts';
@@ -1184,24 +1184,65 @@ Deno.serve(async (req) => {
               canonicalVenue = canonical;
             }
             
-            // 3. Try NCR geocache first (fast, in-memory)
             const searchName = canonicalVenue || rawVenueName;
-            const cachedVenue = lookupNCRVenue(searchName);
-            if (cachedVenue) {
-              locationLat = cachedVenue.lat;
-              locationLng = cachedVenue.lng;
-              geocodeSource = 'ncr_cache_exact';
-              
-              await ingestLogger?.success('geocache', `NCR cache hit (exact): ${searchName}`, {
+            
+            // 3. NEW PRIORITY: Check known_venues database FIRST
+            // This has verified, meter-accurate coordinates and should be preferred
+            try {
+              const knownVenueMatch = await lookupKnownVenuesFirst(searchName);
+              if (knownVenueMatch) {
+                locationLat = knownVenueMatch.lat;
+                locationLng = knownVenueMatch.lng;
+                canonicalVenue = knownVenueMatch.canonicalName;
+                geocodeSource = 'known_venues_db';
+                
+                // Log with match type details
+                const matchTypeLabel = {
+                  'exact_name': 'exact name match',
+                  'exact_alias': 'alias match',
+                  'partial_name': 'partial name match',
+                  'partial_alias': 'partial alias match'
+                }[knownVenueMatch.matchType] || knownVenueMatch.matchType;
+                
+                await ingestLogger?.success('geocache', `[GEOCODE] known_venues ${matchTypeLabel}: "${searchName}" → "${knownVenueMatch.canonicalName}"`, {
+                  postId: post.postId,
+                  venue: rawVenueName,
+                  matchedName: knownVenueMatch.canonicalName,
+                  matchType: knownVenueMatch.matchType,
+                  lat: knownVenueMatch.lat,
+                  lng: knownVenueMatch.lng,
+                  city: knownVenueMatch.city,
+                });
+              }
+            } catch (dbError) {
+              await ingestLogger?.warn('geocache', `Known venues lookup error`, {
                 postId: post.postId,
                 venue: rawVenueName,
-                lat: cachedVenue.lat,
-                lng: cachedVenue.lng,
-                city: cachedVenue.city,
+                error: dbError instanceof Error ? dbError.message : 'Unknown error',
               });
-            } else {
-              // 4. Try fuzzy match in NCR cache
-              const fuzzyMatch = fuzzyMatchVenue(searchName, 0.7);
+            }
+            
+            // 4. Fall back to static NCR geocache (fast, in-memory)
+            if (!locationLat) {
+              const cachedVenue = lookupNCRVenue(searchName);
+              if (cachedVenue) {
+                locationLat = cachedVenue.lat;
+                locationLng = cachedVenue.lng;
+                geocodeSource = 'ncr_cache_exact';
+                
+                await ingestLogger?.success('geocache', `NCR cache hit (exact): ${searchName}`, {
+                  postId: post.postId,
+                  venue: rawVenueName,
+                  lat: cachedVenue.lat,
+                  lng: cachedVenue.lng,
+                  city: cachedVenue.city,
+                });
+              }
+            }
+            
+            // 5. Fall back to fuzzy match in NCR cache
+            if (!locationLat) {
+              const fuzzyMatch = fuzzyMatchVenue(searchName, DEFAULT_FUZZY_THRESHOLD);
               if (fuzzyMatch) {
                 locationLat = fuzzyMatch.lat;
                 locationLng = fuzzyMatch.lng;
@@ -1214,61 +1255,6 @@ Deno.serve(async (req) => {
                   lat: fuzzyMatch.lat,
                   lng: fuzzyMatch.lng,
                   city: fuzzyMatch.city,
-                });
-              }
-            }
-            
-            // 5. If still no coordinates, check known_venues table
-            if (!locationLat && canonicalVenue) {
-              try {
-                const searchTerm = canonicalVenue.toLowerCase().replace(/[%_]/g, '');
-                const { data: venues } = await supabase
-                  .from('known_venues')
-                  .select('name, lat, lng, city, aliases')
-                  .limit(50);
-                
-                if (venues && venues.length > 0) {
-                  type KnownVenueRow = { name: string; lat: number; lng: number; city?: string; aliases?: string[] };
-                  
-                  // Try exact match first
-                  let matchedVenue = venues.find((v: KnownVenueRow) => 
-                    v.name?.toLowerCase() === searchTerm ||
-                    v.aliases?.some((a: string) => a.toLowerCase() === searchTerm)
-                  );
-                  
-                  // Try partial match
-                  if (!matchedVenue) {
-                    matchedVenue = venues.find((v: KnownVenueRow) => 
-                      v.name?.toLowerCase().includes(searchTerm) ||
-                      searchTerm.includes(v.name?.toLowerCase() || '') ||
-                      v.aliases?.some((a: string) => 
-                        a.toLowerCase().includes(searchTerm) || 
-                        searchTerm.includes(a.toLowerCase())
-                      )
-                    );
-                  }
-                  
-                  if (matchedVenue?.lat && matchedVenue?.lng) {
-                    locationLat = matchedVenue.lat;
-                    locationLng = matchedVenue.lng;
-                    canonicalVenue = matchedVenue.name;
-                    geocodeSource = 'known_venues_db';
-                    
-                    await ingestLogger?.success('geocache', `Known venue match: ${searchName} → ${matchedVenue.name}`, {
-                      postId: post.postId,
-                      venue: rawVenueName,
-                      matchedName: matchedVenue.name,
-                      lat: matchedVenue.lat,
-                      lng: matchedVenue.lng,
-                      city: matchedVenue.city,
-                    });
-                  }
-                }
-              } catch (dbError) {
-                await ingestLogger?.warn('geocache', `Known venues lookup failed`, {
-                  postId: post.postId,
-                  venue: rawVenueName,
-                  error: dbError instanceof Error ? dbError.message : 'Unknown error',
                 });
               }
             }
