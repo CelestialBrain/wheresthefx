@@ -1135,13 +1135,39 @@ async function loadDatabaseVenues(): Promise<void> {
 }
 
 /**
+ * Match type for known venue lookups
+ */
+export type VenueMatchType = 'exact_name' | 'exact_alias' | 'normalized_name' | 'normalized_alias' | 'word_match' | 'partial_name' | 'partial_alias' | 'fuzzy';
+
+/**
+ * Check if all words from the shorter string appear in the longer string
+ * Used for word-based venue matching
+ */
+function checkWordMatch(normalizedSearch: string, normalizedTarget: string): boolean {
+  const searchWords = normalizedSearch.split(/\s+/).filter(w => w.length >= 3);
+  const targetWords = normalizedTarget.split(/\s+/).filter(w => w.length >= 3);
+  
+  if (searchWords.length === 0) return false;
+  
+  // Check if all words from shorter list appear in longer list
+  const shorterWords = searchWords.length <= targetWords.length ? searchWords : targetWords;
+  const longerWordsSet = new Set(searchWords.length <= targetWords.length ? targetWords : searchWords);
+  
+  return shorterWords.every(word => longerWordsSet.has(word));
+}
+
+/**
  * Lookup venues in the known_venues database FIRST with comprehensive matching
  * This should be the PRIMARY venue lookup method
  * 
  * Matching strategy:
  * 1. Exact name match (case-insensitive)
  * 2. Exact alias match (case-insensitive) 
- * 3. Partial/contains match on name and aliases
+ * 3. Normalized exact name match
+ * 4. Normalized exact alias match
+ * 5. Word-based match
+ * 6. Partial/contains match on name and aliases
+ * 7. Fuzzy match with 0.75 threshold
  * 
  * Returns matched venue with lat, lng, city, and canonical name
  */
@@ -1150,7 +1176,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
   lng: number;
   city: string;
   canonicalName: string;
-  matchType: 'exact_name' | 'exact_alias' | 'normalized_name' | 'normalized_alias' | 'word_match' | 'partial_name' | 'partial_alias' | 'fuzzy';
+  matchType: VenueMatchType;
 } | null> {
   if (!venueName) return null;
   
@@ -1250,49 +1276,33 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     }
     
     // 5. Try word-based match (all words from one appear in the other)
-    const searchWords = normalizedSearch.split(/\s+/).filter(w => w.length >= 3);
-    if (searchWords.length > 0) {
-      for (const venue of venues) {
-        const normalizedVenueName = normalizeForLookup(venue.name || '');
-        const venueWords = normalizedVenueName.split(/\s+/).filter(w => w.length >= 3);
-        
-        // Check if all words from shorter list appear in longer list
-        const shorterWords = searchWords.length <= venueWords.length ? searchWords : venueWords;
-        const longerWords = searchWords.length <= venueWords.length ? venueWords : searchWords;
-        
-        const allWordsMatch = shorterWords.every(word => longerWords.includes(word));
-        if (allWordsMatch && shorterWords.length > 0) {
-          return {
-            lat: Number(venue.lat),
-            lng: Number(venue.lng),
-            city: venue.city || 'Metro Manila',
-            canonicalName: venue.name,
-            matchType: 'word_match'
-          };
-        }
+    for (const venue of venues) {
+      const normalizedVenueName = normalizeForLookup(venue.name || '');
+      if (checkWordMatch(normalizedSearch, normalizedVenueName)) {
+        return {
+          lat: Number(venue.lat),
+          lng: Number(venue.lng),
+          city: venue.city || 'Metro Manila',
+          canonicalName: venue.name,
+          matchType: 'word_match'
+        };
       }
-      
-      // Also check word match on aliases
-      for (const venue of venues) {
-        if (Array.isArray(venue.aliases)) {
-          for (const alias of venue.aliases) {
-            if (typeof alias === 'string') {
-              const normalizedAlias = normalizeForLookup(alias);
-              const aliasWords = normalizedAlias.split(/\s+/).filter(w => w.length >= 3);
-              
-              const shorterWords = searchWords.length <= aliasWords.length ? searchWords : aliasWords;
-              const longerWords = searchWords.length <= aliasWords.length ? aliasWords : searchWords;
-              
-              const allWordsMatch = shorterWords.every(word => longerWords.includes(word));
-              if (allWordsMatch && shorterWords.length > 0) {
-                return {
-                  lat: Number(venue.lat),
-                  lng: Number(venue.lng),
-                  city: venue.city || 'Metro Manila',
-                  canonicalName: venue.name,
-                  matchType: 'word_match'
-                };
-              }
+    }
+    
+    // Also check word match on aliases
+    for (const venue of venues) {
+      if (Array.isArray(venue.aliases)) {
+        for (const alias of venue.aliases) {
+          if (typeof alias === 'string') {
+            const normalizedAlias = normalizeForLookup(alias);
+            if (checkWordMatch(normalizedSearch, normalizedAlias)) {
+              return {
+                lat: Number(venue.lat),
+                lng: Number(venue.lng),
+                city: venue.city || 'Metro Manila',
+                canonicalName: venue.name,
+                matchType: 'word_match'
+              };
             }
           }
         }
@@ -1338,7 +1348,6 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     }
     
     // 8. Try fuzzy matching with higher threshold (0.75) for known venues
-    const KNOWN_VENUE_FUZZY_THRESHOLD = 0.75;
     let bestFuzzyMatch: { venue: { name: string; aliases?: string[]; lat: number; lng: number; city?: string }; score: number } | null = null;
     
     for (const venue of venues) {
@@ -1443,6 +1452,7 @@ export function lookupNCRVenue(venueName: string): VenueData | null {
 export const SUBSTRING_BASE_SCORE = 0.85;  // Base score when one string contains another
 export const SUBSTRING_BONUS_RANGE = 0.15; // Additional bonus based on length ratio
 export const DEFAULT_FUZZY_THRESHOLD = 0.5; // Default threshold for fuzzy matching
+export const KNOWN_VENUE_FUZZY_THRESHOLD = 0.75; // Stricter threshold for known venue lookups
 
 /**
  * Fuzzy matching for venue names using string similarity
