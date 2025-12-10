@@ -17,6 +17,7 @@ export interface VenueData {
   lng: number;
   city: string;
   fullName?: string; // Optional canonical full name
+  address?: string; // Optional street address
 }
 
 /**
@@ -1187,6 +1188,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
   city: string;
   canonicalName: string;
   matchType: VenueMatchType;
+  address?: string; // Return address from known_venues
 } | null> {
   if (!venueName) return null;
   
@@ -1207,7 +1209,7 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
     // loadDatabaseVenues() or using database-side fuzzy matching with pg_trgm.
     const { data: venues, error } = await supabase
       .from('known_venues')
-      .select('name, aliases, lat, lng, city')
+      .select('name, aliases, lat, lng, city, address')
       .not('lat', 'is', null)
       .not('lng', 'is', null);
     
@@ -1229,7 +1231,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
           lng: Number(venue.lng),
           city: venue.city || 'Metro Manila',
           canonicalName: venue.name,
-          matchType: 'exact_name'
+          matchType: 'exact_name',
+          address: venue.address || undefined
         };
       }
     }
@@ -1244,7 +1247,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
               lng: Number(venue.lng),
               city: venue.city || 'Metro Manila',
               canonicalName: venue.name,
-              matchType: 'exact_alias'
+              matchType: 'exact_alias',
+              address: venue.address || undefined
             };
           }
         }
@@ -1260,7 +1264,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
           lng: Number(venue.lng),
           city: venue.city || 'Metro Manila',
           canonicalName: venue.name,
-          matchType: 'normalized_name'
+          matchType: 'normalized_name',
+          address: venue.address || undefined
         };
       }
     }
@@ -1277,7 +1282,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
                 lng: Number(venue.lng),
                 city: venue.city || 'Metro Manila',
                 canonicalName: venue.name,
-                matchType: 'normalized_alias'
+                matchType: 'normalized_alias',
+                address: venue.address || undefined
               };
             }
           }
@@ -1294,7 +1300,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
           lng: Number(venue.lng),
           city: venue.city || 'Metro Manila',
           canonicalName: venue.name,
-          matchType: 'word_match'
+          matchType: 'word_match',
+          address: venue.address || undefined
         };
       }
     }
@@ -1311,7 +1318,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
                 lng: Number(venue.lng),
                 city: venue.city || 'Metro Manila',
                 canonicalName: venue.name,
-                matchType: 'word_match'
+                matchType: 'word_match',
+                address: venue.address || undefined
               };
             }
           }
@@ -1330,7 +1338,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
           lng: Number(venue.lng),
           city: venue.city || 'Metro Manila',
           canonicalName: venue.name,
-          matchType: 'partial_name'
+          matchType: 'partial_name',
+          address: venue.address || undefined
         };
       }
     }
@@ -1349,7 +1358,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
                 lng: Number(venue.lng),
                 city: venue.city || 'Metro Manila',
                 canonicalName: venue.name,
-                matchType: 'partial_alias'
+                matchType: 'partial_alias',
+                address: venue.address || undefined
               };
             }
           }
@@ -1389,7 +1399,8 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
         lng: Number(bestFuzzyMatch.venue.lng),
         city: bestFuzzyMatch.venue.city || 'Metro Manila',
         canonicalName: bestFuzzyMatch.venue.name,
-        matchType: 'fuzzy'
+        matchType: 'fuzzy',
+        address: (bestFuzzyMatch.venue as any).address || undefined
       };
     }
     
