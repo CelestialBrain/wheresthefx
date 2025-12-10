@@ -55,8 +55,14 @@ const eventExtractionSchema = {
     ocrText: { type: SchemaType.STRING, nullable: true, description: "All text extracted from image" },
     isEvent: { type: SchemaType.BOOLEAN, description: "Whether this is an event announcement" },
     eventTitle: { type: SchemaType.STRING, nullable: true, description: "Event title/name" },
-    eventDate: { type: SchemaType.STRING, nullable: true, description: "Event date in YYYY-MM-DD format" },
-    eventEndDate: { type: SchemaType.STRING, nullable: true, description: "End date for multi-day events in YYYY-MM-DD format" },
+    eventDate: { type: SchemaType.STRING, nullable: true, description: "Event date (first/next date) in YYYY-MM-DD format" },
+    eventEndDate: { type: SchemaType.STRING, nullable: true, description: "End date for multi-day CONTINUOUS events in YYYY-MM-DD format" },
+    allEventDates: { 
+      type: SchemaType.ARRAY, 
+      items: { type: SchemaType.STRING }, 
+      nullable: true, 
+      description: "All event dates for non-continuous multi-date events (e.g., Dec 7, 13, 14, 20, 21) in YYYY-MM-DD format. Use this for scattered dates, not continuous ranges." 
+    },
     eventTime: { type: SchemaType.STRING, nullable: true, description: "Event start time in HH:MM format (24-hour)" },
     endTime: { type: SchemaType.STRING, nullable: true, description: "Event end time in HH:MM format (24-hour)" },
     venueName: { type: SchemaType.STRING, nullable: true, description: "Venue name" },
@@ -260,6 +266,16 @@ DATE EXTRACTION - ⚠️ CAREFUL WITH FORMATS:
 - For relative dates ("tomorrow", "this Friday"), calculate from post date, not today
 - If month has passed this year, assume next year ONLY if post is recent (within 7 days)
 - ⚠️ RSVP DEADLINE detection: "RSVP by Dec 16" or "Register before Dec 10" - extract as rsvpDeadline, NOT eventDate
+
+⚠️ NON-CONTINUOUS MULTI-DATE EVENTS (CRITICAL):
+- When you see SCATTERED dates like "Dec 7, 13, 14, 20, 21" or "Every Sat & Sun in December":
+  → Set eventDate to the FIRST/NEXT upcoming date
+  → Set allEventDates to ALL dates in YYYY-MM-DD format: ["2025-12-07", "2025-12-13", "2025-12-14", "2025-12-20", "2025-12-21"]
+  → Do NOT use eventEndDate (that's only for continuous ranges like "Dec 12-14")
+- Examples:
+  - "Meet Santa on Dec 7, 13, 14, 20, 21" → eventDate: "2025-12-07", allEventDates: ["2025-12-07", "2025-12-13", "2025-12-14", "2025-12-20", "2025-12-21"]
+  - "Screenings: Dec 5, 6, 12, 13" → eventDate: "2025-12-05", allEventDates: ["2025-12-05", "2025-12-06", "2025-12-12", "2025-12-13"]
+- For CONTINUOUS ranges (Dec 12-14), use eventDate and eventEndDate, NOT allEventDates
 
 TIME EXTRACTION:
 - Look for: "8PM", "9:00 PM", "DOORS OPEN 7PM", "21:00"

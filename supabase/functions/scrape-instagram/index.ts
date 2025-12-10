@@ -1171,7 +1171,9 @@ Deno.serve(async (req) => {
           
           // 1. Get raw venue name from AI extraction or post data
           const rawVenueName = post.aiExtraction?.venueName || post.locationName;
+          const rawVenueAddress = post.aiExtraction?.venueAddress || null;
           let canonicalVenue: string | null = rawVenueName || null;
+          let locationAddress: string | null = rawVenueAddress;
           let locationLat: number | null = null;
           let locationLng: number | null = null;
           let geocodeSource: string | null = null;
@@ -1196,6 +1198,11 @@ Deno.serve(async (req) => {
                 canonicalVenue = knownVenueMatch.canonicalName;
                 geocodeSource = 'known_venues_db';
                 
+                // Copy address from known_venues if available AND if not already set by AI
+                if (knownVenueMatch.address && !locationAddress) {
+                  locationAddress = knownVenueMatch.address;
+                }
+                
                 // Log with match type details
                 const matchTypeLabel = {
                   'exact_name': 'exact name match',
@@ -1216,6 +1223,7 @@ Deno.serve(async (req) => {
                   lat: knownVenueMatch.lat,
                   lng: knownVenueMatch.lng,
                   city: knownVenueMatch.city,
+                  address: knownVenueMatch.address || null,
                 });
               }
             } catch (dbError) {
@@ -1411,7 +1419,7 @@ Deno.serve(async (req) => {
             stored_image_url: storedImageUrl,
             posted_at: post.timestamp || new Date().toISOString(),
             location_name: validation.correctedData.locationName,
-            location_address: post.aiExtraction?.venueAddress,
+            location_address: locationAddress, // Use address from known_venues if available
             location_lat: locationLat,
             location_lng: locationLng,
             is_event: isEvent, // Use corrected isEvent (after non-event/historical checks)
@@ -1511,6 +1519,30 @@ Deno.serve(async (req) => {
                 }
               } catch (scheduleInsertError) {
                 console.warn(`Error inserting schedule for ${post.postId}:`, scheduleInsertError);
+              }
+            }
+            // NEW: Handle allEventDates array (non-continuous multi-date events)
+            const allEventDates = (post.aiExtraction as any)?.allEventDates;
+            if (upsertedPost?.id && allEventDates && Array.isArray(allEventDates) && allEventDates.length > 0) {
+              try {
+                // Delete existing and insert new
+                await supabase.from('event_dates').delete().eq('instagram_post_id', upsertedPost.id);
+                
+                const dateRecords = allEventDates.map((dateStr: string) => ({
+                  instagram_post_id: upsertedPost.id,
+                  event_date: dateStr,
+                  event_time: validation.correctedData.eventTime || null,
+                  venue_name: canonicalVenue || null,
+                }));
+                
+                const { error: datesError } = await supabase.from('event_dates').insert(dateRecords);
+                if (datesError) {
+                  console.warn(`Failed to insert allEventDates for ${post.postId}:`, datesError.message);
+                } else {
+                  await ingestLogger?.info('save', `Stored ${dateRecords.length} event dates for multi-date event`, { postId: post.postId, dates: allEventDates });
+                }
+              } catch (err) {
+                console.warn(`Error inserting allEventDates for ${post.postId}:`, err);
               }
             }
             // Legacy support: Store additional dates if provided (multi-date events)
