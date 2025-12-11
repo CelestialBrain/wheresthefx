@@ -170,7 +170,16 @@ function getFallbackVenues() {
     "Smart Araneta Coliseum", "Social House BGC", "Spruce Gallery", "Tago Jazz Cafe",
     "The Fifth at Rockwell", "The Palace Manila", "The Pop Up Katipunan",
     "Tipple and Slaw", "Ugly Duck", "UP Town Center", "Valkyrie at The Palace",
-    "Venice Grand Canal Mall", "Victor Bridgetowne", "Whisky Park", "XX XX", "Xylo"
+    "Venice Grand Canal Mall", "Victor Bridgetowne", "Whisky Park", "XX XX", "Xylo",
+    // New venues added
+    "Drawing Room Manila", "UPFI Film Center", "Cinematheque Centre Manila",
+    "Lost and Found Makati", "Mercato Centrale", "SMX Aura", "SMX Convention Center",
+    "The Beach House Taft", "Sanctuary Manila", "Jungle Base Cafe", "HUB Make Lab",
+    "Le Pavillon", "Fusebox Lifestyle Complex", "White Rabbit Building", "BosCoffee",
+    "Sundeck Party Zhostel", "The Corner House", "Cafe Agapita", "Route 196",
+    "Sev's Cafe", "Coffee Architect", "Pintô Art Museum", "Vargas Museum",
+    "The Mind Museum", "UP Amphitheater", "UP Sunken Garden", "CCP Main Theater",
+    "Tanghalang Nicanor Abelardo", "Metropolitan Theater", "Aliw Theater"
   ];
 }
 
@@ -222,7 +231,111 @@ function extractUrlsFromText(text) {
     }
   }
   
+  // Check for DM for slots/reservations
+  const dmPatterns = [
+    /dm\s*(?:for|to)\s*(?:slots?|reserv|book|rsvp)/i,
+    /message\s*(?:for|to)\s*(?:slots?|reserv|book)/i,
+  ];
+  
+  for (const pattern of dmPatterns) {
+    if (pattern.test(text)) {
+      return 'dm_for_slots';
+    }
+  }
+  
   return null;
+}
+
+/**
+ * Extract time from caption using regex (fallback)
+ */
+function extractTimeFromCaption(caption) {
+  if (!caption) return null;
+  
+  // Time patterns - most specific first
+  const patterns = [
+    // Standard time formats: 7PM, 7:00PM, 7:00 PM
+    /\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)\b/i,
+    // 24-hour format: 19:00, 14:30
+    /\b([01]?\d|2[0-3]):([0-5]\d)\b(?!\s*(?:AM|PM))/i,
+    // Filipino: alas-7, alas 8
+    /alas[- ]?(\d{1,2})/i,
+    // Doors open at X, starts at X
+    /(?:doors?\s*(?:open|at)|starts?\s*at|begins?\s*at)\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = caption.match(pattern);
+    if (match) {
+      let hour = parseInt(match[1]);
+      let minute = match[2] ? parseInt(match[2]) : 0;
+      const meridiem = match[3]?.toUpperCase();
+      
+      // Convert to 24-hour format
+      if (meridiem === 'PM' && hour !== 12) {
+        hour += 12;
+      } else if (meridiem === 'AM' && hour === 12) {
+        hour = 0;
+      } else if (!meridiem && hour >= 1 && hour <= 6) {
+        // Assume PM for evening events if no meridiem specified
+        // Check context for evening keywords
+        const eveningKeywords = /night|evening|gabi|dinner|cocktail/i;
+        if (eveningKeywords.test(caption)) {
+          hour += 12;
+        }
+      }
+      
+      // Validate hour
+      if (hour >= 0 && hour <= 23) {
+        return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract sub-events from caption using regex (fallback)
+ */
+function extractSubEventsFromCaption(caption) {
+  if (!caption) return [];
+  
+  const subEvents = [];
+  
+  // Pattern: TIME - TITLE or TIME TITLE
+  const timeSlotPattern = /(\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)?)\s*[-–—:]\s*([A-Z][^\n\r,;]+?)(?=\n|\r|$|(?:\d{1,2}(?::\d{2})?\s*(?:AM|PM)))/gi;
+  
+  let match;
+  while ((match = timeSlotPattern.exec(caption)) !== null) {
+    const timeStr = match[1].trim();
+    const title = match[2].trim();
+    
+    // Skip if title is too short or looks like a generic phrase
+    if (title.length < 3 || /^(and|with|at|in|on|the|for)$/i.test(title)) {
+      continue;
+    }
+    
+    // Parse time to 24-hour format
+    const timeMatch = timeStr.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?/i);
+    if (timeMatch) {
+      let hour = parseInt(timeMatch[1]);
+      const minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+      const meridiem = timeMatch[3]?.toUpperCase();
+      
+      if (meridiem === 'PM' && hour !== 12) hour += 12;
+      if (meridiem === 'AM' && hour === 12) hour = 0;
+      
+      if (hour >= 0 && hour <= 23) {
+        subEvents.push({
+          title: title,
+          time: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
+        });
+      }
+    }
+  }
+  
+  return subEvents;
 }
 
 /**
@@ -543,16 +656,121 @@ async function processPost(post) {
   
   // Post-process AI result
   if (aiResult) {
-    // URL regex fallback - ALWAYS try regex if AI didn't find URL
+    // ═══════════════════════════════════════════════════════════════
+    // URL EXTRACTION FALLBACK - CRITICAL FIX
+    // ═══════════════════════════════════════════════════════════════
     if (!aiResult.signupUrl || aiResult.signupUrl === null || aiResult.signupUrl === '') {
       const regexUrl = extractUrlsFromText(caption);
       if (regexUrl) {
         aiResult.signupUrl = regexUrl;
-        aiResult.urlType = regexUrl === 'link_in_bio' ? 'link_in_bio' : 
-                          regexUrl === 'dm_for_slots' ? 'dm' : 'extracted_url';
-        console.log(`    🔗 URL found via regex fallback: ${regexUrl}`);
+        // Determine URL type
+        if (regexUrl === 'link_in_bio') {
+          aiResult.urlType = 'link_in_bio';
+        } else if (regexUrl === 'dm_for_slots') {
+          aiResult.urlType = 'dm';
+        } else if (regexUrl.includes('bit.ly') || regexUrl.includes('lnk.to')) {
+          aiResult.urlType = 'shortened_url';
+        } else if (regexUrl.includes('forms.gle') || regexUrl.includes('google.com/forms')) {
+          aiResult.urlType = 'registration';
+        } else if (regexUrl.includes('eventbrite') || regexUrl.includes('ticket')) {
+          aiResult.urlType = 'tickets';
+        } else {
+          aiResult.urlType = 'extracted_url';
+        }
+        console.log(`    🔗 URL extracted via regex: ${regexUrl.substring(0, 50)}... (${aiResult.urlType})`);
       }
     }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // TIME EXTRACTION FALLBACK
+    // ═══════════════════════════════════════════════════════════════
+    if (!aiResult.eventTime && caption) {
+      const regexTime = extractTimeFromCaption(caption);
+      if (regexTime) {
+        aiResult.eventTime = regexTime;
+        console.log(`    ⏰ Time extracted via regex: ${regexTime}`);
+      }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // SUB-EVENTS EXTRACTION FALLBACK
+    // ═══════════════════════════════════════════════════════════════
+    if ((!aiResult.subEvents || aiResult.subEvents.length === 0) && caption) {
+      // Check for time slot patterns
+      const timeSlotPatterns = [
+        /\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\s*[-–—]\s*[A-Z]/i,
+        /\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\s+[A-Z][a-z]/i,
+        /(?:session|workshop|class|set|slot)\s*\d/i,
+      ];
+      
+      const hasTimeSlots = timeSlotPatterns.some(p => p.test(caption));
+      if (hasTimeSlots) {
+        const regexSubEvents = extractSubEventsFromCaption(caption);
+        if (regexSubEvents.length > 0) {
+          aiResult.subEvents = regexSubEvents;
+          console.log(`    📋 ${regexSubEvents.length} sub-events extracted via regex`);
+        } else {
+          console.log(`    ⚠️ Caption has time slots but regex couldn't extract - may need manual review`);
+        }
+      }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // IS_FREE / PRICE CONSISTENCY FIX
+    // ═══════════════════════════════════════════════════════════════
+    if (aiResult.isFree === true && (aiResult.price > 0 || aiResult.priceMin > 0 || aiResult.priceMax > 0)) {
+      aiResult.isFree = false;
+      console.log(`    💰 Fixed is_free inconsistency: has price but was marked free`);
+    }
+    
+    // Check caption for price indicators if marked as free
+    if (aiResult.isFree === true && caption) {
+      const priceIndicators = /(?:₱|PHP|P)\s*\d{2,}|(?:entrance|door|ticket)\s*(?:fee|price|:)/i;
+      if (priceIndicators.test(caption)) {
+        // Double-check - don't flip if it says "FREE" explicitly
+        const freeIndicators = /\bfree\s*(?:entrance|entry|admission)\b|no\s*(?:entrance|cover)\s*fee|\blibre\b/i;
+        if (!freeIndicators.test(caption)) {
+          aiResult.isFree = false;
+          console.log(`    💰 Fixed is_free: caption has price indicators but was marked free`);
+        }
+      }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // HISTORICAL POST DETECTION
+    // ═══════════════════════════════════════════════════════════════
+    if (aiResult.isHistoricalPost) {
+      aiResult.isEvent = false;
+      console.log(`    📜 Historical post detected - marking as not event`);
+    }
+    
+    // Smart historical detection using eventEndDate for multi-day events
+    if (aiResult.eventDate && post.timestamp) {
+      const eventDate = new Date(aiResult.eventDate);
+      const effectiveEndDate = aiResult.eventEndDate 
+        ? new Date(aiResult.eventEndDate) 
+        : eventDate;
+      const postDate = new Date(post.timestamp);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      
+      const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (effectiveEndDate < today && effectiveEndDate < postDate) {
+        aiResult.isEvent = false;
+        aiResult.isHistoricalPost = true;
+        aiResult.reasoning = (aiResult.reasoning || '') + ' [Auto-detected: Event ended before post date = historical recap]';
+        console.log(`    📜 Event end date (${aiResult.eventEndDate || aiResult.eventDate}) before post date - marking as historical`);
+      }
+      
+      if (postAgeInDays > 30 && effectiveEndDate < today) {
+        aiResult.isEvent = false;
+        aiResult.isHistoricalPost = true;
+        aiResult.reasoning = (aiResult.reasoning || '') + ` [Auto-detected: Old post (${postAgeInDays} days) with completed event = historical]`;
+        console.log(`    📜 Old post with past event date - marking as historical`);
+      }
+    }
+  }
     
     // Sub-events debug logging - warn if caption looks like it has schedules but subEvents is empty
     if ((!aiResult.subEvents || aiResult.subEvents.length === 0) && caption) {
