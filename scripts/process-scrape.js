@@ -8,47 +8,18 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const DATA_INGEST_TOKEN = process.env.DATA_INGEST_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const BATCH_SIZE = 10;
-const DELAY_BETWEEN_BATCHES_MS = 2000;
+// Performance tuning - increased for concurrency
+const BATCH_SIZE = 25; // Increased from 10
+const CONCURRENT_REQUESTS = 5; // Process 5 posts concurrently within each batch
+const DELAY_BETWEEN_BATCHES_MS = 1500; // Reduced delay
 const IMAGE_FETCH_TIMEOUT_MS = 15000;
 const IMAGE_FETCH_RETRIES = 2;
-// Minimum caption length for caption-only extraction
-// Below this threshold, captions lack enough context for reliable event extraction
 const MIN_CAPTION_LENGTH_FOR_EXTRACTION = 100;
 
-// Known venues list for venue matching (fetched from database or hardcoded fallback)
-const KNOWN_VENUES = [
-  "123 Block", "19 East", "225 Lounge", "3 Torre Lorenzo", "5G Coffee House",
-  "70's Bistro", "A.bode Space", "Alabang Town Center", "Alveo Central Plaza",
-  "Apotheka Manila", "Araneta City", "Artinformal Makati", "Ayala Malls Manila Bay",
-  "Ayala Malls Nuvali", "Ayala Malls TriNoma", "Ayala Triangle", "B-Side",
-  "Baked Studios", "Balcony Music House", "Bank Bar", "BAR IX", "Beat The Bar",
-  "Bench Tower", "Blackbox Katipunan", "Bonifacio Global City", "BGC",
-  "Burgos Circle Park", "Cafe 32nd St", "Capitol Commons", "Cine Adarna",
-  "Cinema 76", "City of Dreams Manila", "Clubhouse at The Palace", "Commune",
-  "Cubao Expo", "Draft Restaurant & Brewery", "East Wing Atrium", "Eastwood City",
-  "Estancia Mall", "Evia Lifestyle Center", "Festival Mall", "Finale Art File",
-  "Fireside", "Forbes Town Center", "Fred's Revolucion", "Galerie Stephanie",
-  "Gateway Mall", "Glorietta", "Gravity Art Space", "Greenbelt", "Gyud Food",
-  "Handlebar Bar and Grill", "Heyday Cafe", "INT.Bar / EXT.Cafe", "Intramuros",
-  "Jess & Pats", "K:ITA Cafe", "Kampai", "La Fuerza Plaza", "Lan Kwai Speakeasy",
-  "Legazpi Active Park", "Legazpi Sunday Market", "M Bakery", "Mall of Asia Arena",
-  "MOA Arena", "Mandala Park", "Market! Market!", "Matheus Bldg",
-  "Metrotent Convention Center", "Molito Lifestyle Center", "Mow's Bar",
-  "New Frontier Theater", "Newport Performing Arts Theater", "NoKal Manila",
-  "Odd Cafe", "Okada Manila", "Paseo Center", "Petite Bakery", "Philippine Arena",
-  "Playlist Cafe Antipolo", "Poblacion", "Power Plant Mall", "Quezon Club",
-  "Radius Katipunan", "Red Room", "Revel at The Palace", "Rizal Park",
-  "Robinsons Magnolia", "Rockwell", "SaGuijo Café + Bar", "Salcedo Market",
-  "Salcedo Park", "Samsung Hall", "Samsung Performing Arts Theater", "Silverlens",
-  "SINE POP", "SM City North EDSA", "SM Mall of Asia", "SM Megamall", "SM Southmall",
-  "Smart Araneta Coliseum", "Social House BGC", "Spruce Gallery", "Tago Jazz Cafe",
-  "The Fifth at Rockwell", "The Palace Manila", "The Pop Up Katipunan",
-  "Tipple and Slaw", "Ugly Duck", "UP Town Center", "Valkyrie at The Palace",
-  "Venice Grand Canal Mall", "Victor Bridgetowne", "Whisky Park", "XX XX", "Xylo"
-];
+// Known venues list - will be populated from database
+let KNOWN_VENUES = [];
 
-// JSON Schema for Gemini Structured Output (eliminates JSON parsing issues)
+// JSON Schema for Gemini Structured Output
 const eventExtractionSchema = {
   type: SchemaType.OBJECT,
   properties: {
@@ -72,7 +43,7 @@ const eventExtractionSchema = {
     priceMax: { type: SchemaType.NUMBER, nullable: true, description: "Maximum price for tiered pricing" },
     priceNotes: { type: SchemaType.STRING, nullable: true, description: "Price tier details" },
     isFree: { type: SchemaType.BOOLEAN, nullable: true, description: "Whether the event is free" },
-    signupUrl: { type: SchemaType.STRING, nullable: true, description: "Registration/ticket URL" },
+    signupUrl: { type: SchemaType.STRING, nullable: true, description: "Registration/ticket URL - CRITICAL: Extract any bit.ly, forms.gle, lnk.to, or https:// links" },
     urlType: { type: SchemaType.STRING, nullable: true, description: "Type of URL: tickets, registration, rsvp, info, link_in_bio" },
     category: { type: SchemaType.STRING, description: "Event category: nightlife, music, art_culture, markets, food, workshops, community, comedy, other" },
     confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-1" },
@@ -81,22 +52,21 @@ const eventExtractionSchema = {
     rsvpDeadline: { type: SchemaType.STRING, nullable: true, description: "RSVP deadline in YYYY-MM-DD format" },
     isHistoricalPost: { type: SchemaType.BOOLEAN, description: "Whether this is about a past event" },
     reasoning: { type: SchemaType.STRING, description: "Explanation of extraction decisions" },
-    // NEW: Sub-events for multi-event posts (different artists/activities per day)
     subEvents: {
       type: SchemaType.ARRAY,
       items: {
         type: SchemaType.OBJECT,
         properties: {
-          title: { type: SchemaType.STRING, description: "Sub-event title (artist name, activity)" },
+          title: { type: SchemaType.STRING, description: "Sub-event title (movie name, artist name, workshop title, activity name)" },
           date: { type: SchemaType.STRING, nullable: true, description: "Specific date for this sub-event in YYYY-MM-DD" },
           time: { type: SchemaType.STRING, nullable: true, description: "Start time in HH:MM format" },
           endTime: { type: SchemaType.STRING, nullable: true, description: "End time in HH:MM format" },
-          description: { type: SchemaType.STRING, nullable: true, description: "Additional details" }
+          description: { type: SchemaType.STRING, nullable: true, description: "Additional details like director, performer" }
         },
         required: ["title"]
       },
       nullable: true,
-      description: "Multiple events/activities within same post (e.g., different artists on different days)"
+      description: "CRITICAL: Multiple events/activities within same post - film screenings with times, workshop schedules, different artists performing"
     }
   },
   required: ["isEvent", "category", "confidence", "isRecurring", "isHistoricalPost", "reasoning"]
@@ -130,6 +100,130 @@ const results = {
   failed: 0,
   errors: [],
 };
+
+/**
+ * Fetch known venues from database
+ */
+async function fetchKnownVenuesFromDatabase() {
+  try {
+    console.log('📍 Fetching known venues from database...');
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/known_venues?select=name,aliases`, {
+      headers: {
+        'Authorization': `Bearer ${DATA_INGEST_TOKEN}`,
+        'apikey': DATA_INGEST_TOKEN,
+      }
+    });
+    
+    if (!response.ok) {
+      console.log('⚠️ Failed to fetch venues from database, using fallback list');
+      return getFallbackVenues();
+    }
+    
+    const venues = await response.json();
+    const venueNames = new Set();
+    
+    for (const venue of venues) {
+      venueNames.add(venue.name);
+      if (venue.aliases && Array.isArray(venue.aliases)) {
+        venue.aliases.forEach(alias => venueNames.add(alias));
+      }
+    }
+    
+    const venueList = Array.from(venueNames);
+    console.log(`✅ Loaded ${venueList.length} venue names from database`);
+    return venueList;
+  } catch (err) {
+    console.log(`⚠️ Error fetching venues: ${err.message}, using fallback list`);
+    return getFallbackVenues();
+  }
+}
+
+/**
+ * Fallback venue list if database fetch fails
+ */
+function getFallbackVenues() {
+  return [
+    "123 Block", "19 East", "225 Lounge", "3 Torre Lorenzo", "5G Coffee House",
+    "70's Bistro", "A.bode Space", "Alabang Town Center", "Alveo Central Plaza",
+    "Apotheka Manila", "Araneta City", "Artinformal Makati", "Ayala Malls Manila Bay",
+    "Ayala Malls Nuvali", "Ayala Malls TriNoma", "Ayala Triangle", "B-Side",
+    "Baked Studios", "Balcony Music House", "Bank Bar", "BAR IX", "Beat The Bar",
+    "Bench Tower", "Blackbox Katipunan", "Bonifacio Global City", "BGC",
+    "Burgos Circle Park", "Cafe 32nd St", "Capitol Commons", "Cine Adarna",
+    "Cinema 76", "City of Dreams Manila", "Clubhouse at The Palace", "Commune",
+    "Cubao Expo", "Draft Restaurant & Brewery", "East Wing Atrium", "Eastwood City",
+    "Estancia Mall", "Evia Lifestyle Center", "Festival Mall", "Finale Art File",
+    "Fireside", "Forbes Town Center", "Fred's Revolucion", "Galerie Stephanie",
+    "Gateway Mall", "Glorietta", "Gravity Art Space", "Greenbelt", "Gyud Food",
+    "Handlebar Bar and Grill", "Heyday Cafe", "INT.Bar / EXT.Cafe", "Intramuros",
+    "Jess & Pats", "K:ITA Cafe", "Kampai", "La Fuerza Plaza", "Lan Kwai Speakeasy",
+    "Legazpi Active Park", "Legazpi Sunday Market", "M Bakery", "Mall of Asia Arena",
+    "MOA Arena", "Mandala Park", "Market! Market!", "Matheus Bldg",
+    "Metrotent Convention Center", "Molito Lifestyle Center", "Mow's Bar",
+    "New Frontier Theater", "Newport Performing Arts Theater", "NoKal Manila",
+    "Odd Cafe", "Okada Manila", "Paseo Center", "Petite Bakery", "Philippine Arena",
+    "Playlist Cafe Antipolo", "Poblacion", "Power Plant Mall", "Quezon Club",
+    "Radius Katipunan", "Red Room", "Revel at The Palace", "Rizal Park",
+    "Robinsons Magnolia", "Rockwell", "SaGuijo Café + Bar", "Salcedo Market",
+    "Salcedo Park", "Samsung Hall", "Samsung Performing Arts Theater", "Silverlens",
+    "SINE POP", "SM City North EDSA", "SM Mall of Asia", "SM Megamall", "SM Southmall",
+    "Smart Araneta Coliseum", "Social House BGC", "Spruce Gallery", "Tago Jazz Cafe",
+    "The Fifth at Rockwell", "The Palace Manila", "The Pop Up Katipunan",
+    "Tipple and Slaw", "Ugly Duck", "UP Town Center", "Valkyrie at The Palace",
+    "Venice Grand Canal Mall", "Victor Bridgetowne", "Whisky Park", "XX XX", "Xylo"
+  ];
+}
+
+/**
+ * Extract URLs from text using regex (fallback)
+ */
+function extractUrlsFromText(text) {
+  if (!text) return null;
+  
+  // URL patterns to look for
+  const patterns = [
+    // Full URLs
+    /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi,
+    // Short URL services
+    /bit\.ly\/[a-zA-Z0-9_-]+/gi,
+    /forms\.gle\/[a-zA-Z0-9_-]+/gi,
+    /lnk\.to\/[a-zA-Z0-9_-]+/gi,
+    /tinyurl\.com\/[a-zA-Z0-9_-]+/gi,
+    /linktr\.ee\/[a-zA-Z0-9_-]+/gi,
+    /goo\.gl\/[a-zA-Z0-9_-]+/gi,
+    /fb\.me\/[a-zA-Z0-9_-]+/gi,
+    /eventbrite\.[a-z]+\/[^\s]+/gi,
+    /ticketmaster\.[a-z]+\/[^\s]+/gi,
+  ];
+  
+  for (const pattern of patterns) {
+    const matches = text.match(pattern);
+    if (matches && matches.length > 0) {
+      let url = matches[0];
+      // Add https:// if missing
+      if (!url.startsWith('http')) {
+        url = 'https://' + url;
+      }
+      return url;
+    }
+  }
+  
+  // Check for "link in bio" mentions
+  const linkInBioPatterns = [
+    /link\s*in\s*bio/i,
+    /check\s*bio/i,
+    /see\s*bio/i,
+    /bio\s*link/i,
+  ];
+  
+  for (const pattern of linkInBioPatterns) {
+    if (pattern.test(text)) {
+      return 'link_in_bio';
+    }
+  }
+  
+  return null;
+}
 
 /**
  * Fetch image with timeout and retry
@@ -172,21 +266,20 @@ async function fetchImageWithRetry(imageUrl, retries = IMAGE_FETCH_RETRIES) {
  * Build the extraction prompt with all context
  */
 function buildExtractionPrompt(caption, post, hasImage = true) {
-  // Get today's date for context
   const today = new Date().toISOString().split('T')[0];
   const currentYear = new Date().getFullYear();
   
-  // Calculate post age to detect historical posts
   const postTimestamp = post?.timestamp;
   const postDate = postTimestamp ? new Date(postTimestamp) : new Date();
   const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
   const isOldPost = postAgeInDays > 30;
   
-  // Build known venues context
-  const venueContext = `
+  // Use database venues, limit to reasonable size for prompt
+  const venueContext = KNOWN_VENUES.length > 0 ? `
 KNOWN VENUES (use exact spelling if venue matches one of these):
-${KNOWN_VENUES.slice(0, 60).join(', ')}
-... and more. If venue matches a known venue, use the exact spelling from this list.`;
+${KNOWN_VENUES.slice(0, 100).join(', ')}
+${KNOWN_VENUES.length > 100 ? `... and ${KNOWN_VENUES.length - 100} more.` : ''}
+If venue matches a known venue, use the exact spelling from this list.` : '';
 
   return `You are an expert at extracting event information from Filipino Instagram event posters.
 
@@ -200,7 +293,71 @@ ${caption || '(no caption)'}
 
 ${venueContext}
 
-${hasImage ? 'Extract ALL text visible in the image, then determine if this is an event announcement.' : '⚠️ NOTE: No image is available - extract information from caption text only.'}
+${hasImage ? 'Extract ALL text visible in the image, then determine if this is an event announcement.' : '⚠️ NOTE: No image available - extract information from caption text only.'}
+
+═══════════════════════════════════════════════════════════════
+⚠️ CRITICAL FIELD: signupUrl - URL EXTRACTION (DO NOT SKIP!)
+═══════════════════════════════════════════════════════════════
+LOOK FOR these URL patterns in the caption AND image:
+- bit.ly/xxxxx
+- forms.gle/xxxxx  
+- lnk.to/xxxxx
+- linktr.ee/xxxxx
+- eventbrite.com/...
+- Any https:// or http:// URLs
+- If you see "link in bio", "check bio", "DM for link" → set signupUrl to "link_in_bio" and urlType to "link_in_bio"
+
+EXAMPLES:
+Caption: "Tickets via bit.ly/summer-fest" → signupUrl: "https://bit.ly/summer-fest"
+Caption: "Register: forms.gle/abc123" → signupUrl: "https://forms.gle/abc123"
+Caption: "Get tickets at the link in bio" → signupUrl: "link_in_bio", urlType: "link_in_bio"
+Caption: "DM for slots" → signupUrl: "dm_for_slots", urlType: "dm"
+
+═══════════════════════════════════════════════════════════════
+⚠️ CRITICAL FIELD: subEvents - MULTI-SCHEDULE EXTRACTION
+═══════════════════════════════════════════════════════════════
+When a post contains MULTIPLE scheduled activities, you MUST extract them as subEvents.
+
+EXAMPLE 1 - Film Festival Schedule:
+"""
+Dec 12 Friday:
+4PM - Padamlagan  
+6:30PM - Bloom Where You Are Planted
+
+Dec 13 Saturday:
+1:30PM - Paglilitis ni Mang Serapio
+4PM - May Araw Pa Pagkatapos ng Dilim
+"""
+→ subEvents: [
+  {"title": "Padamlagan", "date": "2025-12-12", "time": "16:00"},
+  {"title": "Bloom Where You Are Planted", "date": "2025-12-12", "time": "18:30"},
+  {"title": "Paglilitis ni Mang Serapio", "date": "2025-12-13", "time": "13:30"},
+  {"title": "May Araw Pa Pagkatapos ng Dilim", "date": "2025-12-13", "time": "16:00"}
+]
+
+EXAMPLE 2 - Workshop Schedule:
+"""
+Saturday Classes:
+10AM - Pottery Basics with Ana
+2PM - Advanced Ceramics with Ben
+"""
+→ subEvents: [
+  {"title": "Pottery Basics", "description": "with Ana", "time": "10:00"},
+  {"title": "Advanced Ceramics", "description": "with Ben", "time": "14:00"}
+]
+
+EXAMPLE 3 - Concert Lineup:
+"""
+Dec 14 at XX XX:
+8PM - The Itchyworms
+10PM - Urbandub
+"""
+→ subEvents: [
+  {"title": "The Itchyworms", "date": "2025-12-14", "time": "20:00"},
+  {"title": "Urbandub", "date": "2025-12-14", "time": "22:00"}
+]
+
+═══════════════════════════════════════════════════════════════
 
 ⚠️ CRITICAL: HISTORICAL POST DETECTION
 - This post was made ${postAgeInDays} days ago
@@ -228,89 +385,21 @@ CRITICAL VALIDATION RULES:
 - Contains operating hours: "6PM — Tues to Sat", "Open Mon-Fri"
 - Says "Every [day]" without a specific date
 - Generic promo: "Visit us", "Come check out", "Be in the loop"
-- Describes regular venue operations, not a unique event
 
 ⚠️ RECURRING VS MULTI-DAY - CRITICAL DISTINCTION:
 - MULTI-DAY EVENT (is_recurring: false): "Nov 8-9", "Dec 27-30", "This weekend"
-  These are ONE-TIME events that span multiple consecutive days
   → Set eventDate to first day, eventEndDate to last day
 - RECURRING EVENT (is_recurring: true): ONLY if explicit pattern language exists:
-  ✅ "Every Friday"
-  ✅ "Weekly"
-  ✅ "Monthly"
-  ✅ "First Saturday of every month"
-  ❌ "Friday and Saturday" (NOT recurring - just two days)
-  ❌ "Nov 8-9" (NOT recurring - one-time multi-day)
-  ❌ "This weekend" (NOT recurring - one-time)
-- If eventDate and eventEndDate are just 2-3 days apart, is_recurring MUST be false
+  ✅ "Every Friday", "Weekly", "Monthly", "First Saturday of every month"
+  ❌ "Friday and Saturday" (NOT recurring)
+  ❌ "Nov 8-9" (NOT recurring)
 
-MULTI-DAY EVENT TIME HANDLING:
-- For multi-day events (festivals, markets, conventions, fairs), the schedule usually REPEATS each day
-- eventTime = daily opening/start time
-- endTime = daily closing/end time  
-- If you see multiple times (e.g., "4PM" and "6:30PM"), these are likely:
-  ✅ Daily hours: opens 4PM, last session at 6:30PM
-  ✅ Multiple sessions/screenings per day (both times apply to ALL days)
-  ❌ NOT different hours on different days (rare - only if explicitly stated like "Fri 4PM, Sat 6PM")
-
-Example interpretations:
-- "Dec 12-13, 4PM-9PM" → eventTime: "16:00", endTime: "21:00" (SAME schedule both days)
-- "Film festival Dec 12-13, screenings at 4PM and 6:30PM" → eventTime: "16:00", endTime: null, priceNotes: "Screenings at 4PM and 6:30PM daily"
-- "Friday 8PM, Saturday 2PM" → DIFFERENT times per day (explicit), note in priceNotes
-
-⚠️ COMMON MISTAKE:
-When you see two times in a multi-day event post, do NOT assign them to different days unless the post EXPLICITLY says "Friday at X, Saturday at Y"
+⚠️ NON-CONTINUOUS MULTI-DATE EVENTS:
+- "Dec 7, 13, 14, 20, 21" → eventDate: "2025-12-07", allEventDates: ["2025-12-07", "2025-12-13", "2025-12-14", "2025-12-20", "2025-12-21"]
 
 ⚠️ NIGHTLIFE MIDNIGHT RULE:
-- In nightlife context (clubs, bars, parties, DJ events), times from 12MN to 4AM belong to the NIGHT of the previous date
-- "Dec 5 at 12MN" in nightlife context = night of Dec 5 (technically Dec 6 00:00), the party starts late on Dec 5
-- "2AM" for a party = the party runs INTO 2AM (it started the previous evening)
-- DO NOT create a new event date for 12MN-4AM times - they're part of the same night event
-- If you see "Party starts 10PM" and "Until 4AM", eventTime: "22:00", endTime: "04:00" (same event)
-
-CONFIDENCE GUIDELINES:
-${hasImage ? `- Set confidence >= 0.9 ONLY if all core fields (date, time, venue) are clearly visible in BOTH image AND caption
-- Set confidence 0.8-0.89 if fields are clear in either image OR caption
-- Set confidence 0.6-0.79 if you're interpreting date formats or inferring AM/PM
-- Set confidence < 0.6 if you're making educated guesses - consider setting field to null instead` : 
-`- Set confidence 0.5-0.7 for caption-only extraction (no image available)
-- Lower confidence if date, time, or venue is unclear`}
-
-DATE EXTRACTION - ⚠️ CAREFUL WITH FORMATS:
-- European/Philippine format: 05.12.2025 = December 5 (day.month.year), NOT May 12
-- Validate extracted date against expected day-of-week: "Freaky Friday" must result in a Friday
-- Look for: "DEC 15", "December 15", "12/15", "Dec 6-7" (multi-day)
-- For relative dates ("tomorrow", "this Friday"), calculate from post date, not today
-- If month has passed this year, assume next year ONLY if post is recent (within 7 days)
-- ⚠️ RSVP DEADLINE detection: "RSVP by Dec 16" or "Register before Dec 10" - extract as rsvpDeadline, NOT eventDate
-
-⚠️ NON-CONTINUOUS MULTI-DATE EVENTS (CRITICAL):
-- When you see SCATTERED dates like "Dec 7, 13, 14, 20, 21" or "Every Sat & Sun in December":
-  → Set eventDate to the FIRST/NEXT upcoming date
-  → Set allEventDates to ALL dates in YYYY-MM-DD format: ["2025-12-07", "2025-12-13", "2025-12-14", "2025-12-20", "2025-12-21"]
-  → Do NOT use eventEndDate (that's only for continuous ranges like "Dec 12-14")
-- Examples:
-  - "Meet Santa on Dec 7, 13, 14, 20, 21" → eventDate: "2025-12-07", allEventDates: ["2025-12-07", "2025-12-13", "2025-12-14", "2025-12-20", "2025-12-21"]
-  - "Screenings: Dec 5, 6, 12, 13" → eventDate: "2025-12-05", allEventDates: ["2025-12-05", "2025-12-06", "2025-12-12", "2025-12-13"]
-- For CONTINUOUS ranges (Dec 12-14), use eventDate and eventEndDate, NOT allEventDates
-
-TIME EXTRACTION:
-- Look for: "8PM", "9:00 PM", "DOORS OPEN 7PM", "21:00"
-- "12MN", "12 midnight", "12 mn" = "00:00" (midnight)
-- TIME AMBIGUITY - Infer AM/PM from context:
-  * Bar/club/party/concert: 8, 9, 10 → PM (20:00, 21:00, 22:00)
-  * Market/fair/yoga/run: 7, 8, 9 → AM (07:00, 08:00, 09:00)
-
-END TIME EXTRACTION:
-- Always try to extract end time if visible in the image or caption
-- If not visible, infer based on event type:
-  * Film screening: ~2-3 hours after start (e.g., 4PM start → 6:30PM or 7PM end)
-  * Concert/gig: ~3-4 hours after start (e.g., 8PM start → 11PM or midnight end)
-  * Market/fair: typically until 9-10 PM if afternoon/evening event
-  * Workshop: ~2-3 hours after start
-- If inferring end time, set confidence lower and add note to reasoning
-- Format: "HH:MM" (24-hour)
-- For multi-day events, endTime represents the daily closing time, NOT the last day's time
+- In nightlife context, times 12MN to 4AM belong to the NIGHT of the previous date
+- "Dec 5 at 12MN" = party starts late Dec 5 (technically Dec 6 00:00)
 
 VENUE/LOCATION - ⚠️ STRICT RULES:
 - Extract the ACTUAL venue name from the post content
@@ -318,82 +407,50 @@ VENUE/LOCATION - ⚠️ STRICT RULES:
   1. 📍 emoji followed by venue name (MOST RELIABLE)
   2. "Location:", "Venue:", "Where:" labels
   3. Explicit venue mentions in caption text
-- If venue matches a KNOWN VENUE from the list above, use that EXACT spelling
-- ❌ NEVER extract venue from:
-  - @mentions (those are usually performers/sponsors/photographers)
-  - Hashtags like #SMmall, #Makati, #BGC (these are just tags)
-  - The posting account username
-- DO NOT guess or make up venue names - if unclear, set to null
-- Vague venues should be flagged: "TBA", "DM for details", "secret location", "my bar", "the venue"
-- If venue is just a generic word like "cafe" or "bar", set to null
+- If venue matches a KNOWN VENUE, use that EXACT spelling
+- ❌ NEVER extract venue from @mentions or hashtags
 
-PRICE EXTRACTION (ENHANCED):
-- Single price: "₱500", "P500", "Php500" → price: 500, priceMin: 500, priceMax: 500
-- Range: "₱300-500" → priceMin: 300, priceMax: 500, price: 300
-- Tiered pricing: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
-- Conditional: "Free before 10PM, ₱300 after" → priceMin: 0, priceMax: 300, priceNotes: "Free before 10PM, ₱300 after", isFree: true
-- "FREE", "LIBRE", "Walang bayad" → isFree: true, price: 0, priceMin: 0, priceMax: 0
-- ⚠️ is_free rules:
-  - ONLY set isFree: true if explicit free language found: "FREE", "LIBRE", "Free entry", "No cover"
-  - If you see prices, tickets, presale, door charge → isFree: false
-  - If price information is unclear or ambiguous, set isFree: null and add priceNotes: "Price not specified"
+PRICE EXTRACTION:
+- Single price: "₱500" → price: 500, priceMin: 500, priceMax: 500
+- Range: "₱300-500" → priceMin: 300, priceMax: 500
+- Tiered: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
+- Free or PWYC: "Free entry", "PWYC" → isFree: true
 
-URL/LINK EXTRACTION - ⚠️ CRITICAL:
-- ACTIVELY SEARCH for registration, ticket, or RSVP links in BOTH caption AND image
-- Extract ANY URL formats you see:
-  ✅ "bit.ly/EventName" → signupUrl: "https://bit.ly/EventName"
-  ✅ "tinyurl.com/xyz" → signupUrl: "https://tinyurl.com/xyz"
-  ✅ "tickelo.com/event" → signupUrl: "https://tickelo.com/event"
-  ✅ "eventbrite.com/..." → signupUrl: "https://eventbrite.com/..."
-  ✅ "forms.gle/..." → signupUrl: "https://forms.gle/..."
-  ✅ "lnk.to/..." → signupUrl: "https://lnk.to/..."
-  ✅ Any https:// or http:// URL
-- If "link in bio" or "check bio" mentioned but no URL visible:
-  → Set urlType: "link_in_bio", signupUrl: null
-- Set urlType based on context: "tickets", "registration", "rsvp", "info"
-- ❌ DO NOT extract @mentions, sponsor URLs, or the Instagram post URL itself
-- ❌ DO NOT extract venue websites unless they're specifically for registration/tickets
+CONFIDENCE GUIDELINES:
+${hasImage ? `- 0.9+ ONLY if all core fields clear in BOTH image AND caption
+- 0.8-0.89 if fields clear in either image OR caption
+- 0.6-0.79 if interpreting date formats or inferring AM/PM
+- < 0.6 if guessing - consider setting field to null` : 
+`- 0.5-0.7 for caption-only extraction
+- Lower confidence if date, time, or venue is unclear`}
 
-MULTI-EVENT POSTS (subEvents) - NEW:
-- If a single post announces MULTIPLE distinct events/performances:
-  - Different artists/DJs on different days
-  - Different activities/workshops at different times
-  - Film festival with multiple screenings
-- Extract into subEvents array:
-  [{"title": "DJ Alpha", "date": "2025-12-12", "time": "22:00"},
-   {"title": "DJ Beta", "date": "2025-12-13", "time": "22:00"}]
-- Keep the MAIN event title as the overall event name
-- subEvents captures the breakdown
-
-Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
-
-Extract the event information following the JSON schema provided.`;
+REMEMBER: signupUrl and subEvents are CRITICAL fields. Do not skip them!`;
 }
 
 /**
- * Extract event data from image using Gemini Vision with JSON Schema mode
+ * Extract event data from image + caption using Gemini Vision
  */
 async function extractWithGeminiVision(imageUrl, caption, post = {}) {
   try {
     const imageResponse = await fetchImageWithRetry(imageUrl);
-    
     const imageBuffer = await imageResponse.arrayBuffer();
-    const base64Image = Buffer.from(imageBuffer).toString('base64');
+    const imageBase64 = Buffer.from(imageBuffer).toString('base64');
+    const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
     
     const prompt = buildExtractionPrompt(caption, post, true);
-
+    
     const result = await model.generateContent([
-      { text: prompt },
       {
         inlineData: {
-          mimeType: 'image/jpeg',
-          data: base64Image,
-        },
+          data: imageBase64,
+          mimeType: mimeType
+        }
       },
+      prompt
     ]);
-
-    // With JSON Schema mode, response is guaranteed valid JSON
+    
     const text = result.response.text();
+    
     try {
       const parsed = JSON.parse(text);
       return parsed;
@@ -409,7 +466,7 @@ async function extractWithGeminiVision(imageUrl, caption, post = {}) {
 }
 
 /**
- * Extract event data from caption only (fallback when image fetch fails)
+ * Extract event data from caption only (fallback)
  */
 async function extractFromCaptionOnly(caption, post = {}) {
   try {
@@ -420,7 +477,6 @@ async function extractFromCaptionOnly(caption, post = {}) {
     
     try {
       const parsed = JSON.parse(text);
-      // Mark that this was caption-only extraction
       parsed.captionOnlyExtraction = true;
       return parsed;
     } catch (parseErr) {
@@ -452,7 +508,6 @@ async function sendBatchToEdgeFunction(posts, runId, batchNumber, totalBatches, 
       isLastBatch: batchNumber === totalBatches,
       batchNumber: batchNumber,
       totalBatches: totalBatches,
-      // Only include pre-filter rejections on first batch
       ...(batchNumber === 1 && preFilterRejections.length > 0 && { preFilterRejections }),
     }),
   });
@@ -472,14 +527,12 @@ async function processPost(post) {
   const caption = post.caption || '';
   const imageUrl = post.displayUrl || post.imageUrl;
   
-  // Use Gemini Vision for image text extraction
-  // Pass full post context for historical post detection
   let aiResult = null;
   if (imageUrl) {
     aiResult = await extractWithGeminiVision(imageUrl, caption, post);
   }
   
-  // Caption-only fallback: If image fetch failed but caption is substantial, try caption-only extraction
+  // Caption-only fallback
   if (!aiResult && !imageUrl && caption && caption.length > MIN_CAPTION_LENGTH_FOR_EXTRACTION) {
     console.log(`    🔄 No image available, attempting caption-only extraction...`);
     aiResult = await extractFromCaptionOnly(caption, post);
@@ -488,9 +541,19 @@ async function processPost(post) {
     aiResult = await extractFromCaptionOnly(caption, post);
   }
   
-  // Post-process AI result for historical posts
+  // Post-process AI result
   if (aiResult) {
-    // If AI marked as historical, mark as not an event
+    // URL regex fallback - if AI didn't find URL, try regex
+    if (!aiResult.signupUrl || aiResult.signupUrl === null) {
+      const regexUrl = extractUrlsFromText(caption);
+      if (regexUrl) {
+        aiResult.signupUrl = regexUrl;
+        aiResult.urlType = regexUrl === 'link_in_bio' ? 'link_in_bio' : 'extracted_url';
+        console.log(`    🔗 URL found via regex fallback: ${regexUrl}`);
+      }
+    }
+    
+    // Historical post detection
     if (aiResult.isHistoricalPost) {
       aiResult.isEvent = false;
       console.log(`    📜 Historical post detected - marking as not event`);
@@ -499,27 +562,22 @@ async function processPost(post) {
     // Smart historical detection using eventEndDate for multi-day events
     if (aiResult.eventDate && post.timestamp) {
       const eventDate = new Date(aiResult.eventDate);
-      // Use eventEndDate if available (for multi-day events), otherwise use eventDate
       const effectiveEndDate = aiResult.eventEndDate 
         ? new Date(aiResult.eventEndDate) 
         : eventDate;
       const postDate = new Date(post.timestamp);
       const today = new Date();
-      today.setHours(23, 59, 59, 999); // End of today for fair comparison
+      today.setHours(23, 59, 59, 999);
       
       const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
       
-      // Only mark as historical if the event has COMPLETELY ENDED (using effectiveEndDate)
-      // AND the event end date is before TODAY (not before post date - same-day posts are valid!)
       if (effectiveEndDate < today && effectiveEndDate < postDate) {
-        // Event ended before the post was made - this is definitely a recap/historical post
         aiResult.isEvent = false;
         aiResult.isHistoricalPost = true;
         aiResult.reasoning = (aiResult.reasoning || '') + ' [Auto-detected: Event ended before post date = historical recap]';
         console.log(`    📜 Event end date (${aiResult.eventEndDate || aiResult.eventDate}) before post date - marking as historical`);
       }
       
-      // Safety net: If post is OLD (>30 days) AND event has completely passed, it's historical
       if (postAgeInDays > 30 && effectiveEndDate < today) {
         aiResult.isEvent = false;
         aiResult.isHistoricalPost = true;
@@ -544,6 +602,43 @@ async function processPost(post) {
 }
 
 /**
+ * Process multiple posts concurrently
+ */
+async function processPostsConcurrently(posts, concurrency = CONCURRENT_REQUESTS) {
+  const results = [];
+  
+  for (let i = 0; i < posts.length; i += concurrency) {
+    const batch = posts.slice(i, i + concurrency);
+    const batchPromises = batch.map(async (post) => {
+      const postIdentifier = post.shortCode || post.id || `unknown-${Date.now()}`;
+      console.log(`  🔍 Processing: ${postIdentifier}`);
+      try {
+        const processed = await processPost(post);
+        if (processed.aiExtraction?.isEvent) {
+          console.log(`     ✅ Event: ${processed.aiExtraction.eventTitle || 'Untitled'}${processed.aiExtraction.signupUrl ? ' 🔗' : ''}${processed.aiExtraction.subEvents?.length ? ` (${processed.aiExtraction.subEvents.length} sub-events)` : ''}`);
+        } else {
+          console.log(`     📝 Not an event`);
+        }
+        return { success: true, data: processed };
+      } catch (err) {
+        console.log(`     ❌ Failed: ${err.message}`);
+        return { success: false, error: err.message, postId: postIdentifier };
+      }
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    // Small delay between concurrent batches to avoid rate limiting
+    if (i + concurrency < posts.length) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+  
+  return results;
+}
+
+/**
  * Main function
  */
 async function main() {
@@ -552,7 +647,6 @@ async function main() {
   if (!datasetUrl) {
     console.error('❌ Dataset URL required.');
     console.error('Usage: node process-scrape.js <dataset_url>');
-    console.error('Example: node process-scrape.js "https://api.apify.com/v2/datasets/ABC123/items?format=json"');
     process.exit(1);
   }
 
@@ -572,9 +666,13 @@ async function main() {
 
   console.log('🚀 Starting Instagram scrape processing...\n');
   console.log(`📊 Dataset URL: ${datasetUrl}`);
-  console.log(`🏠 Using ${KNOWN_VENUES.length} known venues for matching\n`);
+  console.log(`⚡ Batch size: ${BATCH_SIZE}, Concurrency: ${CONCURRENT_REQUESTS}`);
   
-  // Fetch posts directly from Apify URL (no API key needed!)
+  // Fetch known venues from database
+  KNOWN_VENUES = await fetchKnownVenuesFromDatabase();
+  console.log(`📍 Using ${KNOWN_VENUES.length} known venues for matching\n`);
+  
+  // Fetch posts from Apify
   console.log('\n📥 Fetching posts from Apify...');
   
   let posts;
@@ -594,7 +692,7 @@ async function main() {
     process.exit(1);
   }
   
-  // Filter out posts without valid identifiers or images, and collect rejections
+  // Filter out invalid posts
   const preFilterRejections = [];
   const validPosts = posts.filter(post => {
     const hasIdentifier = post.shortCode || post.id;
@@ -603,12 +701,10 @@ async function main() {
     if (!hasIdentifier || !hasImage) {
       const reason = !hasIdentifier ? 'MISSING_IDENTIFIER' : 'MISSING_IMAGE';
       console.log(`  ⚠️ Skipping post: ${reason}`);
-      
-      // Collect rejection data for database logging
       preFilterRejections.push({
         reason: reason,
         rawData: {
-          availableKeys: Object.keys(post).slice(0, 15), // First 15 keys for context
+          availableKeys: Object.keys(post).slice(0, 15),
           shortCode: post.shortCode || null,
           id: post.id || null,
           hasDisplayUrl: !!post.displayUrl,
@@ -628,50 +724,46 @@ async function main() {
   }
   
   results.total = validPosts.length;
-  console.log(`✅ Fetched ${posts.length} posts (${validPosts.length} valid)\n`);
+  const estimatedTime = Math.ceil((validPosts.length / BATCH_SIZE) * (BATCH_SIZE / CONCURRENT_REQUESTS) * 3 / 60);
+  console.log(`✅ Fetched ${posts.length} posts (${validPosts.length} valid)`);
+  console.log(`⏱️ Estimated processing time: ~${estimatedTime} minutes\n`);
   
-  // Generate a single run ID for all batches
+  // Generate a single run ID
   const runId = crypto.randomUUID();
   console.log(`📋 Run ID: ${runId}`);
   
-  // Process in batches
+  // Process in batches with concurrency
   const totalBatches = Math.ceil(validPosts.length / BATCH_SIZE);
   
   for (let i = 0; i < validPosts.length; i += BATCH_SIZE) {
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
     const batch = validPosts.slice(i, i + BATCH_SIZE);
     
-    console.log(`\n📦 Batch ${batchNum}/${totalBatches} (${batch.length} posts)`);
+    console.log(`\n📦 Batch ${batchNum}/${totalBatches} (${batch.length} posts, ${CONCURRENT_REQUESTS} concurrent)`);
     console.log('─'.repeat(50));
     
-    // Process each post with Gemini Vision
+    // Process posts concurrently
+    const batchResults = await processPostsConcurrently(batch);
+    
     const processedPosts = [];
-    for (const post of batch) {
-      try {
-        const postIdentifier = post.shortCode || post.id || `unknown-${Date.now()}`;
-        console.log(`  🔍 Processing: ${postIdentifier}`);
-        const processed = await processPost(post);
-        processedPosts.push(processed);
-        
-        if (processed.aiExtraction?.isEvent) {
+    for (const result of batchResults) {
+      if (result.success) {
+        processedPosts.push(result.data);
+        if (result.data.aiExtraction?.isEvent) {
           results.events++;
-          console.log(`     ✅ Event: ${processed.aiExtraction.eventTitle || 'Untitled'}`);
         } else {
           results.notEvents++;
-          console.log(`     📝 Not an event`);
         }
         results.processed++;
-      } catch (err) {
-        console.log(`     ❌ Failed: ${err.message}`);
+      } else {
         results.failed++;
-        results.errors.push({ postId: post.id || post.shortCode, error: err.message });
+        results.errors.push({ postId: result.postId, error: result.error });
       }
     }
     
-    // Send batch to Edge Function for database storage
+    // Send batch to Edge Function
     try {
       console.log(`\n  📤 Sending batch ${batchNum}/${totalBatches} to Edge Function...`);
-      // Pass preFilterRejections only on first batch
       const response = await sendBatchToEdgeFunction(processedPosts, runId, batchNum, totalBatches, preFilterRejections);
       console.log(`  ✅ Batch saved: ${response.saved || 0} posts`);
     } catch (err) {
@@ -680,16 +772,17 @@ async function main() {
     }
     
     // Progress summary
-    console.log(`\n📊 Progress: ${results.processed}/${results.total}`);
+    const progress = ((results.processed / results.total) * 100).toFixed(1);
+    console.log(`\n📊 Progress: ${results.processed}/${results.total} (${progress}%)`);
     
-    // Delay between batches (except last)
+    // Delay between batches
     if (i + BATCH_SIZE < validPosts.length) {
       console.log(`⏳ Waiting ${DELAY_BETWEEN_BATCHES_MS / 1000}s before next batch...`);
       await new Promise(r => setTimeout(r, DELAY_BETWEEN_BATCHES_MS));
     }
   }
   
-  // Save results to file
+  // Save results
   const resultsDir = path.join(process.cwd(), 'results');
   fs.mkdirSync(resultsDir, { recursive: true });
   fs.writeFileSync(
