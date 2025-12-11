@@ -438,30 +438,112 @@ export function assignReviewTier(
     extractionConfidence: confidence
   };
 }
+/**
+ * Calculate post completeness score for quality-aware deduplication
+ * Higher score = more complete/detailed post data
+ */
+export function calculatePostCompleteness(post: {
+  event_title?: string | null;
+  event_time?: string | null;
+  end_time?: string | null;
+  price?: number | null;
+  price_notes?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
+  signup_url?: string | null;
+  sub_events?: any[] | null;
+  caption?: string | null;
+  location_address?: string | null;
+}): number {
+  let score = 0;
+  
+  // Event title quality (max 20 points)
+  if (post.event_title) {
+    if (post.event_title.length > 20) score += 20;
+    else if (post.event_title.length > 10) score += 15;
+    else score += 10;
+  }
+  
+  // Time fields (max 25 points)
+  if (post.event_time) score += 15;
+  if (post.end_time) score += 10;
+  
+  // Price info (max 20 points)
+  if (post.price && post.price > 0) score += 15;
+  if (post.price_notes) score += 5;
+  
+  // Location quality (max 20 points)
+  if (post.location_lat && post.location_lng) score += 15; // Geocoded
+  if (post.location_address) score += 5;
+  
+  // Additional valuable data (max 15 points)
+  if (post.signup_url) score += 10;
+  if (post.sub_events && Array.isArray(post.sub_events) && post.sub_events.length > 0) score += 5;
+  
+  // Caption length bonus (more detailed description) (max 5 points)
+  if (post.caption) {
+    if (post.caption.length > 500) score += 5;
+    else if (post.caption.length > 200) score += 3;
+  }
+  
+  return score; // Max ~105 points
+}
+
+export interface DuplicateCheckResult {
+  isDuplicate: boolean;
+  duplicateOfId: string | null;
+  shouldReplaceExisting: boolean;
+  existingCompleteness: number;
+  newCompleteness: number;
+  existingPostId: string | null;
+}
 
 /**
- * Checks for duplicate events in the database
+ * Checks for duplicate events in the database with quality-aware comparison
+ * Returns whether the new post should replace an existing primary
  */
 export async function checkForDuplicate(
   supabase: any,
   venueName: string | null,
   eventDate: string | null,
   eventTime: string | null,
-  eventTitle: string | null
-): Promise<{ isDuplicate: boolean; duplicateOfId: string | null }> {
+  eventTitle: string | null,
+  newPostData?: {
+    event_title?: string | null;
+    event_time?: string | null;
+    end_time?: string | null;
+    price?: number | null;
+    price_notes?: string | null;
+    location_lat?: number | null;
+    location_lng?: number | null;
+    signup_url?: string | null;
+    sub_events?: any[] | null;
+    caption?: string | null;
+    location_address?: string | null;
+  }
+): Promise<DuplicateCheckResult> {
+  
+  const defaultResult: DuplicateCheckResult = { 
+    isDuplicate: false, 
+    duplicateOfId: null,
+    shouldReplaceExisting: false,
+    existingCompleteness: 0,
+    newCompleteness: 0,
+    existingPostId: null
+  };
   
   if (!eventDate || !venueName) {
-    return { isDuplicate: false, duplicateOfId: null };
+    return defaultResult;
   }
   
   try {
     // Sanitize venue name for ILIKE
     const sanitizedVenue = venueName.substring(0, 30).replace(/[%_]/g, '');
     
-    // Check for existing event at same venue on same date
+    // Fetch more fields for completeness comparison
     const { data: existingEvents } = await supabase
       .from('instagram_posts')
-      .select('id, event_title, event_time')
+      .select('id, event_title, event_time, end_time, price, price_notes, location_lat, location_lng, signup_url, sub_events, caption, location_address')
       .eq('event_date', eventDate)
       .eq('is_event', true)
       .eq('is_duplicate', false)
@@ -469,28 +551,47 @@ export async function checkForDuplicate(
       .limit(5);
     
     if (!existingEvents || existingEvents.length === 0) {
-      return { isDuplicate: false, duplicateOfId: null };
+      return defaultResult;
     }
     
     // Check time proximity (within 2 hours)
     for (const existing of existingEvents) {
+      let isTimeMatch = false;
+      
       if (eventTime && existing.event_time) {
         const newHour = parseInt(eventTime.split(':')[0], 10);
         const existingHour = parseInt(existing.event_time.split(':')[0], 10);
-        
-        if (Math.abs(newHour - existingHour) <= 2) {
-          return { isDuplicate: true, duplicateOfId: existing.id };
-        }
+        isTimeMatch = Math.abs(newHour - existingHour) <= 2;
       } else {
         // No time to compare - same venue/date is likely duplicate
-        return { isDuplicate: true, duplicateOfId: existing.id };
+        isTimeMatch = true;
+      }
+      
+      if (isTimeMatch) {
+        // Calculate completeness scores
+        const existingCompleteness = calculatePostCompleteness(existing);
+        const newCompleteness = newPostData ? calculatePostCompleteness(newPostData) : 0;
+        
+        // Determine if new post should replace existing as primary
+        const shouldReplaceExisting = newCompleteness > existingCompleteness;
+        
+        console.log(`[DUPLICATE] Existing post (score: ${existingCompleteness}) vs New post (score: ${newCompleteness}) - ${shouldReplaceExisting ? 'NEW REPLACES EXISTING' : 'Keep existing as primary'}`);
+        
+        return { 
+          isDuplicate: true, 
+          duplicateOfId: shouldReplaceExisting ? null : existing.id,
+          shouldReplaceExisting,
+          existingCompleteness,
+          newCompleteness,
+          existingPostId: existing.id
+        };
       }
     }
     
-    return { isDuplicate: false, duplicateOfId: null };
+    return defaultResult;
   } catch (err) {
     console.error('Duplicate check failed:', err);
-    return { isDuplicate: false, duplicateOfId: null };
+    return defaultResult;
   }
 }
 
