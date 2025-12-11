@@ -80,32 +80,33 @@ export const ScraperLogs = () => {
     applyFilters();
   }, [logs, selectedRun, selectedLevel, selectedStage]);
 
-  // Fetch TRUE stats from database (not limited to 1000)
+  // Fetch TRUE stats from database using COUNT aggregate (not limited to 1000)
   const fetchDbStats = async (runId: string | null) => {
     try {
-      let query = supabase.from('scraper_logs').select('log_level');
-      if (runId) {
-        query = query.eq('run_id', runId);
-      }
-      
-      // Fetch all log levels for counting (only selecting log_level is fast)
-      const { data, error } = await query;
-      
-      if (error) {
-        console.error('Error fetching stats:', error);
-        return;
-      }
-      
-      const stats: DbStats = {
-        total: data?.length || 0,
-        success: data?.filter(l => l.log_level === 'success').length || 0,
-        info: data?.filter(l => l.log_level === 'info').length || 0,
-        warnings: data?.filter(l => l.log_level === 'warn').length || 0,
-        errors: data?.filter(l => l.log_level === 'error').length || 0,
-        debug: data?.filter(l => l.log_level === 'debug').length || 0,
+      const buildCountQuery = (level?: string) => {
+        let q = supabase.from('scraper_logs').select('*', { count: 'exact', head: true });
+        if (runId) q = q.eq('run_id', runId);
+        if (level) q = q.eq('log_level', level);
+        return q;
       };
-      
-      setDbStats(stats);
+
+      const [total, success, info, warnings, errors, debug] = await Promise.all([
+        buildCountQuery(),
+        buildCountQuery('success'),
+        buildCountQuery('info'),
+        buildCountQuery('warn'),
+        buildCountQuery('error'),
+        buildCountQuery('debug'),
+      ]);
+
+      setDbStats({
+        total: total.count || 0,
+        success: success.count || 0,
+        info: info.count || 0,
+        warnings: warnings.count || 0,
+        errors: errors.count || 0,
+        debug: debug.count || 0,
+      });
     } catch (err) {
       console.error('Error in fetchDbStats:', err);
     }
