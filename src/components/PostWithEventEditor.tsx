@@ -15,6 +15,8 @@ import { EventScheduleEditor, ScheduleDay } from "./EventScheduleEditor";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CATEGORY_LABELS } from "@/constants/categoryColors";
+import { VenueSelector } from "./VenueSelector";
+import { KnownVenue } from "@/hooks/useKnownVenues";
 // Helper component to compare extracted vs current values
 const CompareValue = ({ extracted, current }: { extracted: any; current: any }) => {
   const extractedStr = extracted?.toString() || '(null)';
@@ -1028,6 +1030,24 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
             </Button>
           </div>
 
+          {/* Quick Venue Selector */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Quick Select from Known Venues</Label>
+            <VenueSelector 
+              value={locationCorrection?.venueName || post.location_name || undefined}
+              onSelect={(venue: KnownVenue) => {
+                setLocationCorrection({
+                  venueName: venue.name,
+                  streetAddress: venue.address || "",
+                  lat: venue.lat,
+                  lng: venue.lng,
+                });
+                toast.success(`Selected ${venue.name}${venue.lat ? ' (with coordinates)' : ''}`);
+              }}
+              placeholder="Search known venues..."
+            />
+          </div>
+
           {!showLocationEditor && (
             <div className="bg-muted/50 rounded-md p-3 space-y-1 text-sm">
               <div><strong>Venue:</strong> {locationCorrection?.venueName || post.location_name || "(not set)"}</div>
@@ -1037,7 +1057,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
                   ? `${locationCorrection.lat.toFixed(6)}, ${locationCorrection.lng.toFixed(6)}`
                   : post.location_lat && post.location_lng
                     ? `${post.location_lat}, ${post.location_lng}`
-                    : "(not set)"
+                    : "(not set - select a known venue)"
               }</div>
             </div>
           )}
