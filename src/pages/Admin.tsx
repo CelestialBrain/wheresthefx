@@ -15,6 +15,8 @@ import { ScraperLogs } from "@/components/ScraperLogs";
 import { KnownVenuesManager } from "@/components/KnownVenuesManager";
 import { LocationCorrectionsViewer } from "@/components/LocationCorrectionsViewer";
 import { AccountVenueStatsViewer } from "@/components/AccountVenueStatsViewer";
+import { UnmatchedVenuesViewer } from "@/components/UnmatchedVenuesViewer";
+import { InstagramHandlesViewer } from "@/components/InstagramHandlesViewer";
 
 interface InstagramAccount {
   id: string;
@@ -1054,6 +1056,8 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="knowledge" className="space-y-6 mt-6">
+            <UnmatchedVenuesViewer />
+            <InstagramHandlesViewer />
             <KnownVenuesManager />
             <LocationCorrectionsViewer />
             <AccountVenueStatsViewer />

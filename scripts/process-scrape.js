@@ -820,6 +820,40 @@ async function processPost(post) {
     }
   }
   
+  // ═══════════════════════════════════════════════════════════════
+  // MENTIONS EXTRACTION - Extract @handles from caption
+  // ═══════════════════════════════════════════════════════════════
+  const mentions = [];
+  if (caption) {
+    const mentionRegex = /@([a-zA-Z0-9._]+)/g;
+    let match;
+    while ((match = mentionRegex.exec(caption)) !== null) {
+      const handle = match[1].toLowerCase();
+      // Filter out common false positives
+      if (handle.length > 2 && !mentions.includes(handle)) {
+        mentions.push(handle);
+      }
+    }
+    if (mentions.length > 0) {
+      console.log(`    👥 Extracted ${mentions.length} mentions: @${mentions.slice(0, 3).join(', @')}${mentions.length > 3 ? '...' : ''}`);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // HASHTAGS EXTRACTION - Extract #hashtags from caption
+  // ═══════════════════════════════════════════════════════════════
+  const hashtags = [];
+  if (caption) {
+    const hashtagRegex = /#([a-zA-Z0-9_]+)/g;
+    let match;
+    while ((match = hashtagRegex.exec(caption)) !== null) {
+      const tag = match[1].toLowerCase();
+      if (tag.length > 2 && !hashtags.includes(tag)) {
+        hashtags.push(tag);
+      }
+    }
+  }
+  
   return {
     postId: post.id || post.shortCode,
     shortCode: post.shortCode,
@@ -830,6 +864,8 @@ async function processPost(post) {
     locationName: post.locationName,
     likesCount: post.likesCount,
     commentsCount: post.commentsCount,
+    mentions: mentions,
+    hashtags: hashtags,
     aiExtraction: aiResult,
   };
 }
