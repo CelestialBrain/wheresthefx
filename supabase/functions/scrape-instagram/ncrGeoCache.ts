@@ -5,6 +5,7 @@
  * - Reduce external geocoding API calls
  * - Improve hit rate for common venues
  * - Provide fallback when geocoding API fails
+ * - Filter out non-NCR events based on geographic boundaries
  * 
  * Data sources: Google Maps, OpenStreetMap, manual verification
  */
@@ -18,6 +19,78 @@ export interface VenueData {
   city: string;
   fullName?: string; // Optional canonical full name
   address?: string; // Optional street address
+}
+
+/**
+ * NCR Bounding Box - Metro Manila geographic boundaries
+ * Events with coordinates outside this box are flagged as outside_service_area
+ */
+export const NCR_BOUNDS = {
+  minLat: 14.35,  // Southern boundary (Muntinlupa)
+  maxLat: 14.80,  // Northern boundary (Valenzuela/Caloocan)
+  minLng: 120.85, // Western boundary (Manila Bay coast)
+  maxLng: 121.15, // Eastern boundary (Pasig/Marikina border)
+};
+
+/**
+ * Check if coordinates are within NCR (Metro Manila) boundaries
+ */
+export function isWithinNCR(lat: number | null | undefined, lng: number | null | undefined): boolean {
+  if (lat === null || lat === undefined || lng === null || lng === undefined) {
+    return false;
+  }
+  return (
+    lat >= NCR_BOUNDS.minLat &&
+    lat <= NCR_BOUNDS.maxLat &&
+    lng >= NCR_BOUNDS.minLng &&
+    lng <= NCR_BOUNDS.maxLng
+  );
+}
+
+/**
+ * Province/city keywords that indicate non-NCR locations
+ * Used for pre-filtering captions before geocoding
+ */
+export const NON_NCR_PROVINCE_KEYWORDS = [
+  // Pampanga
+  'pampanga', 'angeles city', 'san fernando pampanga', 'clark', 'clark freeport',
+  // Bulacan
+  'bulacan', 'malolos', 'meycauayan bulacan', 'sta. maria bulacan', 'san jose del monte',
+  // Cavite (exclude borderline areas)
+  'cavite', 'tagaytay', 'silang cavite', 'dasmarinas cavite', 'imus cavite', 
+  'general trias', 'kawit cavite', 'rosario cavite',
+  // Laguna
+  'laguna', 'los banos', 'los baños', 'san pablo laguna', 'sta. rosa laguna', 
+  'calamba laguna', 'binan laguna',
+  // Batangas
+  'batangas', 'lipa batangas', 'tanauan batangas', 'batangas city',
+  // Rizal (the province, not Rizal Park Manila)
+  'rizal province', 'antipolo rizal', 'taytay rizal', 'cainta rizal', 'binangonan rizal',
+  'tanay rizal', 'angono rizal', 'morong rizal',
+  // Other nearby provinces
+  'nueva ecija', 'tarlac', 'zambales', 'pangasinan', 'quezon province',
+  // Explicit province markers
+  'outside metro manila', 'outside ncr', 'provincial',
+];
+
+/**
+ * Detect if caption mentions non-NCR locations
+ * Returns the matched province/city keyword if found
+ */
+export function detectNonNCRProvince(caption: string | null | undefined): string | null {
+  if (!caption) return null;
+  
+  const captionLower = caption.toLowerCase();
+  
+  for (const keyword of NON_NCR_PROVINCE_KEYWORDS) {
+    // Use word boundary check for better accuracy
+    const pattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (pattern.test(captionLower)) {
+      return keyword;
+    }
+  }
+  
+  return null;
 }
 
 /**

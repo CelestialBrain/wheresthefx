@@ -50,6 +50,7 @@ interface Post {
   location_address: string | null;
   location_lat: number | null;
   location_lng: number | null;
+  location_status: string | null;
   price: number | null;
   price_min: number | null;
   price_max: number | null;
@@ -776,6 +777,14 @@ export function ConsolidatedReviewQueue() {
                               )}
                               {post.is_duplicate && (
                                 <Badge variant="destructive" className="text-xs">Duplicate</Badge>
+                              )}
+                              {post.location_status === 'outside_service_area' && (
+                                <Badge className="text-xs bg-purple-600 text-white">🌍 Outside NCR</Badge>
+                              )}
+                              {(post.validation_warnings?.includes('venue_outside_ncr') || 
+                                post.validation_warnings?.includes('coordinates_outside_ncr')) && 
+                                post.location_status !== 'outside_service_area' && (
+                                <Badge className="text-xs bg-purple-600 text-white">🌍 Outside NCR</Badge>
                               )}
                               <PriceDisplay 
                                 isFree={post.is_free}

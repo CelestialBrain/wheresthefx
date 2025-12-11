@@ -737,6 +737,42 @@ async function processPost(post) {
     }
     
     // ═══════════════════════════════════════════════════════════════
+    // NCR SERVICE AREA FILTERING - Detect non-Metro Manila venues
+    // ═══════════════════════════════════════════════════════════════
+    const NON_NCR_KEYWORDS = [
+      'pampanga', 'angeles city', 'san fernando pampanga', 'clark', 'clark freeport',
+      'bulacan', 'malolos', 'meycauayan bulacan', 'san jose del monte',
+      'cavite', 'tagaytay', 'silang cavite', 'dasmarinas cavite', 'imus cavite',
+      'general trias', 'kawit cavite', 'rosario cavite',
+      'laguna', 'los banos', 'los baños', 'san pablo laguna', 'sta. rosa laguna',
+      'calamba laguna', 'binan laguna',
+      'batangas', 'lipa batangas', 'tanauan batangas', 'batangas city',
+      'rizal province', 'antipolo rizal', 'taytay rizal', 'binangonan rizal',
+      'tanay rizal', 'angono rizal', 'morong rizal',
+      'nueva ecija', 'tarlac', 'zambales', 'pangasinan', 'quezon province'
+    ];
+    
+    const captionLower = (caption || '').toLowerCase();
+    const venueNameLower = (aiResult.venueName || '').toLowerCase();
+    const venueAddressLower = (aiResult.venueAddress || '').toLowerCase();
+    
+    let detectedProvince = null;
+    for (const keyword of NON_NCR_KEYWORDS) {
+      const pattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (pattern.test(captionLower) || pattern.test(venueNameLower) || pattern.test(venueAddressLower)) {
+        detectedProvince = keyword;
+        break;
+      }
+    }
+    
+    if (detectedProvince) {
+      aiResult.isOutsideNCR = true;
+      aiResult.detectedProvince = detectedProvince;
+      aiResult.locationStatus = 'outside_service_area';
+      console.log(`    🌍 Non-NCR location detected: "${detectedProvince}" - marking as outside service area`);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
     // HISTORICAL POST DETECTION
     // ═══════════════════════════════════════════════════════════════
     if (aiResult.isHistoricalPost) {
