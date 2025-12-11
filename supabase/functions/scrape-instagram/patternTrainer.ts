@@ -573,22 +573,46 @@ export async function trainPatternsFromComparison(
     }
   }
 
-  // Queue pattern suggestions
+  // Queue pattern suggestions (with deduplication via upsert)
   if (patternSuggestions.length > 0) {
     console.log(`[PatternTrainer] Queueing ${patternSuggestions.length} validated pattern suggestions`);
     
-    try {
-      const { error } = await supabase
-        .from('pattern_suggestions')
-        .insert(patternSuggestions);
-
-      if (error) {
-        console.error(`[PatternTrainer] Failed to queue suggestions:`, error.message);
-      } else {
-        console.log(`[PatternTrainer] ✅ Queued ${patternSuggestions.length} suggestions for post ${postId}`);
+    for (const suggestion of patternSuggestions) {
+      try {
+        // Check if similar suggestion already exists
+        const { data: existing } = await supabase
+          .from('pattern_suggestions')
+          .select('id, attempt_count')
+          .eq('pattern_type', suggestion.pattern_type)
+          .eq('expected_value', suggestion.expected_value)
+          .eq('status', 'pending')
+          .maybeSingle();
+        
+        if (existing) {
+          // Increment attempt count instead of creating duplicate
+          await supabase
+            .from('pattern_suggestions')
+            .update({ 
+              attempt_count: (existing.attempt_count || 1) + 1,
+              sample_text: suggestion.sample_text, // Update with latest sample
+            })
+            .eq('id', existing.id);
+          console.log(`[PatternTrainer] Updated existing suggestion for ${suggestion.expected_value} (attempt ${(existing.attempt_count || 1) + 1})`);
+        } else {
+          // Insert new suggestion
+          const { error } = await supabase
+            .from('pattern_suggestions')
+            .insert(suggestion);
+          
+          if (error && !error.message.includes('duplicate')) {
+            console.error(`[PatternTrainer] Failed to queue suggestion:`, error.message);
+          } else if (!error) {
+            console.log(`[PatternTrainer] ✅ Queued new suggestion: ${suggestion.expected_value}`);
+          }
+        }
+      } catch (err) {
+        console.error('[PatternTrainer] Exception queuing suggestion:', err);
       }
-    } catch (err) {
-      console.error('[PatternTrainer] Exception queuing suggestions:', err);
     }
   }
 }
