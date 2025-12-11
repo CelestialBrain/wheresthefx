@@ -685,11 +685,13 @@ export type Database = {
           review_tier: string | null
           signup_url: string | null
           stored_image_url: string | null
+          sub_events: Json | null
           tags: string[] | null
           topic_confidence: number | null
           topic_label: string | null
           updated_at: string
           urgency_score: number | null
+          url_type: string | null
           validation_warnings: string[] | null
         }
         Insert: {
@@ -746,11 +748,13 @@ export type Database = {
           review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
+          sub_events?: Json | null
           tags?: string[] | null
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
           urgency_score?: number | null
+          url_type?: string | null
           validation_warnings?: string[] | null
         }
         Update: {
@@ -807,11 +811,13 @@ export type Database = {
           review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
+          sub_events?: Json | null
           tags?: string[] | null
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
           urgency_score?: number | null
+          url_type?: string | null
           validation_warnings?: string[] | null
         }
         Relationships: [

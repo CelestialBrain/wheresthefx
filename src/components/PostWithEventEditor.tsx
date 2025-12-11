@@ -482,15 +482,23 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       }
 
       // Now publish to published_events table
-      const { error: publishError } = await supabase.functions.invoke("publish-event", {
+      console.log('[Publish] Calling publish-event edge function for post:', post.id);
+      const { data: publishData, error: publishError } = await supabase.functions.invoke("publish-event", {
         body: { postId: post.id }
       });
 
-      if (publishError) throw publishError;
+      if (publishError) {
+        console.error('[Publish] Edge function error:', publishError);
+        // Revert needs_review back to true since publish failed
+        await supabase.from("instagram_posts").update({ needs_review: true }).eq("id", post.id);
+        throw publishError;
+      }
 
+      console.log('[Publish] Success:', publishData);
       toast.success("Event published successfully!");
       onCreateEvent(post.id);
     } catch (error: any) {
+      console.error('[Publish] Error:', error);
       toast.error(`Failed to publish: ${error.message}`);
       setIsPublishing(false);
     }
