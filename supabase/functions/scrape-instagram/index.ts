@@ -1457,6 +1457,11 @@ Deno.serve(async (req) => {
             recurrence_pattern: (post.aiExtraction as any)?.recurrencePattern ?? null,
             // Urgency score for sorting
             urgency_score: urgencyScore,
+            // Signup URL and type
+            signup_url: (post.aiExtraction as any)?.signupUrl ?? null,
+            url_type: (post.aiExtraction as any)?.urlType ?? null,
+            // Sub-events for multi-event posts (different artists/activities per day)
+            sub_events: (post.aiExtraction as any)?.subEvents ?? null,
           }, { onConflict: 'post_id' }).select('id').single();
           
           if (error) {

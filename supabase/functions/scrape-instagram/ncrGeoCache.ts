@@ -1327,40 +1327,65 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
       }
     }
     
-    // 6. Try partial/contains match on name
-    for (const venue of venues) {
-      const venueLower = venue.name?.toLowerCase() || '';
-      // Check if one contains the other (with minimum length check to avoid false positives)
-      if (searchTerm.length >= 3 && venueLower.length >= 3 &&
-          (venueLower.includes(searchTerm) || searchTerm.includes(venueLower))) {
-        return {
-          lat: Number(venue.lat),
-          lng: Number(venue.lng),
-          city: venue.city || 'Metro Manila',
-          canonicalName: venue.name,
-          matchType: 'partial_name',
-          address: venue.address || undefined
-        };
+    // Common false-positive words to exclude from partial matching
+    const PARTIAL_MATCH_EXCLUSIONS = [
+      'sm', 'mall', 'bar', 'cafe', 'coffee', 'center', 'centre', 'town', 
+      'city', 'place', 'park', 'the', 'at', 'in', 'manila', 'makati', 
+      'bgc', 'quezon', 'pasig', 'taguig', 'shaw', 'edsa', 'ayala'
+    ];
+    
+    // Check if search term is just a common word (false positive risk)
+    const isCommonWord = PARTIAL_MATCH_EXCLUSIONS.includes(searchTerm.toLowerCase());
+    
+    // 6. Try partial/contains match on name (STRICTER: min length 5, exclude common words)
+    if (!isCommonWord) {
+      for (const venue of venues) {
+        const venueLower = venue.name?.toLowerCase() || '';
+        // Check if one contains the other (with minimum length 5 to avoid false positives)
+        // Also require that the match is substantial (at least 60% of the longer string)
+        if (searchTerm.length >= 5 && venueLower.length >= 5) {
+          const longer = Math.max(searchTerm.length, venueLower.length);
+          const shorter = Math.min(searchTerm.length, venueLower.length);
+          const lengthRatio = shorter / longer;
+          
+          if (lengthRatio >= 0.6 && (venueLower.includes(searchTerm) || searchTerm.includes(venueLower))) {
+            return {
+              lat: Number(venue.lat),
+              lng: Number(venue.lng),
+              city: venue.city || 'Metro Manila',
+              canonicalName: venue.name,
+              matchType: 'partial_name',
+              address: venue.address || undefined
+            };
+          }
+        }
       }
     }
     
-    // 7. Try partial/contains match on aliases
-    for (const venue of venues) {
-      if (Array.isArray(venue.aliases)) {
-        for (const alias of venue.aliases) {
-          if (typeof alias === 'string') {
-            const aliasLower = alias.toLowerCase();
-            // Check if one contains the other (with minimum length check to avoid false positives)
-            if (searchTerm.length >= 3 && aliasLower.length >= 3 &&
-                (aliasLower.includes(searchTerm) || searchTerm.includes(aliasLower))) {
-              return {
-                lat: Number(venue.lat),
-                lng: Number(venue.lng),
-                city: venue.city || 'Metro Manila',
-                canonicalName: venue.name,
-                matchType: 'partial_alias',
-                address: venue.address || undefined
-              };
+    // 7. Try partial/contains match on aliases (STRICTER: same rules)
+    if (!isCommonWord) {
+      for (const venue of venues) {
+        if (Array.isArray(venue.aliases)) {
+          for (const alias of venue.aliases) {
+            if (typeof alias === 'string') {
+              const aliasLower = alias.toLowerCase();
+              // Check if one contains the other (with minimum length 5 to avoid false positives)
+              if (searchTerm.length >= 5 && aliasLower.length >= 5) {
+                const longer = Math.max(searchTerm.length, aliasLower.length);
+                const shorter = Math.min(searchTerm.length, aliasLower.length);
+                const lengthRatio = shorter / longer;
+                
+                if (lengthRatio >= 0.6 && (aliasLower.includes(searchTerm) || searchTerm.includes(aliasLower))) {
+                  return {
+                    lat: Number(venue.lat),
+                    lng: Number(venue.lng),
+                    city: venue.city || 'Metro Manila',
+                    canonicalName: venue.name,
+                    matchType: 'partial_alias',
+                    address: venue.address || undefined
+                  };
+                }
+              }
             }
           }
         }

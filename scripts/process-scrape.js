@@ -80,7 +80,24 @@ const eventExtractionSchema = {
     recurrencePattern: { type: SchemaType.STRING, nullable: true, description: "Recurrence pattern e.g. weekly:friday" },
     rsvpDeadline: { type: SchemaType.STRING, nullable: true, description: "RSVP deadline in YYYY-MM-DD format" },
     isHistoricalPost: { type: SchemaType.BOOLEAN, description: "Whether this is about a past event" },
-    reasoning: { type: SchemaType.STRING, description: "Explanation of extraction decisions" }
+    reasoning: { type: SchemaType.STRING, description: "Explanation of extraction decisions" },
+    // NEW: Sub-events for multi-event posts (different artists/activities per day)
+    subEvents: {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          title: { type: SchemaType.STRING, description: "Sub-event title (artist name, activity)" },
+          date: { type: SchemaType.STRING, nullable: true, description: "Specific date for this sub-event in YYYY-MM-DD" },
+          time: { type: SchemaType.STRING, nullable: true, description: "Start time in HH:MM format" },
+          endTime: { type: SchemaType.STRING, nullable: true, description: "End time in HH:MM format" },
+          description: { type: SchemaType.STRING, nullable: true, description: "Additional details" }
+        },
+        required: ["title"]
+      },
+      nullable: true,
+      description: "Multiple events/activities within same post (e.g., different artists on different days)"
+    }
   },
   required: ["isEvent", "category", "confidence", "isRecurring", "isHistoricalPost", "reasoning"]
 };
@@ -297,9 +314,15 @@ END TIME EXTRACTION:
 
 VENUE/LOCATION - ⚠️ STRICT RULES:
 - Extract the ACTUAL venue name from the post content
+- PRIORITY ORDER:
+  1. 📍 emoji followed by venue name (MOST RELIABLE)
+  2. "Location:", "Venue:", "Where:" labels
+  3. Explicit venue mentions in caption text
 - If venue matches a KNOWN VENUE from the list above, use that EXACT spelling
-- DO NOT use @mentions as venues (those are usually performers/sponsors)
-- DO NOT use the posting account username as venue
+- ❌ NEVER extract venue from:
+  - @mentions (those are usually performers/sponsors/photographers)
+  - Hashtags like #SMmall, #Makati, #BGC (these are just tags)
+  - The posting account username
 - DO NOT guess or make up venue names - if unclear, set to null
 - Vague venues should be flagged: "TBA", "DM for details", "secret location", "my bar", "the venue"
 - If venue is just a generic word like "cafe" or "bar", set to null
@@ -315,13 +338,32 @@ PRICE EXTRACTION (ENHANCED):
   - If you see prices, tickets, presale, door charge → isFree: false
   - If price information is unclear or ambiguous, set isFree: null and add priceNotes: "Price not specified"
 
-URL/LINK EXTRACTION:
-- Look for registration, ticket, or RSVP links in BOTH caption AND image
-- Extract formats: "https://...", "bit.ly/...", "tinyurl.com/...", "tickelo.com/...", "eventbrite.com/...", "lnk.to/...", "forms.gle/..."
-- If "link in bio" mentioned but no URL visible, set urlType to "link_in_bio"
-- Priority: ticket purchase > registration > general info
-- DO NOT extract @mentions, sponsor URLs, or the Instagram post URL itself
-- DO NOT extract venue websites unless they're specifically for registration/tickets
+URL/LINK EXTRACTION - ⚠️ CRITICAL:
+- ACTIVELY SEARCH for registration, ticket, or RSVP links in BOTH caption AND image
+- Extract ANY URL formats you see:
+  ✅ "bit.ly/EventName" → signupUrl: "https://bit.ly/EventName"
+  ✅ "tinyurl.com/xyz" → signupUrl: "https://tinyurl.com/xyz"
+  ✅ "tickelo.com/event" → signupUrl: "https://tickelo.com/event"
+  ✅ "eventbrite.com/..." → signupUrl: "https://eventbrite.com/..."
+  ✅ "forms.gle/..." → signupUrl: "https://forms.gle/..."
+  ✅ "lnk.to/..." → signupUrl: "https://lnk.to/..."
+  ✅ Any https:// or http:// URL
+- If "link in bio" or "check bio" mentioned but no URL visible:
+  → Set urlType: "link_in_bio", signupUrl: null
+- Set urlType based on context: "tickets", "registration", "rsvp", "info"
+- ❌ DO NOT extract @mentions, sponsor URLs, or the Instagram post URL itself
+- ❌ DO NOT extract venue websites unless they're specifically for registration/tickets
+
+MULTI-EVENT POSTS (subEvents) - NEW:
+- If a single post announces MULTIPLE distinct events/performances:
+  - Different artists/DJs on different days
+  - Different activities/workshops at different times
+  - Film festival with multiple screenings
+- Extract into subEvents array:
+  [{"title": "DJ Alpha", "date": "2025-12-12", "time": "22:00"},
+   {"title": "DJ Beta", "date": "2025-12-13", "time": "22:00"}]
+- Keep the MAIN event title as the overall event name
+- subEvents captures the breakdown
 
 Categories: nightlife, music, art_culture, markets, food, workshops, community, comedy, other
 

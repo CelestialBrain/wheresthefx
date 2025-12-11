@@ -166,22 +166,30 @@ export function EventDatesDisplay({
         {/* Expanded date list */}
         {isExpanded && (
           <div className="mt-2 rounded-lg border border-border bg-muted/30 p-2 space-y-1">
-            {displayDates.map((dateStr, index) => (
-              <div 
-                key={`${dateStr}-${index}`}
-                className="flex items-center justify-between text-xs px-2 py-1"
-              >
-                <span className="text-foreground">
-                  {formatDate(dateStr)}
-                </span>
-                {timeRangeStr && (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    {timeRangeStr}
+            {displayDates.map((dateStr, index) => {
+              // Check if we have per-day time data from additionalDates
+              const dateRecord = additionalDates.find(d => d.event_date === dateStr);
+              const dayTimeRange = dateRecord 
+                ? formatTimeRange(dateRecord.event_time, dateRecord.end_time)
+                : timeRangeStr;
+              
+              return (
+                <div 
+                  key={`${dateStr}-${index}`}
+                  className="flex items-center justify-between text-xs px-2 py-1"
+                >
+                  <span className="text-foreground">
+                    {formatDate(dateStr)}
                   </span>
-                )}
-              </div>
-            ))}
+                  {dayTimeRange && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {dayTimeRange}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
