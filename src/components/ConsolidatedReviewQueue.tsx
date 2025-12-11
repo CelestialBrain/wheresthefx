@@ -31,6 +31,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PriceDisplay } from "./PriceDisplay";
+import { SubEventsDisplay } from "./SubEventsDisplay";
+import { Json } from "@/integrations/supabase/types";
 
 interface Post {
   id: string;
@@ -72,6 +74,7 @@ interface Post {
   is_recurring: boolean | null;
   recurrence_pattern: string | null;
   urgency_score: number | null;
+  sub_events: Json | null;
 }
 
 const extractionMethodLabels: Record<string, { label: string; icon: string }> = {
@@ -787,6 +790,9 @@ export function ConsolidatedReviewQueue() {
 
                           {/* Validation Warnings */}
                           <ValidationWarnings warnings={post.validation_warnings} />
+
+                          {/* Sub-Events Display for multi-event posts */}
+                          <SubEventsDisplay subEvents={post.sub_events} />
 
                           {/* Completeness meter */}
                           <div className="space-y-1">
