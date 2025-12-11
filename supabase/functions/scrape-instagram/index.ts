@@ -1587,42 +1587,96 @@ Deno.serve(async (req) => {
             });
             saved++;
             
-            // Pattern training for GitHub Actions ingested posts
-            if (post.aiExtraction && (post.aiExtraction.confidence ?? 0) >= 0.7) {
+            // PHASE 2: Pattern training with ACTUAL regex testing
+            // Run regex extraction to compare with AI and properly track pattern success/failure
+            if (post.caption && post.aiExtraction && (post.aiExtraction.confidence ?? 0) >= 0.7) {
               try {
+                // Actually run regex extraction to test patterns
+                const regexResult = await extractInParallel(
+                  post.caption,
+                  rawVenueName,
+                  post.postId,
+                  supabase,
+                  {
+                    postedAt: post.timestamp,
+                    ownerUsername: post.ownerUsername,
+                    imageUrl: post.imageUrl,
+                    useOCR: false, // Don't re-run AI, just use regex
+                  }
+                );
+                
+                // Build merged result with ACTUAL source comparison
                 const mergedResult: MergedExtractionResult = {
-                  eventTitle: post.aiExtraction.eventTitle || null,
+                  eventTitle: post.aiExtraction.eventTitle || regexResult.eventTitle || null,
                   eventDate: validation.correctedData.eventDate || null,
-                  eventEndDate: (post.aiExtraction as any)?.eventEndDate || null,
+                  eventEndDate: (post.aiExtraction as any)?.eventEndDate || regexResult.eventEndDate || null,
                   eventTime: validation.correctedData.eventTime || null,
-                  endTime: validation.correctedData.endTime || null,
+                  endTime: validation.correctedData.endTime || regexResult.endTime || null,
                   locationName: validation.correctedData.locationName || null,
-                  locationAddress: post.aiExtraction.venueAddress || null,
-                  signupUrl: null,
-                  price: validation.correctedData.price ?? null,
-                  isFree: post.aiExtraction.isFree ?? null,
+                  locationAddress: post.aiExtraction.venueAddress || regexResult.locationAddress || null,
+                  signupUrl: (post.aiExtraction as any)?.signupUrl || regexResult.signupUrl || null,
+                  price: validation.correctedData.price ?? regexResult.price ?? null,
+                  isFree: post.aiExtraction.isFree ?? regexResult.isFree ?? null,
                   isEvent: post.aiExtraction.isEvent ?? false,
                   confidence: post.aiExtraction.confidence,
                   reasoning: (post.aiExtraction as any).reasoning || null,
+                  // Copy pattern IDs from regex result for tracking
+                  datePatternId: regexResult.datePatternId,
+                  timePatternId: regexResult.timePatternId,
+                  venuePatternId: regexResult.venuePatternId,
+                  pricePatternId: regexResult.pricePatternId,
+                  signupUrlPatternId: regexResult.signupUrlPatternId,
+                  // Calculate actual sources by comparing regex vs AI
                   sources: {
-                    eventDate: 'ai',
-                    eventTime: 'ai',
-                    locationName: 'ai',
-                    price: 'ai',
-                    signupUrl: undefined,
+                    eventDate: regexResult.eventDate && post.aiExtraction.eventDate 
+                      ? (regexResult.eventDate === post.aiExtraction.eventDate ? 'both' : 'ai')
+                      : (regexResult.eventDate ? 'regex' : 'ai'),
+                    eventTime: regexResult.eventTime && post.aiExtraction.eventTime 
+                      ? (regexResult.eventTime === post.aiExtraction.eventTime ? 'both' : 'ai')
+                      : (regexResult.eventTime ? 'regex' : 'ai'),
+                    locationName: regexResult.locationName && post.aiExtraction.venueName 
+                      ? 'both' : (regexResult.locationName ? 'regex' : 'ai'),
+                    price: regexResult.price !== null && post.aiExtraction.price !== null
+                      ? (regexResult.price === post.aiExtraction.price ? 'both' : 'ai')
+                      : (regexResult.price !== null ? 'regex' : 'ai'),
+                    signupUrl: regexResult.signupUrl ? 'regex' : 
+                      ((post.aiExtraction as any)?.signupUrl ? 'ai' : undefined),
                   },
                   conflicts: [],
-                  overallSource: 'ai_only',
+                  overallSource: 'both',
                 };
                 
-                await saveGroundTruth(post.postId, post.caption || '', mergedResult, supabase);
+                // Detect conflicts
+                if (regexResult.eventDate && post.aiExtraction.eventDate && 
+                    regexResult.eventDate !== post.aiExtraction.eventDate) {
+                  mergedResult.conflicts.push({
+                    field: 'eventDate',
+                    regexValue: regexResult.eventDate,
+                    aiValue: post.aiExtraction.eventDate,
+                  });
+                }
+                if (regexResult.eventTime && post.aiExtraction.eventTime && 
+                    regexResult.eventTime !== post.aiExtraction.eventTime) {
+                  mergedResult.conflicts.push({
+                    field: 'eventTime',
+                    regexValue: regexResult.eventTime,
+                    aiValue: post.aiExtraction.eventTime,
+                  });
+                }
                 
-                // Train patterns by comparing AI results with regex patterns
+                await saveGroundTruth(post.postId, post.caption || '', mergedResult, supabase);
                 await trainPatternsFromComparison(post.postId, post.caption || '', mergedResult, supabase);
                 
-                await ingestLogger?.info('save', `Saved ground truth and trained patterns for ${post.postId}`, {
-                  confidence: post.aiExtraction.confidence,
-                  fieldsCount: Object.values(mergedResult).filter(v => v !== null && v !== undefined).length,
+                await ingestLogger?.info('save', `Pattern training: ${Object.entries(mergedResult.sources).filter(([,v]) => v === 'both').length} matched, ${mergedResult.conflicts.length} conflicts`, {
+                  postId: post.postId,
+                  sources: mergedResult.sources,
+                  conflicts: mergedResult.conflicts.length,
+                  patternIds: {
+                    date: regexResult.datePatternId,
+                    time: regexResult.timePatternId,
+                    venue: regexResult.venuePatternId,
+                    price: regexResult.pricePatternId,
+                  },
                 });
               } catch (trainErr) {
                 console.warn(`[GH-INGEST] Pattern training failed for ${post.postId}:`, trainErr);

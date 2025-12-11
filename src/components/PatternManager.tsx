@@ -14,6 +14,7 @@ import { Search, CheckCircle2, XCircle, AlertCircle, Eye, EyeOff, AlertTriangle,
 import { PatternLearner } from "./PatternLearner";
 import { PatternCreationForm } from "./PatternCreationForm";
 import { PatternSuggestionsReview } from "./PatternSuggestionsReview";
+import { PatternSuggestionsBulkActions } from "./PatternSuggestionsBulkActions";
 import { GroundTruthViewer } from "./GroundTruthViewer";
 
 interface PatternTestResult {
@@ -461,7 +462,11 @@ export const PatternManager = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="suggestions" className="mt-4 md:mt-6">
+        <TabsContent value="suggestions" className="mt-4 md:mt-6 space-y-4">
+          {/* Bulk Actions */}
+          <PatternSuggestionsBulkActions />
+          
+          {/* Individual Review */}
           <Card>
             <CardHeader className="p-4 md:p-6">
               <CardTitle className="text-base md:text-lg flex items-center gap-2">
