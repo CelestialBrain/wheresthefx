@@ -32,6 +32,30 @@ interface DbStats {
   debug: number;
 }
 
+interface AggregatedData {
+  runId: string;
+  runStartedAt: string;
+  runCompletedAt: string | null;
+  runStatus: string;
+  totalPosts: number;
+  totalLogs: number;
+  metrics: {
+    eventsDetected: number;
+    notEvents: number;
+    geocodeSuccess: number;
+    geocodeFailures: number;
+    historicalRejected: number;
+    preFilterSkipped: number;
+    imagesStored: number;
+    imagesFailed: number;
+  };
+  categoryBreakdown: Record<string, number>;
+  topVenueMatches: Array<{ venue: string; count: number }>;
+  failedVenueMatches: Array<{ venue: string; count: number }>;
+  rejectionReasons: Array<{ reason: string; count: number }>;
+  validationWarnings: Array<{ warning: string; count: number }>;
+}
+
 interface AnalysisResult {
   overallQuality: 'excellent' | 'good' | 'fair' | 'poor';
   summary: string;
@@ -61,6 +85,7 @@ export const ScraperLogs = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [aggregatedData, setAggregatedData] = useState<AggregatedData | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(true);
   const [dbStats, setDbStats] = useState<DbStats>({ total: 0, success: 0, info: 0, warnings: 0, errors: 0, debug: 0 });
   const { toast } = useToast();
@@ -342,6 +367,7 @@ export const ScraperLogs = () => {
 
     setIsAnalyzing(true);
     setAnalysisResult(null);
+    setAggregatedData(null);
 
     try {
       const response = await fetch(
@@ -363,6 +389,7 @@ export const ScraperLogs = () => {
 
       const data = await response.json();
       setAnalysisResult(data.analysis);
+      setAggregatedData(data.aggregated);
       setAnalysisOpen(true);
 
       toast({
@@ -603,7 +630,152 @@ export const ScraperLogs = () => {
                   {/* Summary */}
                   <p className="text-sm text-muted-foreground">{analysisResult.summary}</p>
 
-                  {/* Key Metrics */}
+                  {/* Raw Metrics Summary */}
+                  {aggregatedData && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 rounded-lg bg-background/50 border">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-purple-500">
+                          {aggregatedData.metrics.eventsDetected}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Events / {aggregatedData.metrics.eventsDetected + aggregatedData.metrics.notEvents} posts
+                        </div>
+                        <div className="text-xs font-medium text-purple-500">
+                          {aggregatedData.metrics.eventsDetected + aggregatedData.metrics.notEvents > 0 
+                            ? `${Math.round((aggregatedData.metrics.eventsDetected / (aggregatedData.metrics.eventsDetected + aggregatedData.metrics.notEvents)) * 100)}%`
+                            : '0%'}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-emerald-500">
+                          {aggregatedData.metrics.geocodeSuccess}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Geocoded / {aggregatedData.metrics.geocodeSuccess + aggregatedData.metrics.geocodeFailures}
+                        </div>
+                        <div className="text-xs font-medium text-emerald-500">
+                          {aggregatedData.metrics.geocodeSuccess + aggregatedData.metrics.geocodeFailures > 0 
+                            ? `${Math.round((aggregatedData.metrics.geocodeSuccess / (aggregatedData.metrics.geocodeSuccess + aggregatedData.metrics.geocodeFailures)) * 100)}%`
+                            : '0%'}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-pink-500">
+                          {aggregatedData.metrics.imagesStored}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Images / {aggregatedData.metrics.imagesStored + aggregatedData.metrics.imagesFailed}
+                        </div>
+                        <div className="text-xs font-medium text-pink-500">
+                          {aggregatedData.metrics.imagesStored + aggregatedData.metrics.imagesFailed > 0 
+                            ? `${Math.round((aggregatedData.metrics.imagesStored / (aggregatedData.metrics.imagesStored + aggregatedData.metrics.imagesFailed)) * 100)}%`
+                            : '0%'}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-amber-500">
+                          {aggregatedData.metrics.historicalRejected}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Historical</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-gray-500">
+                          {aggregatedData.metrics.preFilterSkipped}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Skipped</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Category Breakdown */}
+                  {aggregatedData && Object.keys(aggregatedData.categoryBreakdown).length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">📂 Category Distribution</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(aggregatedData.categoryBreakdown)
+                          .sort(([,a], [,b]) => b - a)
+                          .map(([category, count]) => (
+                            <Badge key={category} variant="secondary" className="text-xs">
+                              {category}: {count}
+                            </Badge>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top Venue Matches */}
+                  {aggregatedData && aggregatedData.topVenueMatches.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 text-emerald-600">
+                        ✅ Top Venue Matches ({aggregatedData.topVenueMatches.reduce((sum, v) => sum + v.count, 0)} total)
+                      </h4>
+                      <div className="flex flex-wrap gap-1">
+                        {aggregatedData.topVenueMatches.slice(0, 12).map((v, i) => (
+                          <Badge key={i} variant="outline" className="text-xs bg-emerald-500/10 border-emerald-500/30">
+                            {v.venue} ({v.count}x)
+                          </Badge>
+                        ))}
+                        {aggregatedData.topVenueMatches.length > 12 && (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            +{aggregatedData.topVenueMatches.length - 12} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Failed Venues with Counts */}
+                  {aggregatedData && aggregatedData.failedVenueMatches.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 text-amber-600">
+                        ⚠️ Failed Venue Matches ({aggregatedData.failedVenueMatches.reduce((sum, v) => sum + v.count, 0)} lookups)
+                      </h4>
+                      <div className="flex flex-wrap gap-1">
+                        {aggregatedData.failedVenueMatches.slice(0, 15).map((v, i) => (
+                          <Badge key={i} variant="outline" className="text-xs bg-amber-500/10 border-amber-500/30">
+                            {v.venue} ({v.count}x)
+                          </Badge>
+                        ))}
+                        {aggregatedData.failedVenueMatches.length > 15 && (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            +{aggregatedData.failedVenueMatches.length - 15} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Rejection Reasons */}
+                  {aggregatedData && aggregatedData.rejectionReasons.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">🚫 Rejection Breakdown</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                        {aggregatedData.rejectionReasons.map((r, i) => (
+                          <div key={i} className="flex justify-between text-xs p-1.5 rounded bg-background/50">
+                            <span className="truncate">{r.reason}</span>
+                            <span className="font-medium text-muted-foreground ml-2">{r.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Validation Warnings */}
+                  {aggregatedData && aggregatedData.validationWarnings.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">⚠️ Validation Warnings</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                        {aggregatedData.validationWarnings.map((w, i) => (
+                          <div key={i} className="flex justify-between text-xs p-1.5 rounded bg-yellow-500/10">
+                            <span className="truncate">{w.warning}</span>
+                            <span className="font-medium text-yellow-600 ml-2">{w.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Key Metrics Analysis */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="p-3 rounded-lg bg-background/50 border">
                       <div className="text-xs text-muted-foreground mb-1">Event Detection</div>
@@ -636,28 +808,6 @@ export const ScraperLogs = () => {
                             </div>
                           </div>
                         ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Venues to Add */}
-                  {analysisResult.venuesToAdd.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                        <Lightbulb className="h-4 w-4 text-yellow-500" />
-                        Venues to Add ({analysisResult.venuesToAdd.length})
-                      </h4>
-                      <div className="flex flex-wrap gap-1">
-                        {analysisResult.venuesToAdd.slice(0, 15).map((venue, i) => (
-                          <Badge key={i} variant="outline" className="text-xs">
-                            {venue}
-                          </Badge>
-                        ))}
-                        {analysisResult.venuesToAdd.length > 15 && (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">
-                            +{analysisResult.venuesToAdd.length - 15} more
-                          </Badge>
-                        )}
                       </div>
                     </div>
                   )}
