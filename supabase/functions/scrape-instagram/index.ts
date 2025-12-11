@@ -1365,14 +1365,43 @@ Deno.serve(async (req) => {
             isFree: post.aiExtraction?.isFree ?? null,
           });
           
-          // Check for duplicates
+          // Prepare new post data for completeness comparison
+          const newPostDataForComparison = {
+            event_title: post.aiExtraction?.eventTitle || null,
+            event_time: validation.correctedData.eventTime,
+            end_time: validation.correctedData.endTime,
+            price: validation.correctedData.price,
+            price_notes: (post.aiExtraction as any)?.priceNotes ?? null,
+            location_lat: locationLat,
+            location_lng: locationLng,
+            signup_url: (post.aiExtraction as any)?.signupUrl ?? null,
+            sub_events: (post.aiExtraction as any)?.subEvents ?? null,
+            caption: post.caption,
+            location_address: locationAddress,
+          };
+          
+          // Check for duplicates with quality-aware comparison
           const duplicateCheck = await checkForDuplicate(
             supabase,
             validation.correctedData.locationName,
             validation.correctedData.eventDate,
             validation.correctedData.eventTime,
-            post.aiExtraction?.eventTitle || null
+            post.aiExtraction?.eventTitle || null,
+            newPostDataForComparison
           );
+          
+          // If new post should replace existing as primary, update the existing post
+          let swappedExistingPost = false;
+          if (duplicateCheck.isDuplicate && duplicateCheck.shouldReplaceExisting && duplicateCheck.existingPostId) {
+            // Mark the existing post as a duplicate of the new post (will update after upsert)
+            swappedExistingPost = true;
+            await ingestLogger?.info('save', `New post (score: ${duplicateCheck.newCompleteness}) REPLACES existing (score: ${duplicateCheck.existingCompleteness}) as primary`, { 
+              postId: post.postId,
+              existingPostId: duplicateCheck.existingPostId,
+              newCompleteness: duplicateCheck.newCompleteness,
+              existingCompleteness: duplicateCheck.existingCompleteness
+            });
+          }
           
           // Assign review tier
           const tierAssignment = assignReviewTier(
@@ -1387,8 +1416,11 @@ Deno.serve(async (req) => {
             !!(locationLat && locationLng) // isKnownVenue = has coordinates
           );
           
-          // If duplicate, force to rejected tier
-          const finalTier = duplicateCheck.isDuplicate ? 'rejected' : tierAssignment.tier;
+          // If duplicate and NOT replacing existing, mark new post as rejected
+          // If replacing existing, new post becomes primary (use original tier)
+          const finalTier = (duplicateCheck.isDuplicate && !duplicateCheck.shouldReplaceExisting) 
+            ? 'rejected' 
+            : tierAssignment.tier;
           
           // Calculate urgency score based on event date proximity
           let urgencyScore = 0;
@@ -1471,6 +1503,27 @@ Deno.serve(async (req) => {
             });
             failed++;
           } else {
+            // If we swapped duplicates, update the existing post to point to new post as primary
+            if (swappedExistingPost && upsertedPost?.id && duplicateCheck.existingPostId) {
+              const { error: swapError } = await supabase
+                .from('instagram_posts')
+                .update({ 
+                  is_duplicate: true, 
+                  duplicate_of: upsertedPost.id,
+                  review_tier: 'rejected'
+                })
+                .eq('id', duplicateCheck.existingPostId);
+              
+              if (swapError) {
+                console.warn(`Failed to swap duplicate roles: ${swapError.message}`);
+              } else {
+                await ingestLogger?.success('save', `Swapped duplicate roles - existing post ${duplicateCheck.existingPostId} now points to new primary ${upsertedPost.id}`, {
+                  existingPostId: duplicateCheck.existingPostId,
+                  newPrimaryId: upsertedPost.id
+                });
+              }
+            }
+            
             // Log validation warnings to validation_logs table
             if (validation.warnings.length > 0 && upsertedPost?.id) {
               await logValidationWarnings(supabase, upsertedPost.id, validation.warnings, {
