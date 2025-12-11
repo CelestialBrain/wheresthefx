@@ -808,53 +808,6 @@ async function processPost(post) {
     }
   }
     
-    // Sub-events debug logging - warn if caption looks like it has schedules but subEvents is empty
-    if ((!aiResult.subEvents || aiResult.subEvents.length === 0) && caption) {
-      const timeSlotPatterns = [
-        /\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\s*[-–—]\s*[A-Z]/i, // "4PM - Title"
-        /\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\s+[A-Z][a-z]/i, // "4PM Title"
-        /(?:session|workshop|class|set|slot)\s*\d/i, // "Session 1", "Workshop 2"
-      ];
-      
-      const hasTimeSlots = timeSlotPatterns.some(p => p.test(caption));
-      if (hasTimeSlots) {
-        console.log(`    ⚠️ Caption appears to have time slots but subEvents is empty - may need manual review`);
-      }
-    }
-    
-    // Historical post detection
-    if (aiResult.isHistoricalPost) {
-      aiResult.isEvent = false;
-      console.log(`    📜 Historical post detected - marking as not event`);
-    }
-    
-    // Smart historical detection using eventEndDate for multi-day events
-    if (aiResult.eventDate && post.timestamp) {
-      const eventDate = new Date(aiResult.eventDate);
-      const effectiveEndDate = aiResult.eventEndDate 
-        ? new Date(aiResult.eventEndDate) 
-        : eventDate;
-      const postDate = new Date(post.timestamp);
-      const today = new Date();
-      today.setHours(23, 59, 59, 999);
-      
-      const postAgeInDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (effectiveEndDate < today && effectiveEndDate < postDate) {
-        aiResult.isEvent = false;
-        aiResult.isHistoricalPost = true;
-        aiResult.reasoning = (aiResult.reasoning || '') + ' [Auto-detected: Event ended before post date = historical recap]';
-        console.log(`    📜 Event end date (${aiResult.eventEndDate || aiResult.eventDate}) before post date - marking as historical`);
-      }
-      
-      if (postAgeInDays > 30 && effectiveEndDate < today) {
-        aiResult.isEvent = false;
-        aiResult.isHistoricalPost = true;
-        aiResult.reasoning = (aiResult.reasoning || '') + ` [Auto-detected: Old post (${postAgeInDays} days) with completed event = historical]`;
-        console.log(`    📜 Old post with past event date - marking as historical`);
-      }
-    }
-  }
   
   // ═══════════════════════════════════════════════════════════════
   // MENTIONS EXTRACTION - Extract @handles from caption
