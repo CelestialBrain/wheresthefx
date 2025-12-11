@@ -1645,11 +1645,31 @@ export function lookupNCRVenue(venueName: string): VenueData | null {
 // Fuzzy matching constants
 export const SUBSTRING_BASE_SCORE = 0.85;  // Base score when one string contains another
 export const SUBSTRING_BONUS_RANGE = 0.15; // Additional bonus based on length ratio
-export const DEFAULT_FUZZY_THRESHOLD = 0.5; // Default threshold for fuzzy matching
-export const KNOWN_VENUE_FUZZY_THRESHOLD = 0.75; // Stricter threshold for known venue lookups
+export const DEFAULT_FUZZY_THRESHOLD = 0.7; // Increased threshold to prevent false positives
+export const KNOWN_VENUE_FUZZY_THRESHOLD = 0.8; // Stricter threshold for known venue lookups
+
+// Common words that should NOT count as significant matches
+// These are too generic and cause false positives like "Loop Cafe" → "heyday cafe"
+const INSIGNIFICANT_WORDS = new Set([
+  'cafe', 'bar', 'restaurant', 'lounge', 'club', 'pub', 'bistro', 'kitchen',
+  'grill', 'house', 'place', 'spot', 'den', 'room', 'hall', 'space',
+  'manila', 'makati', 'bgc', 'pasig', 'quezon', 'city', 'metro',
+  'the', 'at', 'in', 'on', 'and', 'or', 'of', 'by',
+  'events', 'event', 'venue', 'studio', 'gallery', 'shop', 'store'
+]);
+
+/**
+ * Get significant words from a venue name (excluding common/generic words)
+ */
+function getSignificantWords(str: string): string[] {
+  return str.split(/\s+/)
+    .filter(word => word.length >= 3)
+    .filter(word => !INSIGNIFICANT_WORDS.has(word.toLowerCase()));
+}
 
 /**
  * Fuzzy matching for venue names using string similarity
+ * STRICT: Requires 2+ significant word matches to prevent false positives
  */
 function calculateSimilarity(str1: string, str2: string): number {
   const longer = str1.length > str2.length ? str1 : str2;
@@ -1657,28 +1677,55 @@ function calculateSimilarity(str1: string, str2: string): number {
   
   if (longer.length === 0) return 1.0;
   
-  // Simple contains check - return HIGH score (0.85+) for full containment
-  // This is a strong match indicator
-  if (longer.includes(shorter)) {
-    return SUBSTRING_BASE_SCORE + (shorter.length / longer.length) * SUBSTRING_BONUS_RANGE;
+  // Get significant words for both strings
+  const sigWords1 = getSignificantWords(str1);
+  const sigWords2 = getSignificantWords(str2);
+  
+  // Simple contains check - but ONLY if the shorter string has significant words
+  // This prevents "cafe" from matching "heyday cafe"
+  if (longer.includes(shorter) && sigWords1.length > 0 && sigWords2.length > 0) {
+    // Check if at least 1 significant word is shared
+    const hasSignificantMatch = sigWords1.some(w1 => 
+      sigWords2.some(w2 => w1.toLowerCase() === w2.toLowerCase())
+    );
+    if (hasSignificantMatch) {
+      return SUBSTRING_BASE_SCORE + (shorter.length / longer.length) * SUBSTRING_BONUS_RANGE;
+    }
   }
   
-  // Word-level matches
-  const words1 = str1.split(/\s+/);
-  const words2 = str2.split(/\s+/);
+  // Word-level matches - require 2+ significant word matches OR 1 unique long word (5+ chars)
+  const allWords1 = str1.split(/\s+/).filter(w => w.length >= 3);
+  const allWords2 = str2.split(/\s+/).filter(w => w.length >= 3);
   
-  let matchedWords = 0;
-  for (const word1 of words1) {
-    if (word1.length < 3) continue;
-    for (const word2 of words2) {
-      if (word1 === word2) {
-        matchedWords++;
+  let matchedSignificant = 0;
+  let matchedTotal = 0;
+  let hasLongUniqueMatch = false;
+  
+  for (const word1 of allWords1) {
+    const word1Lower = word1.toLowerCase();
+    for (const word2 of allWords2) {
+      if (word1Lower === word2.toLowerCase()) {
+        matchedTotal++;
+        // Check if this is a significant word match
+        if (!INSIGNIFICANT_WORDS.has(word1Lower)) {
+          matchedSignificant++;
+          // Check if it's a long unique word (likely the actual venue name)
+          if (word1.length >= 5) {
+            hasLongUniqueMatch = true;
+          }
+        }
         break;
       }
     }
   }
   
-  return matchedWords / Math.max(words1.length, words2.length);
+  // STRICT RULE: Require 2+ significant matches OR 1 long unique word match
+  // This prevents "Loop Cafe" from matching "heyday cafe" (only "cafe" matches)
+  if (matchedSignificant < 2 && !hasLongUniqueMatch) {
+    return 0; // No meaningful similarity
+  }
+  
+  return matchedTotal / Math.max(allWords1.length, allWords2.length);
 }
 
 /**
