@@ -307,7 +307,7 @@ const Admin = () => {
   };
 
   const purgeAllPosts = async () => {
-    if (!confirm("⚠️ DANGER: This will delete EVERYTHING including all Instagram accounts, events, posts, locations, and published data. This cannot be undone!\n\nType 'DELETE' to confirm.")) {
+    if (!confirm("⚠️ This will delete all posts, published events, and scrape history.\n\nPreserved: Instagram accounts, Known Venues, Location Corrections, Patterns\n\nType 'DELETE' to confirm.")) {
       return;
     }
 
@@ -323,18 +323,30 @@ const Admin = () => {
     try {
       setIsPurging(true);
 
-      // Delete all data including instagram accounts
+      // Delete child tables first (FK constraints)
+      // Children of instagram_posts
+      await supabase.from("event_dates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("event_updates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("validation_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      
+      // Children of scrape_runs
+      await supabase.from("scraper_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      
+      // Main tables
       await supabase.from("published_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("saved_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("location_corrections").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("locations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("instagram_posts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("ocr_cache").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("instagram_accounts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("scrape_runs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      
+      // PRESERVED: instagram_accounts, known_venues, location_corrections, 
+      // account_venue_stats, extraction_patterns, extraction_ground_truth,
+      // extraction_feedback, pattern_suggestions
 
       toast({
         title: "Success",
-        description: "All data has been completely purged",
+        description: "Posts and scrape data purged. Accounts & knowledge preserved.",
       });
 
       fetchAccounts();
