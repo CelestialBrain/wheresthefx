@@ -16,6 +16,7 @@ import { KnownVenuesManager } from "@/components/KnownVenuesManager";
 import { LocationCorrectionsViewer } from "@/components/LocationCorrectionsViewer";
 import { AccountVenueStatsViewer } from "@/components/AccountVenueStatsViewer";
 import { UnmatchedVenuesViewer } from "@/components/UnmatchedVenuesViewer";
+import { GeoConfigurationManager } from "@/components/GeoConfigurationManager";
 import { InstagramHandlesViewer } from "@/components/InstagramHandlesViewer";
 
 interface InstagramAccount {
@@ -1068,6 +1069,7 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="knowledge" className="space-y-6 mt-6">
+            <GeoConfigurationManager />
             <UnmatchedVenuesViewer />
             <InstagramHandlesViewer />
             <KnownVenuesManager />

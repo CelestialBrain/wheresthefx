@@ -24,13 +24,78 @@ export interface VenueData {
 /**
  * NCR Bounding Box - Metro Manila geographic boundaries
  * Events with coordinates outside this box are flagged as outside_service_area
+ * NOTE: These are fallback values. Actual bounds are loaded from geo_configuration table.
  */
-export const NCR_BOUNDS = {
+export let NCR_BOUNDS = {
   minLat: 14.35,  // Southern boundary (Muntinlupa)
   maxLat: 14.80,  // Northern boundary (Valenzuela/Caloocan)
   minLng: 120.85, // Western boundary (Manila Bay coast)
   maxLng: 121.15, // Eastern boundary (Pasig/Marikina border)
 };
+
+// Database-loaded geo configuration cache
+let dbGeoConfigLoaded = false;
+let dbNonNCRKeywords: string[] = [];
+
+/**
+ * Load geo configuration from database
+ * Populates NCR_BOUNDS and NON_NCR_PROVINCE_KEYWORDS from geo_configuration table
+ */
+export async function loadGeoConfiguration(): Promise<void> {
+  if (dbGeoConfigLoaded) return; // Already loaded
+  
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('[ncrGeoCache] Missing Supabase credentials, using hardcoded geo config');
+    dbGeoConfigLoaded = true;
+    return;
+  }
+  
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data: configs, error } = await supabase
+      .from('geo_configuration')
+      .select('config_type, config_key, config_value, is_active')
+      .eq('is_active', true);
+    
+    if (error) {
+      console.error('[ncrGeoCache] Failed to load geo config from DB:', error.message);
+      dbGeoConfigLoaded = true;
+      return;
+    }
+    
+    if (configs && configs.length > 0) {
+      // Load NCR bounds
+      const boundsConfigs = configs.filter(c => c.config_type === 'ncr_bounds');
+      for (const bound of boundsConfigs) {
+        if (bound.config_value) {
+          const value = parseFloat(bound.config_value);
+          if (!isNaN(value)) {
+            switch (bound.config_key) {
+              case 'minLat': NCR_BOUNDS.minLat = value; break;
+              case 'maxLat': NCR_BOUNDS.maxLat = value; break;
+              case 'minLng': NCR_BOUNDS.minLng = value; break;
+              case 'maxLng': NCR_BOUNDS.maxLng = value; break;
+            }
+          }
+        }
+      }
+      
+      // Load non-NCR keywords
+      const keywordConfigs = configs.filter(c => c.config_type === 'non_ncr_keyword');
+      dbNonNCRKeywords = keywordConfigs.map(c => c.config_key);
+      
+      console.log(`[ncrGeoCache] Loaded geo config: ${boundsConfigs.length} bounds, ${dbNonNCRKeywords.length} non-NCR keywords`);
+    }
+    
+    dbGeoConfigLoaded = true;
+  } catch (err) {
+    console.error('[ncrGeoCache] Error loading geo config:', err);
+    dbGeoConfigLoaded = true;
+  }
+}
 
 /**
  * Check if coordinates are within NCR (Metro Manila) boundaries
@@ -48,8 +113,8 @@ export function isWithinNCR(lat: number | null | undefined, lng: number | null |
 }
 
 /**
- * Province/city keywords that indicate non-NCR locations
- * Used for pre-filtering captions before geocoding
+ * Province/city keywords that indicate non-NCR locations (fallback list)
+ * NOTE: Runtime uses dbNonNCRKeywords loaded from database when available
  */
 export const NON_NCR_PROVINCE_KEYWORDS = [
   // Pampanga
@@ -75,6 +140,13 @@ export const NON_NCR_PROVINCE_KEYWORDS = [
 ];
 
 /**
+ * Get active non-NCR keywords (from database if loaded, otherwise fallback)
+ */
+export function getActiveNonNCRKeywords(): string[] {
+  return dbNonNCRKeywords.length > 0 ? dbNonNCRKeywords : NON_NCR_PROVINCE_KEYWORDS;
+}
+
+/**
  * Detect if caption mentions non-NCR locations
  * Returns the matched province/city keyword if found
  */
@@ -82,8 +154,9 @@ export function detectNonNCRProvince(caption: string | null | undefined): string
   if (!caption) return null;
   
   const captionLower = caption.toLowerCase();
+  const keywords = getActiveNonNCRKeywords();
   
-  for (const keyword of NON_NCR_PROVINCE_KEYWORDS) {
+  for (const keyword of keywords) {
     // Use word boundary check for better accuracy
     const pattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
     if (pattern.test(captionLower)) {

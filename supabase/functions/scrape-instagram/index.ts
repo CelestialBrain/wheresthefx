@@ -20,7 +20,7 @@ import {
   cleanLocationName,
 } from './extractionUtils.ts';
 import { ScraperLogger, RejectedPostLogData } from './logger.ts';
-import { lookupNCRVenue, fuzzyMatchVenue, lookupKnownVenuesFirst, DEFAULT_FUZZY_THRESHOLD } from './ncrGeoCache.ts';
+import { lookupNCRVenue, fuzzyMatchVenue, lookupKnownVenuesFirst, DEFAULT_FUZZY_THRESHOLD, loadGeoConfiguration } from './ncrGeoCache.ts';
 import { fetchWithRetry, fetchWithTimeout } from './retryUtils.ts';
 import { saveGroundTruth, trainPatternsFromComparison } from './patternTrainer.ts';
 import { extractInParallel, mergeResults, MergedExtractionResult } from './parallelExtraction.ts';
@@ -780,6 +780,9 @@ Deno.serve(async (req) => {
     const dataIngestToken = Deno.env.get('DATA_INGEST_TOKEN');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Load geo configuration from database (NCR bounds and non-NCR keywords)
+    await loadGeoConfiguration();
 
     // Check for GitHub ingest token authentication
     const authHeader = req.headers.get('Authorization');

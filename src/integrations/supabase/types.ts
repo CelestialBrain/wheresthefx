@@ -582,6 +582,39 @@ export type Database = {
         }
         Relationships: []
       }
+      geo_configuration: {
+        Row: {
+          config_key: string
+          config_type: string
+          config_value: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          notes: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          config_key: string
+          config_type: string
+          config_value?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          notes?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          config_key?: string
+          config_type?: string
+          config_value?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          notes?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       instagram_accounts: {
         Row: {
           bio: string | null
