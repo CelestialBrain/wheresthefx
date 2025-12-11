@@ -1483,7 +1483,7 @@ Deno.serve(async (req) => {
               ? ((post.aiExtraction as any)?.updateType === 'cancel' ? 'cancelled' : 'rescheduled')
               : ((post.aiExtraction as any)?.eventStatus ?? 'confirmed'),
             availability_status: (post.aiExtraction as any)?.availabilityStatus ?? 'available',
-            location_status: (post.aiExtraction as any)?.locationStatus ?? 'confirmed',
+            location_status: validation.correctedData.locationStatus || (post.aiExtraction as any)?.locationStatus || 'confirmed',
             // Recurring event fields
             is_recurring: (post.aiExtraction as any)?.isRecurring ?? false,
             recurrence_pattern: (post.aiExtraction as any)?.recurrencePattern ?? null,
