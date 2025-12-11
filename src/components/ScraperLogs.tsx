@@ -4,11 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Download, Trash2, RefreshCw, ChevronDown } from "lucide-react";
+import { Download, Trash2, RefreshCw, ChevronDown, Bot, Loader2, AlertTriangle, CheckCircle, XCircle, Lightbulb } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 interface ScraperLog {
   id: string;
   created_at: string;
@@ -32,6 +32,24 @@ interface DbStats {
   debug: number;
 }
 
+interface AnalysisResult {
+  overallQuality: 'excellent' | 'good' | 'fair' | 'poor';
+  summary: string;
+  keyMetrics: {
+    eventDetectionRate: string;
+    geocodingRate: string;
+    dataQuality: string;
+  };
+  issues: Array<{
+    severity: 'high' | 'medium' | 'low';
+    issue: string;
+    recommendation: string;
+  }>;
+  venuesToAdd: string[];
+  accountsToReview: string[];
+  positives: string[];
+  actionItems: string[];
+}
 export const ScraperLogs = () => {
   const [logs, setLogs] = useState<ScraperLog[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<ScraperLog[]>([]);
@@ -41,6 +59,9 @@ export const ScraperLogs = () => {
   const [runs, setRuns] = useState<Array<{ id: string; started_at: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(true);
   const [dbStats, setDbStats] = useState<DbStats>({ total: 0, success: 0, info: 0, warnings: 0, errors: 0, debug: 0 });
   const { toast } = useToast();
 
@@ -309,6 +330,75 @@ export const ScraperLogs = () => {
     }
   };
 
+  const analyzeRun = async () => {
+    if (selectedRun === 'all') {
+      toast({
+        title: "Select a specific run",
+        description: "Please select a specific run to analyze",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysisResult(null);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-scrape-run`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ runId: selectedRun }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Analysis failed');
+      }
+
+      const data = await response.json();
+      setAnalysisResult(data.analysis);
+      setAnalysisOpen(true);
+
+      toast({
+        title: "Analysis complete",
+        description: `Run quality: ${data.analysis.overallQuality}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Analysis failed",
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const getQualityColor = (quality: string) => {
+    switch (quality) {
+      case 'excellent': return 'bg-green-500/10 text-green-600 border-green-500/30';
+      case 'good': return 'bg-blue-500/10 text-blue-600 border-blue-500/30';
+      case 'fair': return 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30';
+      case 'poor': return 'bg-red-500/10 text-red-600 border-red-500/30';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'high': return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'medium': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case 'low': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      default: return null;
+    }
+  };
+
   const getLevelColor = (level: string) => {
     switch (level) {
       case 'success': return 'bg-green-500/10 text-green-500 border-green-500/20';
@@ -470,9 +560,141 @@ export const ScraperLogs = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* AI Analyze Button */}
+            <Button 
+              onClick={analyzeRun} 
+              variant="default" 
+              size="sm" 
+              disabled={isAnalyzing || selectedRun === 'all'}
+              className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Bot className="h-4 w-4 mr-2" />
+                  AI Analyze
+                </>
+              )}
+            </Button>
           </div>
 
-          {/* Stats - Now showing TRUE database counts */}
+          {/* AI Analysis Results */}
+          {analysisResult && (
+            <Collapsible open={analysisOpen} onOpenChange={setAnalysisOpen}>
+              <div className="rounded-lg border bg-gradient-to-br from-purple-500/5 to-indigo-500/5 p-4">
+                <CollapsibleTrigger asChild>
+                  <div className="flex items-center justify-between cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <Bot className="h-5 w-5 text-purple-500" />
+                      <h3 className="font-semibold">AI Analysis</h3>
+                      <Badge className={getQualityColor(analysisResult.overallQuality)} variant="outline">
+                        {analysisResult.overallQuality.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${analysisOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4 space-y-4">
+                  {/* Summary */}
+                  <p className="text-sm text-muted-foreground">{analysisResult.summary}</p>
+
+                  {/* Key Metrics */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-3 rounded-lg bg-background/50 border">
+                      <div className="text-xs text-muted-foreground mb-1">Event Detection</div>
+                      <div className="text-sm">{analysisResult.keyMetrics.eventDetectionRate}</div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-background/50 border">
+                      <div className="text-xs text-muted-foreground mb-1">Geocoding</div>
+                      <div className="text-sm">{analysisResult.keyMetrics.geocodingRate}</div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-background/50 border">
+                      <div className="text-xs text-muted-foreground mb-1">Data Quality</div>
+                      <div className="text-sm">{analysisResult.keyMetrics.dataQuality}</div>
+                    </div>
+                  </div>
+
+                  {/* Issues */}
+                  {analysisResult.issues.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                        Issues ({analysisResult.issues.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {analysisResult.issues.map((issue, i) => (
+                          <div key={i} className="flex items-start gap-2 p-2 rounded bg-background/50 border">
+                            {getSeverityIcon(issue.severity)}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium">{issue.issue}</div>
+                              <div className="text-xs text-muted-foreground">{issue.recommendation}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Venues to Add */}
+                  {analysisResult.venuesToAdd.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <Lightbulb className="h-4 w-4 text-yellow-500" />
+                        Venues to Add ({analysisResult.venuesToAdd.length})
+                      </h4>
+                      <div className="flex flex-wrap gap-1">
+                        {analysisResult.venuesToAdd.slice(0, 15).map((venue, i) => (
+                          <Badge key={i} variant="outline" className="text-xs">
+                            {venue}
+                          </Badge>
+                        ))}
+                        {analysisResult.venuesToAdd.length > 15 && (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            +{analysisResult.venuesToAdd.length - 15} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Positives */}
+                  {analysisResult.positives.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        What Worked Well
+                      </h4>
+                      <ul className="text-sm text-muted-foreground list-disc list-inside">
+                        {analysisResult.positives.map((positive, i) => (
+                          <li key={i}>{positive}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Action Items */}
+                  {analysisResult.actionItems.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Action Items</h4>
+                      <ul className="text-sm space-y-1">
+                        {analysisResult.actionItems.map((item, i) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="p-3 rounded-lg bg-muted">
               <div className="text-sm text-muted-foreground">Total Logs (DB)</div>

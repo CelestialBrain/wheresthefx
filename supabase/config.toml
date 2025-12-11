@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.backfill-ground-truth]
 verify_jwt = false
+
+[functions.analyze-scrape-run]
+verify_jwt = false
