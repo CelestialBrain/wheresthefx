@@ -543,13 +543,28 @@ async function processPost(post) {
   
   // Post-process AI result
   if (aiResult) {
-    // URL regex fallback - if AI didn't find URL, try regex
-    if (!aiResult.signupUrl || aiResult.signupUrl === null) {
+    // URL regex fallback - ALWAYS try regex if AI didn't find URL
+    if (!aiResult.signupUrl || aiResult.signupUrl === null || aiResult.signupUrl === '') {
       const regexUrl = extractUrlsFromText(caption);
       if (regexUrl) {
         aiResult.signupUrl = regexUrl;
-        aiResult.urlType = regexUrl === 'link_in_bio' ? 'link_in_bio' : 'extracted_url';
+        aiResult.urlType = regexUrl === 'link_in_bio' ? 'link_in_bio' : 
+                          regexUrl === 'dm_for_slots' ? 'dm' : 'extracted_url';
         console.log(`    🔗 URL found via regex fallback: ${regexUrl}`);
+      }
+    }
+    
+    // Sub-events debug logging - warn if caption looks like it has schedules but subEvents is empty
+    if ((!aiResult.subEvents || aiResult.subEvents.length === 0) && caption) {
+      const timeSlotPatterns = [
+        /\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\s*[-–—]\s*[A-Z]/i, // "4PM - Title"
+        /\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\s+[A-Z][a-z]/i, // "4PM Title"
+        /(?:session|workshop|class|set|slot)\s*\d/i, // "Session 1", "Workshop 2"
+      ];
+      
+      const hasTimeSlots = timeSlotPatterns.some(p => p.test(caption));
+      if (hasTimeSlots) {
+        console.log(`    ⚠️ Caption appears to have time slots but subEvents is empty - may need manual review`);
       }
     }
     

@@ -1140,31 +1140,91 @@ async function loadDatabaseVenues(): Promise<void> {
  */
 export type VenueMatchType = 'exact_name' | 'exact_alias' | 'normalized_name' | 'normalized_alias' | 'word_match' | 'partial_name' | 'partial_alias' | 'fuzzy';
 
+// Common words that are too generic for single-word matching
+const COMMON_VENUE_WORDS = new Set([
+  'bar', 'cafe', 'coffee', 'restaurant', 'lounge', 'pub', 'club', 'events',
+  'space', 'gallery', 'studio', 'theater', 'theatre', 'hall', 'room',
+  'kitchen', 'house', 'place', 'center', 'centre', 'mall', 'plaza',
+  'tower', 'building', 'floor', 'level', 'manila', 'makati', 'bgc',
+  'quezon', 'pasig', 'taguig', 'city', 'the', 'and', 'at', 'in', 'by'
+]);
+
+/**
+ * Calculate word match score between search and target
+ * Returns a score object with match quality metrics
+ */
+function calculateWordMatchScore(normalizedSearch: string, normalizedTarget: string): {
+  isMatch: boolean;
+  score: number;
+  matchedWords: number;
+  totalSearchWords: number;
+  totalTargetWords: number;
+} {
+  const searchWords = normalizedSearch.split(/\s+/).filter(w => w.length >= 2);
+  const targetWords = normalizedTarget.split(/\s+/).filter(w => w.length >= 2);
+  
+  // Filter out common words for matching purposes
+  const significantSearchWords = searchWords.filter(w => !COMMON_VENUE_WORDS.has(w.toLowerCase()));
+  const significantTargetWords = targetWords.filter(w => !COMMON_VENUE_WORDS.has(w.toLowerCase()));
+  
+  // Both must have significant words for a valid match
+  if (significantSearchWords.length === 0 || significantTargetWords.length === 0) {
+    return { isMatch: false, score: 0, matchedWords: 0, totalSearchWords: searchWords.length, totalTargetWords: targetWords.length };
+  }
+  
+  const targetWordsSet = new Set(targetWords.map(w => w.toLowerCase()));
+  const significantTargetSet = new Set(significantTargetWords.map(w => w.toLowerCase()));
+  
+  // Count how many significant search words appear in target
+  let matchedSignificant = 0;
+  for (const word of significantSearchWords) {
+    if (significantTargetSet.has(word.toLowerCase()) || targetWordsSet.has(word.toLowerCase())) {
+      matchedSignificant++;
+    }
+  }
+  
+  // Calculate match ratio
+  const matchRatio = matchedSignificant / significantSearchWords.length;
+  
+  // STRICTER MATCHING RULES:
+  // 1. Must match at least 2 significant words, OR
+  // 2. Must match 100% of significant words if only 1 significant word
+  // 3. Must match at least 50% of significant words
+  const isMatch = (
+    (matchedSignificant >= 2 && matchRatio >= 0.5) || // At least 2 words and 50%+
+    (significantSearchWords.length === 1 && matchedSignificant === 1 && significantSearchWords[0].length >= 5) // Single word must be 5+ chars
+  );
+  
+  return {
+    isMatch,
+    score: matchRatio * matchedSignificant, // Higher score = better match
+    matchedWords: matchedSignificant,
+    totalSearchWords: significantSearchWords.length,
+    totalTargetWords: significantTargetWords.length
+  };
+}
+
 /**
  * Check if all words from the shorter string appear in the longer string
  * Used for word-based venue matching
  * 
+ * STRICTER RULES (v2):
+ * - Requires minimum 2 matching significant words, OR
+ * - Single word must be 5+ characters and unique (not common)
+ * - Excludes common words like "bar", "cafe", "events" from single-word matching
+ * 
  * Examples:
- * - "Odd Cafe" matches "Odd Cafe Makati" (all words from search appear in target)
- * - "Fireside" matches "Fireside by Kettle" (all words from search appear in target)
+ * - "SaGuijo Cafe" matches "SaGuijo Café + Bar" (2 significant words match)
+ * - "Fireside" matches "Fireside by Kettle" (5+ char unique word)
+ * - "Bar" does NOT match "BAR IX" (common word, too generic)
  * 
  * @param normalizedSearch - The normalized search term
  * @param normalizedTarget - The normalized target venue name
- * @returns true if all words from the shorter string appear in the longer string
+ * @returns true if significant words match according to stricter rules
  */
 function checkWordMatch(normalizedSearch: string, normalizedTarget: string): boolean {
-  const searchWords = normalizedSearch.split(/\s+/).filter(w => w.length >= 3);
-  const targetWords = normalizedTarget.split(/\s+/).filter(w => w.length >= 3);
-  
-  // Both must have words for a valid match
-  if (searchWords.length === 0 || targetWords.length === 0) return false;
-  
-  // Determine which is shorter and which is longer
-  const shorterWords = searchWords.length <= targetWords.length ? searchWords : targetWords;
-  const longerWordsSet = new Set(searchWords.length <= targetWords.length ? targetWords : searchWords);
-  
-  // Check if all words from shorter list appear in longer list
-  return shorterWords.every(word => longerWordsSet.has(word));
+  const result = calculateWordMatchScore(normalizedSearch, normalizedTarget);
+  return result.isMatch;
 }
 
 /**
@@ -1291,40 +1351,55 @@ export async function lookupKnownVenuesFirst(venueName: string): Promise<{
       }
     }
     
-    // 5. Try word-based match (all words from one appear in the other)
+    // 5. Try word-based match - COLLECT ALL MATCHES AND PICK BEST
+    // This prevents false positives like "saGuijo Cafe + Bar Events" matching "BAR IX"
+    let bestWordMatch: {
+      venue: typeof venues[0];
+      score: number;
+      matchType: 'word_match';
+    } | null = null;
+    
     for (const venue of venues) {
       const normalizedVenueName = normalizeForLookup(venue.name || '');
-      if (checkWordMatch(normalizedSearch, normalizedVenueName)) {
-        return {
-          lat: Number(venue.lat),
-          lng: Number(venue.lng),
-          city: venue.city || 'Metro Manila',
-          canonicalName: venue.name,
-          matchType: 'word_match',
-          address: venue.address || undefined
+      const result = calculateWordMatchScore(normalizedSearch, normalizedVenueName);
+      
+      if (result.isMatch && result.score > (bestWordMatch?.score || 0)) {
+        bestWordMatch = {
+          venue,
+          score: result.score,
+          matchType: 'word_match'
         };
       }
-    }
-    
-    // Also check word match on aliases
-    for (const venue of venues) {
+      
+      // Also check aliases
       if (Array.isArray(venue.aliases)) {
         for (const alias of venue.aliases) {
           if (typeof alias === 'string') {
             const normalizedAlias = normalizeForLookup(alias);
-            if (checkWordMatch(normalizedSearch, normalizedAlias)) {
-              return {
-                lat: Number(venue.lat),
-                lng: Number(venue.lng),
-                city: venue.city || 'Metro Manila',
-                canonicalName: venue.name,
-                matchType: 'word_match',
-                address: venue.address || undefined
+            const aliasResult = calculateWordMatchScore(normalizedSearch, normalizedAlias);
+            
+            if (aliasResult.isMatch && aliasResult.score > (bestWordMatch?.score || 0)) {
+              bestWordMatch = {
+                venue,
+                score: aliasResult.score,
+                matchType: 'word_match'
               };
             }
           }
         }
       }
+    }
+    
+    // Return best word match if found
+    if (bestWordMatch) {
+      return {
+        lat: Number(bestWordMatch.venue.lat),
+        lng: Number(bestWordMatch.venue.lng),
+        city: bestWordMatch.venue.city || 'Metro Manila',
+        canonicalName: bestWordMatch.venue.name,
+        matchType: bestWordMatch.matchType,
+        address: bestWordMatch.venue.address || undefined
+      };
     }
     
     // Common false-positive words to exclude from partial matching
