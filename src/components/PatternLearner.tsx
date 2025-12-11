@@ -4,16 +4,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Brain, Loader2, TrendingUp, Info, HelpCircle, Sparkles, Ban, Database, RotateCcw } from "lucide-react";
+import { Brain, Loader2, TrendingUp, Info, HelpCircle, Sparkles, Ban, Database, RotateCcw, Zap, CheckCircle2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+
+interface OptimizationStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  result?: string;
+}
 
 export const PatternLearner = () => {
   const [isLearning, setIsLearning] = useState(false);
   const [isGeneratingFromAI, setIsGeneratingFromAI] = useState(false);
   const [isDisablingFailing, setIsDisablingFailing] = useState(false);
   const [isRetryingFailed, setIsRetryingFailed] = useState(false);
+  const [isRunningOptimization, setIsRunningOptimization] = useState(false);
+  const [optimizationSteps, setOptimizationSteps] = useState<OptimizationStep[]>([]);
   const [progress, setProgress] = useState(0);
   const queryClient = useQueryClient();
 
@@ -282,6 +291,123 @@ export const PatternLearner = () => {
     },
   });
 
+  // Full optimization mutation - runs all steps in sequence
+  const runFullOptimizationMutation = useMutation({
+    mutationFn: async () => {
+      setIsRunningOptimization(true);
+      const steps: OptimizationStep[] = [
+        { id: 'disable', label: 'Disable failing patterns', status: 'pending' },
+        { id: 'reject_venue', label: 'Reject venue/address suggestions', status: 'pending' },
+        { id: 'generate', label: 'Generate patterns from AI', status: 'pending' },
+        { id: 'cleanup', label: 'Cleanup rejected suggestions', status: 'pending' },
+      ];
+      setOptimizationSteps(steps);
+      setProgress(0);
+      
+      const results: Record<string, string> = {};
+      
+      // Step 1: Disable failing patterns
+      const updateStep = (id: string, status: OptimizationStep['status'], result?: string) => {
+        setOptimizationSteps(prev => prev.map(s => 
+          s.id === id ? { ...s, status, result } : s
+        ));
+      };
+      
+      try {
+        updateStep('disable', 'running');
+        const { data: patterns } = await supabase
+          .from("extraction_patterns")
+          .select("id, success_count, failure_count")
+          .eq("is_active", true);
+        
+        const toDisable = patterns?.filter(p => {
+          const total = (p.success_count || 0) + (p.failure_count || 0);
+          return total > 10 && (p.failure_count || 0) > (p.success_count || 0) * 2;
+        }) || [];
+        
+        if (toDisable.length > 0) {
+          await supabase
+            .from("extraction_patterns")
+            .update({ is_active: false })
+            .in("id", toDisable.map(p => p.id));
+        }
+        
+        results.disable = `Disabled ${toDisable.length} failing patterns`;
+        updateStep('disable', 'completed', results.disable);
+        setProgress(25);
+      } catch (err) {
+        updateStep('disable', 'failed', String(err));
+      }
+      
+      // Step 2: Reject venue/address suggestions (not applicable for regex)
+      try {
+        updateStep('reject_venue', 'running');
+        const { data: rejectedVenues } = await supabase
+          .from("pattern_suggestions")
+          .update({ status: "not_applicable" })
+          .in("pattern_type", ["venue", "address"])
+          .eq("status", "pending")
+          .select("id");
+        
+        results.reject_venue = `Rejected ${rejectedVenues?.length || 0} venue/address suggestions`;
+        updateStep('reject_venue', 'completed', results.reject_venue);
+        setProgress(50);
+      } catch (err) {
+        updateStep('reject_venue', 'failed', String(err));
+      }
+      
+      // Step 3: Generate patterns from AI
+      try {
+        updateStep('generate', 'running');
+        const { data, error } = await supabase.functions.invoke("generate-patterns-from-ai", {
+          body: {
+            useGroundTruth: true,
+            useSuggestions: true,
+            minSamplesPerCluster: 2,
+            minSuccessRate: 0.6,
+          },
+        });
+        
+        if (error) throw error;
+        
+        results.generate = `Generated ${data?.patternsGenerated || 0} new patterns`;
+        updateStep('generate', 'completed', results.generate);
+        setProgress(75);
+      } catch (err) {
+        updateStep('generate', 'failed', String(err));
+      }
+      
+      // Step 4: Cleanup rejected suggestions
+      try {
+        updateStep('cleanup', 'running');
+        const { data: deleted } = await supabase
+          .from("pattern_suggestions")
+          .delete()
+          .in("status", ["rejected", "not_applicable"])
+          .select("id");
+        
+        results.cleanup = `Deleted ${deleted?.length || 0} rejected suggestions`;
+        updateStep('cleanup', 'completed', results.cleanup);
+        setProgress(100);
+      } catch (err) {
+        updateStep('cleanup', 'failed', String(err));
+      }
+      
+      return results;
+    },
+    onSuccess: (results) => {
+      toast.success("Full optimization completed!");
+      queryClient.invalidateQueries({ queryKey: ["extraction-patterns"] });
+      queryClient.invalidateQueries({ queryKey: ["learning-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["pattern-suggestions-stats"] });
+      setIsRunningOptimization(false);
+    },
+    onError: (error: Error) => {
+      toast.error(`Optimization failed: ${error.message}`);
+      setIsRunningOptimization(false);
+    },
+  });
+
   const hasCorrections = recentCorrections && recentCorrections.length > 0;
   const hasMinimumCorrections = recentCorrections && recentCorrections.length >= 3;
 
@@ -368,6 +494,64 @@ export const PatternLearner = () => {
               Last correction: {new Date(learningStats.lastCorrectionAt).toLocaleString()}
             </p>
           )}
+
+          <Separator />
+
+          {/* Full Optimization Section */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-500" />
+              Pre-Scrape Optimization
+            </h4>
+            <Alert className="border-yellow-500/50 bg-yellow-500/10">
+              <Zap className="h-4 w-4 text-yellow-500" />
+              <AlertTitle>Run Before Large Scrapes</AlertTitle>
+              <AlertDescription className="text-sm">
+                This will: (1) disable failing patterns, (2) reject venue/address suggestions, 
+                (3) generate new patterns from {learningStats?.groundTruthCount || 0} ground truth records, 
+                (4) cleanup rejected suggestions.
+              </AlertDescription>
+            </Alert>
+            
+            {isRunningOptimization && optimizationSteps.length > 0 && (
+              <div className="space-y-2 p-3 bg-muted rounded-md">
+                <Progress value={progress} className="h-2" />
+                {optimizationSteps.map((step) => (
+                  <div key={step.id} className="flex items-center gap-2 text-sm">
+                    {step.status === 'pending' && <div className="h-4 w-4 rounded-full border-2 border-muted-foreground" />}
+                    {step.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                    {step.status === 'completed' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                    {step.status === 'failed' && <Ban className="h-4 w-4 text-destructive" />}
+                    <span className={step.status === 'completed' ? 'text-muted-foreground' : ''}>
+                      {step.label}
+                    </span>
+                    {step.result && (
+                      <span className="text-xs text-muted-foreground ml-auto">{step.result}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <Button
+              onClick={() => runFullOptimizationMutation.mutate()}
+              disabled={isRunningOptimization}
+              className="w-full"
+              variant="default"
+            >
+              {isRunningOptimization ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Running Optimization...
+                </>
+              ) : (
+                <>
+                  <Zap className="mr-2 h-4 w-4" />
+                  ⚡ Run Full Optimization
+                </>
+              )}
+            </Button>
+          </div>
 
           <Separator />
 
