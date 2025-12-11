@@ -3,7 +3,10 @@
  * 
  * Validates extracted event data before database insert.
  * Logs warnings, corrects data where possible, and assigns review tiers.
+ * Includes geographic filtering for NCR (Metro Manila) service area.
  */
+
+import { isWithinNCR, detectNonNCRProvince } from './ncrGeoCache.ts';
 
 export interface ValidationResult {
   isValid: boolean;
@@ -16,6 +19,7 @@ export interface ValidationResult {
     locationName: string | null;
     price: number | null;
     isFree?: boolean | null;
+    locationStatus?: string | null;
   };
 }
 
@@ -83,6 +87,8 @@ export function validateExtractedData(data: {
   eventTime?: string | null;
   endTime?: string | null;
   locationName?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
   price?: number | null;
   caption?: string;
   eventTitle?: string | null;
@@ -192,6 +198,26 @@ export function validateExtractedData(data: {
     if (corrected.locationName && /^[\d\s\-+()]+$/.test(corrected.locationName.replace(/\s/g, ''))) {
       warnings.push('venue_looks_like_phone');
       corrected.locationName = null;
+    }
+  }
+
+  // 5b. Geographic filtering - NCR service area validation
+  let locationStatus: string | null = null;
+  
+  // Check caption for non-NCR province mentions
+  const nonNCRProvince = detectNonNCRProvince(data.caption);
+  if (nonNCRProvince) {
+    warnings.push('venue_outside_ncr');
+    locationStatus = 'outside_service_area';
+    console.log(`🌍 Non-NCR province detected in caption: "${nonNCRProvince}"`);
+  }
+  
+  // Check coordinates against NCR bounding box
+  if (data.locationLat && data.locationLng) {
+    if (!isWithinNCR(data.locationLat, data.locationLng)) {
+      warnings.push('coordinates_outside_ncr');
+      locationStatus = 'outside_service_area';
+      console.log(`🌍 Coordinates outside NCR: ${data.locationLat}, ${data.locationLng}`);
     }
   }
 
@@ -320,6 +346,7 @@ export function validateExtractedData(data: {
       locationName: corrected.locationName || null,
       price: corrected.price ?? null,
       isFree: correctedIsFree,
+      locationStatus: locationStatus,
     },
     correctedCategory,
   };
@@ -365,6 +392,17 @@ export function assignReviewTier(
   // Determine tier
   const coreFieldsPresent = hasDate && hasVenue;
   const allFieldsPresent = hasDate && hasTime && hasVenue;
+  
+  // AUTO-REJECT: Outside service area (non-NCR locations)
+  const isOutsideNCR = validationWarnings.includes('venue_outside_ncr') || 
+                       validationWarnings.includes('coordinates_outside_ncr');
+  if (isOutsideNCR) {
+    return {
+      tier: 'rejected',
+      reason: 'Location outside Metro Manila service area',
+      extractionConfidence: confidence
+    };
+  }
   
   // READY tier: High confidence + all core fields + no severe warnings
   if (confidence >= 0.85 && allFieldsPresent && severeWarnings.length === 0 && hasCoordinates) {
