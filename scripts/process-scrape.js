@@ -470,6 +470,29 @@ Dec 14 at XX XX:
   {"title": "Urbandub", "date": "2025-12-14", "time": "22:00"}
 ]
 
+EXAMPLE 4 - Mall/Store Holiday Hours:
+"""
+Extended Holiday Hours:
+Dec 12-23: 10AM - 10PM
+Dec 24: 10AM - 8PM
+Dec 25: CLOSED
+Dec 26-30: 10AM - 10PM
+Dec 31: 10AM - 8PM
+Jan 1: 12PM - 9PM
+"""
+→ This is NOT an event (set isEvent: false) - these are operating hours
+→ But if you must extract schedule info, use:
+  subEvents: [
+    {"title": "Extended Hours Dec 12-23", "date": "2025-12-12", "time": "10:00", "endTime": "22:00"},
+    {"title": "Christmas Eve Hours", "date": "2025-12-24", "time": "10:00", "endTime": "20:00"},
+    {"title": "Post-Christmas Hours Dec 26-30", "date": "2025-12-26", "time": "10:00", "endTime": "22:00"},
+    {"title": "New Year's Eve Hours", "date": "2025-12-31", "time": "10:00", "endTime": "20:00"},
+    {"title": "New Year's Day Hours", "date": "2026-01-01", "time": "12:00", "endTime": "21:00"}
+  ]
+
+⚠️ IMPORTANT: Store hours / mall hours posts are typically NOT events!
+Set isEvent: false for posts that are just announcing operating hours.
+
 ═══════════════════════════════════════════════════════════════
 
 ⚠️ CRITICAL: HISTORICAL POST DETECTION

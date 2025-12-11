@@ -59,9 +59,10 @@ export const NON_NCR_PROVINCE_KEYWORDS = [
   // Cavite (exclude borderline areas)
   'cavite', 'tagaytay', 'silang cavite', 'dasmarinas cavite', 'imus cavite', 
   'general trias', 'kawit cavite', 'rosario cavite',
-  // Laguna
+  // Laguna (including Nuvali/Solenad)
   'laguna', 'los banos', 'los baños', 'san pablo laguna', 'sta. rosa laguna', 
-  'calamba laguna', 'binan laguna',
+  'sta. rosa', 'santa rosa laguna', 'calamba laguna', 'binan laguna',
+  'nuvali', 'solenad', 'ayala malls solenad', 'solenad nuvali',
   // Batangas
   'batangas', 'lipa batangas', 'tanauan batangas', 'batangas city',
   // Rizal (the province, not Rizal Park Manila)

@@ -1603,6 +1603,36 @@ Deno.serve(async (req) => {
                 console.warn(`Error inserting allEventDates for ${post.postId}:`, err);
               }
             }
+            // NEW: Handle subEvents with dates (mall hours, film schedules, etc.)
+            const subEvents = (post.aiExtraction as any)?.subEvents;
+            if (upsertedPost?.id && subEvents && Array.isArray(subEvents) && subEvents.length > 0) {
+              try {
+                // Filter sub-events that have specific dates
+                const subEventsWithDates = subEvents.filter((e: any) => e.date);
+                
+                if (subEventsWithDates.length > 0) {
+                  // Delete existing and insert new
+                  await supabase.from('event_dates').delete().eq('instagram_post_id', upsertedPost.id);
+                  
+                  const dateRecords = subEventsWithDates.map((e: any) => ({
+                    instagram_post_id: upsertedPost.id,
+                    event_date: e.date,
+                    event_time: e.time || validation.correctedData.eventTime || null,
+                    end_time: e.endTime || validation.correctedData.endTime || null,
+                    venue_name: e.title || canonicalVenue || null, // Use sub-event title as descriptor
+                  }));
+                  
+                  const { error: subEventsError } = await supabase.from('event_dates').insert(dateRecords);
+                  if (subEventsError) {
+                    console.warn(`Failed to insert subEvents dates for ${post.postId}:`, subEventsError.message);
+                  } else {
+                    await ingestLogger?.info('save', `Stored ${dateRecords.length} sub-event dates`, { postId: post.postId, subEvents: subEventsWithDates.map((e: any) => e.title) });
+                  }
+                }
+              } catch (err) {
+                console.warn(`Error inserting subEvents dates for ${post.postId}:`, err);
+              }
+            }
             // Legacy support: Store additional dates if provided (multi-date events)
             else if (upsertedPost?.id && post.aiExtraction?.additionalDates && post.aiExtraction.additionalDates.length > 0) {
               try {
