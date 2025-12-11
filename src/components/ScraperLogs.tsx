@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, Trash2, Filter, RefreshCw } from "lucide-react";
+import { Download, Trash2, RefreshCw, ChevronDown } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 
 interface ScraperLog {
@@ -15,12 +15,21 @@ interface ScraperLog {
   run_id: string;
   post_id: string | null;
   instagram_post_id: string | null;
-  log_level: string; // Changed from union type to string to match DB
+  log_level: string;
   stage: string;
   message: string;
   data: any;
   duration_ms: number | null;
   error_details: any;
+}
+
+interface DbStats {
+  total: number;
+  success: number;
+  info: number;
+  warnings: number;
+  errors: number;
+  debug: number;
 }
 
 export const ScraperLogs = () => {
@@ -31,6 +40,8 @@ export const ScraperLogs = () => {
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [runs, setRuns] = useState<Array<{ id: string; started_at: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const [dbStats, setDbStats] = useState<DbStats>({ total: 0, success: 0, info: 0, warnings: 0, errors: 0, debug: 0 });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -48,7 +59,9 @@ export const ScraperLogs = () => {
           table: 'scraper_logs'
         },
         (payload) => {
-          setLogs(prev => [payload.new as ScraperLog, ...prev].slice(0, 1000)); // Keep last 1000
+          setLogs(prev => [payload.new as ScraperLog, ...prev].slice(0, 1000));
+          // Refresh stats on new log
+          fetchDbStats(selectedRun === 'all' ? null : selectedRun);
         }
       )
       .subscribe();
@@ -58,9 +71,45 @@ export const ScraperLogs = () => {
     };
   }, []);
 
+  // Fetch true stats when run selection changes
+  useEffect(() => {
+    fetchDbStats(selectedRun === 'all' ? null : selectedRun);
+  }, [selectedRun]);
+
   useEffect(() => {
     applyFilters();
   }, [logs, selectedRun, selectedLevel, selectedStage]);
+
+  // Fetch TRUE stats from database (not limited to 1000)
+  const fetchDbStats = async (runId: string | null) => {
+    try {
+      let query = supabase.from('scraper_logs').select('log_level');
+      if (runId) {
+        query = query.eq('run_id', runId);
+      }
+      
+      // Fetch all log levels for counting (only selecting log_level is fast)
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching stats:', error);
+        return;
+      }
+      
+      const stats: DbStats = {
+        total: data?.length || 0,
+        success: data?.filter(l => l.log_level === 'success').length || 0,
+        info: data?.filter(l => l.log_level === 'info').length || 0,
+        warnings: data?.filter(l => l.log_level === 'warn').length || 0,
+        errors: data?.filter(l => l.log_level === 'error').length || 0,
+        debug: data?.filter(l => l.log_level === 'debug').length || 0,
+      };
+      
+      setDbStats(stats);
+    } catch (err) {
+      console.error('Error in fetchDbStats:', err);
+    }
+  };
 
   const fetchLogs = async () => {
     setIsLoading(true);
@@ -110,89 +159,127 @@ export const ScraperLogs = () => {
     setFilteredLogs(filtered);
   };
 
-  const exportLogsAsJSON = async () => {
-    // If a specific run is selected, fetch ALL logs for that run from DB
-    let logsToExport = filteredLogs;
+  // Paginated fetch to get ALL logs for a run (bypasses 1000 limit)
+  const fetchAllLogsForRun = async (runId: string | null, levelFilter?: string): Promise<ScraperLog[]> => {
+    const allLogs: ScraperLog[] = [];
+    let offset = 0;
+    const batchSize = 1000;
     
-    if (selectedRun !== 'all') {
-      toast({ title: "Fetching all logs for run...", description: "This may take a moment" });
-      
-      const { data, error } = await supabase
+    while (true) {
+      let query = supabase
         .from('scraper_logs')
         .select('*')
-        .eq('run_id', selectedRun)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(offset, offset + batchSize - 1);
+      
+      if (runId) {
+        query = query.eq('run_id', runId);
+      }
+      
+      if (levelFilter) {
+        query = query.eq('log_level', levelFilter);
+      }
+      
+      const { data, error } = await query;
       
       if (error) {
-        toast({ title: "Error fetching logs", description: error.message, variant: "destructive" });
-        return;
+        toast({ 
+          title: "Error fetching logs", 
+          description: error.message, 
+          variant: "destructive" 
+        });
+        break;
       }
-      logsToExport = data || [];
+      
+      if (!data || data.length === 0) break;
+      
+      allLogs.push(...data);
+      offset += batchSize;
+      
+      // Progress toast for large fetches
+      if (offset > batchSize) {
+        toast({ 
+          title: "Fetching logs...", 
+          description: `${allLogs.length} logs fetched` 
+        });
+      }
+      
+      // If we got less than batchSize, we've reached the end
+      if (data.length < batchSize) break;
     }
     
-    const dataStr = JSON.stringify(logsToExport, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `scraper-logs-${selectedRun !== 'all' ? selectedRun : 'all'}-${new Date().toISOString()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-
-    toast({
-      title: "Logs exported",
-      description: `Exported ${logsToExport.length} log entries as JSON`,
-    });
+    return allLogs;
   };
 
-  const exportLogsAsCSV = async () => {
-    // If a specific run is selected, fetch ALL logs for that run from DB
-    let logsToExport = filteredLogs;
+  const exportLogs = async (format: 'json' | 'csv', levelFilter?: string) => {
+    setIsExporting(true);
     
-    if (selectedRun !== 'all') {
-      toast({ title: "Fetching all logs for run...", description: "This may take a moment" });
+    try {
+      const filterLabel = levelFilter ? ` (${levelFilter} only)` : '';
+      toast({ 
+        title: `Exporting${filterLabel}...`, 
+        description: "Fetching all logs from database" 
+      });
       
-      const { data, error } = await supabase
-        .from('scraper_logs')
-        .select('*')
-        .eq('run_id', selectedRun)
-        .order('created_at', { ascending: false });
+      // Fetch ALL logs with pagination
+      const logsToExport = await fetchAllLogsForRun(
+        selectedRun === 'all' ? null : selectedRun,
+        levelFilter
+      );
       
-      if (error) {
-        toast({ title: "Error fetching logs", description: error.message, variant: "destructive" });
+      if (logsToExport.length === 0) {
+        toast({ 
+          title: "No logs to export", 
+          description: "No logs match the current filters",
+          variant: "destructive"
+        });
         return;
       }
-      logsToExport = data || [];
+      
+      const filename = `scraper-logs-${selectedRun !== 'all' ? selectedRun.substring(0, 8) : 'all'}${levelFilter ? `-${levelFilter}` : ''}-${new Date().toISOString().split('T')[0]}`;
+      
+      if (format === 'json') {
+        const dataStr = JSON.stringify(logsToExport, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const headers = ['Timestamp', 'Stage', 'Level', 'Message', 'Post ID', 'Duration (ms)', 'Data'];
+        const rows = logsToExport.map(log => [
+          new Date(log.created_at).toLocaleString(),
+          log.stage,
+          log.log_level,
+          log.message,
+          log.post_id || '',
+          log.duration_ms || '',
+          JSON.stringify(log.data || {})
+        ]);
+
+        const csvContent = [
+          headers.join(','),
+          ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+
+        const dataBlob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
+      toast({
+        title: "Export complete",
+        description: `Exported ${logsToExport.length.toLocaleString()} log entries as ${format.toUpperCase()}`,
+      });
+    } finally {
+      setIsExporting(false);
     }
-    
-    const headers = ['Timestamp', 'Stage', 'Level', 'Message', 'Post ID', 'Duration (ms)', 'Data'];
-    const rows = logsToExport.map(log => [
-      new Date(log.created_at).toLocaleString(),
-      log.stage,
-      log.log_level,
-      log.message,
-      log.post_id || '',
-      log.duration_ms || '',
-      JSON.stringify(log.data || {})
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    const dataBlob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `scraper-logs-${selectedRun !== 'all' ? selectedRun : 'all'}-${new Date().toISOString()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-
-    toast({
-      title: "Logs exported",
-      description: `Exported ${logsToExport.length} log entries as CSV`,
-    });
   };
 
   const clearLogs = async () => {
@@ -203,7 +290,7 @@ export const ScraperLogs = () => {
     const { error } = await supabase
       .from('scraper_logs')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (error) {
       toast({
@@ -213,6 +300,7 @@ export const ScraperLogs = () => {
       });
     } else {
       setLogs([]);
+      setDbStats({ total: 0, success: 0, info: 0, warnings: 0, errors: 0, debug: 0 });
       toast({
         title: "Logs cleared",
         description: "All scraper logs have been deleted",
@@ -259,7 +347,7 @@ export const ScraperLogs = () => {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button onClick={fetchLogs} variant="outline" size="sm">
+            <Button onClick={() => { fetchLogs(); fetchDbStats(selectedRun === 'all' ? null : selectedRun); }} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
@@ -324,38 +412,90 @@ export const ScraperLogs = () => {
 
             <div className="flex-1" />
 
-            <Button onClick={exportLogsAsJSON} variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              JSON
-            </Button>
-            <Button onClick={exportLogsAsCSV} variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              CSV
-            </Button>
+            {/* Export Dropdown - JSON */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={isExporting}>
+                  <Download className="h-4 w-4 mr-2" />
+                  JSON
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => exportLogs('json')}>
+                  All Logs ({dbStats.total.toLocaleString()})
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => exportLogs('json', 'success')}>
+                  Success Only ({dbStats.success.toLocaleString()})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportLogs('json', 'warn')}>
+                  Warnings Only ({dbStats.warnings.toLocaleString()})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportLogs('json', 'error')}>
+                  Errors Only ({dbStats.errors.toLocaleString()})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportLogs('json', 'info')}>
+                  Info Only ({dbStats.info.toLocaleString()})
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Export Dropdown - CSV */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={isExporting}>
+                  <Download className="h-4 w-4 mr-2" />
+                  CSV
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => exportLogs('csv')}>
+                  All Logs ({dbStats.total.toLocaleString()})
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => exportLogs('csv', 'success')}>
+                  Success Only ({dbStats.success.toLocaleString()})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportLogs('csv', 'warn')}>
+                  Warnings Only ({dbStats.warnings.toLocaleString()})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportLogs('csv', 'error')}>
+                  Errors Only ({dbStats.errors.toLocaleString()})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportLogs('csv', 'info')}>
+                  Info Only ({dbStats.info.toLocaleString()})
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
-          {/* Stats */}
+          {/* Stats - Now showing TRUE database counts */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="p-3 rounded-lg bg-muted">
-              <div className="text-sm text-muted-foreground">Total Logs</div>
-              <div className="text-2xl font-bold">{filteredLogs.length}</div>
+              <div className="text-sm text-muted-foreground">Total Logs (DB)</div>
+              <div className="text-2xl font-bold">{dbStats.total.toLocaleString()}</div>
+              {filteredLogs.length < dbStats.total && (
+                <div className="text-xs text-muted-foreground">Showing {filteredLogs.length}</div>
+              )}
             </div>
             <div className="p-3 rounded-lg bg-green-500/10">
               <div className="text-sm text-green-600">Success</div>
               <div className="text-2xl font-bold text-green-600">
-                {filteredLogs.filter(l => l.log_level === 'success').length}
+                {dbStats.success.toLocaleString()}
               </div>
             </div>
             <div className="p-3 rounded-lg bg-yellow-500/10">
               <div className="text-sm text-yellow-600">Warnings</div>
               <div className="text-2xl font-bold text-yellow-600">
-                {filteredLogs.filter(l => l.log_level === 'warn').length}
+                {dbStats.warnings.toLocaleString()}
               </div>
             </div>
             <div className="p-3 rounded-lg bg-red-500/10">
               <div className="text-sm text-red-600">Errors</div>
               <div className="text-2xl font-bold text-red-600">
-                {filteredLogs.filter(l => l.log_level === 'error').length}
+                {dbStats.errors.toLocaleString()}
               </div>
             </div>
           </div>
