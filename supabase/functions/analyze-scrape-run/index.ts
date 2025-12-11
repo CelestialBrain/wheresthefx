@@ -18,6 +18,7 @@ interface AggregatedData {
   runCompletedAt: string | null;
   runStatus: string;
   totalPosts: number;
+  totalLogs: number;
   metrics: {
     eventsDetected: number;
     notEvents: number;
@@ -57,6 +58,30 @@ interface AnalysisResult {
   accountsToReview: string[];
   positives: string[];
   actionItems: string[];
+}
+
+// Fetch ALL logs using pagination to bypass 1000-row limit
+async function fetchAllLogs(supabase: any, runId: string): Promise<any[]> {
+  const allLogs: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  
+  while (true) {
+    const { data, error } = await supabase
+      .from('scraper_logs')
+      .select('log_level, stage, message, data')
+      .eq('run_id', runId)
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+    
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    
+    allLogs.push(...data);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  
+  return allLogs;
 }
 
 Deno.serve(async (req) => {
@@ -102,29 +127,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 2: Fetch aggregated log counts by stage and level
-    const { data: logs, error: logsError } = await supabase
-      .from('scraper_logs')
-      .select('log_level, stage, message, data')
-      .eq('run_id', runId);
+    // Step 2: Fetch ALL logs using pagination
+    const logs = await fetchAllLogs(supabase, runId);
 
-    if (logsError) {
-      console.error('Error fetching logs:', logsError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch logs' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`[analyze-scrape-run] Fetched ${logs.length} logs for analysis`);
+    console.log(`[analyze-scrape-run] Fetched ${logs.length} logs for analysis (paginated)`);
 
     // Step 3: Aggregate data
     const aggregated = aggregateLogs(logs, runId, runData);
 
     console.log(`[analyze-scrape-run] Aggregated data:`, {
+      totalLogs: aggregated.totalLogs,
       totalPosts: aggregated.totalPosts,
       eventsDetected: aggregated.metrics.eventsDetected,
+      notEvents: aggregated.metrics.notEvents,
       geocodeSuccess: aggregated.metrics.geocodeSuccess,
+      geocodeFailures: aggregated.metrics.geocodeFailures,
       failedVenueCount: aggregated.failedVenueMatches.length,
     });
 
@@ -176,33 +193,47 @@ function aggregateLogs(logs: any[], runId: string, runData: any): AggregatedData
 
   for (const log of logs) {
     const { log_level, stage, message, data } = log;
+    const msgLower = message?.toLowerCase() || '';
 
-    // Count events detected vs not events
-    if (message?.includes('Event detected') || message?.includes('is_event: true')) {
+    // Count events detected - match actual log patterns
+    // Patterns: "AI extraction: EVENT", "classified as EVENT"
+    if (message?.includes('AI extraction: EVENT') || message?.includes('classified as EVENT')) {
       metrics.eventsDetected++;
     }
-    if (message?.includes('Not an event') || message?.includes('is_event: false')) {
+    
+    // Count not events - match actual log patterns
+    // Patterns: "AI extraction: NOT_EVENT", "classified as NOT_EVENT"
+    if (message?.includes('AI extraction: NOT_EVENT') || message?.includes('classified as NOT_EVENT')) {
       metrics.notEvents++;
     }
 
-    // Geocoding stats
-    if (message?.includes('Geocoded venue') || message?.includes('venue matched') || message?.includes('NCR cache hit')) {
+    // Geocoding success - match actual log patterns
+    // Stage is 'geocache' with log_level 'success', or message contains specific patterns
+    if (stage === 'geocache' && log_level === 'success') {
       metrics.geocodeSuccess++;
-      const venueName = data?.venue || data?.venueName || data?.locationName;
+      // Extract venue name from message like: [GEOCODE] known_venues exact name match: "Cafe Agapita" → "Cafe Agapita"
+      const venueMatch = message?.match(/[""]([^""]+)[""]\s*→/);
+      const venueName = venueMatch?.[1] || data?.venue || data?.venueName || data?.locationName;
       if (venueName) {
         venueMatchCounts[venueName] = (venueMatchCounts[venueName] || 0) + 1;
       }
     }
-    if (message?.includes('No venue match') || message?.includes('geocode failed') || message?.includes('No coordinates')) {
+    
+    // Geocoding failures - match actual log patterns
+    // Pattern: "No venue match found"
+    if (message?.includes('No venue match found')) {
       metrics.geocodeFailures++;
-      const venueName = data?.venue || data?.venueName || data?.locationName || data?.extractedVenue;
+      // Extract venue name from message or data
+      const venueMatch = message?.match(/No venue match found for:?\s*[""]?([^""]+)[""]?/i);
+      const venueName = venueMatch?.[1] || data?.venue || data?.venueName || data?.locationName || data?.extractedVenue;
       if (venueName) {
         failedVenueCounts[venueName] = (failedVenueCounts[venueName] || 0) + 1;
       }
     }
 
-    // Historical rejections
-    if (message?.includes('historical') || message?.includes('past event')) {
+    // Historical rejections - match actual log patterns
+    // Pattern: "Historical - event date"
+    if (message?.includes('Historical - event date') || message?.includes('historical event')) {
       metrics.historicalRejected++;
     }
 
@@ -211,21 +242,21 @@ function aggregateLogs(logs: any[], runId: string, runData: any): AggregatedData
       metrics.preFilterSkipped++;
     }
 
-    // Image storage
-    if (message?.includes('Image stored') || message?.includes('image downloaded')) {
+    // Image storage - match actual log patterns
+    if (stage === 'image' && log_level === 'success') {
       metrics.imagesStored++;
     }
-    if (message?.includes('Image failed') || message?.includes('image download failed')) {
+    if (stage === 'image' && log_level === 'error') {
       metrics.imagesFailed++;
     }
 
-    // Category breakdown
+    // Category breakdown from data
     if (data?.category) {
       categoryBreakdown[data.category] = (categoryBreakdown[data.category] || 0) + 1;
     }
 
     // Rejection reasons
-    if (stage === 'rejection' || message?.includes('rejected') || message?.includes('skipped')) {
+    if (stage === 'rejection' || msgLower.includes('rejected') || msgLower.includes('skipped')) {
       const reason = data?.reason || message?.split(':')[0] || 'unknown';
       rejectionCounts[reason] = (rejectionCounts[reason] || 0) + 1;
     }
@@ -276,6 +307,7 @@ function aggregateLogs(logs: any[], runId: string, runData: any): AggregatedData
     runCompletedAt: runData.completed_at,
     runStatus: runData.status,
     totalPosts: runData.posts_added + runData.posts_updated,
+    totalLogs: logs.length,
     metrics,
     categoryBreakdown,
     topVenueMatches,
@@ -291,12 +323,15 @@ function aggregateLogs(logs: any[], runId: string, runData: any): AggregatedData
 }
 
 async function analyzeWithGemini(data: AggregatedData, apiKey: string): Promise<AnalysisResult> {
-  const geocodeRate = data.metrics.geocodeSuccess + data.metrics.geocodeFailures > 0
-    ? Math.round((data.metrics.geocodeSuccess / (data.metrics.geocodeSuccess + data.metrics.geocodeFailures)) * 100)
+  const totalClassified = data.metrics.eventsDetected + data.metrics.notEvents;
+  const totalGeocoded = data.metrics.geocodeSuccess + data.metrics.geocodeFailures;
+  
+  const geocodeRate = totalGeocoded > 0
+    ? Math.round((data.metrics.geocodeSuccess / totalGeocoded) * 100)
     : 0;
     
-  const eventRate = data.metrics.eventsDetected + data.metrics.notEvents > 0
-    ? Math.round((data.metrics.eventsDetected / (data.metrics.eventsDetected + data.metrics.notEvents)) * 100)
+  const eventRate = totalClassified > 0
+    ? Math.round((data.metrics.eventsDetected / totalClassified) * 100)
     : 0;
 
   const prompt = `You are analyzing a scraper run for an event discovery platform focused on Metro Manila, Philippines.
@@ -305,12 +340,13 @@ SCRAPE RUN SUMMARY:
 - Run ID: ${data.runId}
 - Started: ${data.runStartedAt}
 - Status: ${data.runStatus}
-- Total posts processed: ${data.totalPosts}
+- Total posts in database: ${data.totalPosts}
+- Total logs analyzed: ${data.totalLogs}
 
 METRICS:
-- Events detected: ${data.metrics.eventsDetected} (${eventRate}%)
+- Events detected: ${data.metrics.eventsDetected} (${eventRate}% of classified posts)
 - Not events: ${data.metrics.notEvents}
-- Geocoding success: ${data.metrics.geocodeSuccess} (${geocodeRate}%)
+- Geocoding success: ${data.metrics.geocodeSuccess} (${geocodeRate}% of venues)
 - Geocoding failures: ${data.metrics.geocodeFailures}
 - Historical posts rejected: ${data.metrics.historicalRejected}
 - Pre-filter skipped: ${data.metrics.preFilterSkipped}
@@ -321,27 +357,27 @@ CATEGORY BREAKDOWN:
 ${JSON.stringify(data.categoryBreakdown, null, 2)}
 
 TOP SUCCESSFUL VENUE MATCHES:
-${data.topVenueMatches.map(v => `- "${v.venue}" (${v.count}x)`).join('\n')}
+${data.topVenueMatches.map(v => `- "${v.venue}" (${v.count}x)`).join('\n') || '(none recorded)'}
 
 FAILED VENUE MATCHES (need to add to database):
-${data.failedVenueMatches.map(v => `- "${v.venue}" (${v.count}x)`).join('\n')}
+${data.failedVenueMatches.map(v => `- "${v.venue}" (${v.count}x)`).join('\n') || '(none)'}
 
 REJECTION REASONS:
-${data.rejectionReasons.map(r => `- ${r.reason}: ${r.count}`).join('\n')}
+${data.rejectionReasons.map(r => `- ${r.reason}: ${r.count}`).join('\n') || '(none)'}
 
 VALIDATION WARNINGS:
-${data.validationWarnings.map(w => `- ${w.warning}: ${w.count}`).join('\n')}
+${data.validationWarnings.map(w => `- ${w.warning}: ${w.count}`).join('\n') || '(none)'}
 
 SAMPLE ERRORS:
-${data.sampleLogs.errors.slice(0, 10).map(e => `- ${e.message}`).join('\n')}
+${data.sampleLogs.errors.slice(0, 10).map(e => `- ${e.message}`).join('\n') || '(none)'}
 
 SAMPLE WARNINGS:
-${data.sampleLogs.warnings.slice(0, 15).map(w => `- ${w.message}`).join('\n')}
+${data.sampleLogs.warnings.slice(0, 15).map(w => `- ${w.message}`).join('\n') || '(few warnings)'}
 
 Based on this data, provide a comprehensive analysis. Consider:
-1. Overall quality assessment
+1. Overall quality assessment (excellent if geocode>=90% and events>=30%, good if geocode>=70%, fair if geocode>=50%, poor otherwise)
 2. What went well vs what needs improvement
-3. Specific venues that should be added to known_venues database
+3. Specific venues that should be added to known_venues database (from failed matches)
 4. Any concerning patterns or anomalies
 5. Actionable next steps
 
@@ -350,8 +386,8 @@ Return ONLY valid JSON matching this structure:
   "overallQuality": "excellent" | "good" | "fair" | "poor",
   "summary": "2-3 sentence summary of the run quality",
   "keyMetrics": {
-    "eventDetectionRate": "analysis of ${eventRate}% detection rate",
-    "geocodingRate": "analysis of ${geocodeRate}% geocoding success",
+    "eventDetectionRate": "analysis of the event detection rate",
+    "geocodingRate": "analysis of geocoding success rate",
     "dataQuality": "analysis of overall data quality based on warnings/errors"
   },
   "issues": [
@@ -398,11 +434,11 @@ Return ONLY valid JSON matching this structure:
     console.error('Failed to parse Gemini response:', textContent);
     // Return a fallback analysis
     return {
-      overallQuality: geocodeRate >= 90 ? 'excellent' : geocodeRate >= 70 ? 'good' : geocodeRate >= 50 ? 'fair' : 'poor',
+      overallQuality: geocodeRate >= 90 && eventRate >= 30 ? 'excellent' : geocodeRate >= 70 ? 'good' : geocodeRate >= 50 ? 'fair' : 'poor',
       summary: `Processed ${data.totalPosts} posts with ${eventRate}% event detection and ${geocodeRate}% geocoding success.`,
       keyMetrics: {
-        eventDetectionRate: `${eventRate}% of posts identified as events`,
-        geocodingRate: `${geocodeRate}% venue geocoding success`,
+        eventDetectionRate: `${eventRate}% of posts identified as events (${data.metrics.eventsDetected}/${totalClassified})`,
+        geocodingRate: `${geocodeRate}% venue geocoding success (${data.metrics.geocodeSuccess}/${totalGeocoded})`,
         dataQuality: `${data.sampleLogs.errors.length} errors, ${data.validationWarnings.length} warning types`,
       },
       issues: data.failedVenueMatches.length > 10 
