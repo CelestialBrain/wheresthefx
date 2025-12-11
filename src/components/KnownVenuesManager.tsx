@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +65,24 @@ export const KnownVenuesManager = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<VenueFormData>(emptyFormData);
+  
+  // Scroll position preservation
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollPosition = useRef<number>(0);
+
+  const saveScrollPosition = useCallback(() => {
+    if (tableContainerRef.current) {
+      savedScrollPosition.current = tableContainerRef.current.scrollTop;
+    }
+  }, []);
+
+  const restoreScrollPosition = useCallback(() => {
+    if (tableContainerRef.current) {
+      setTimeout(() => {
+        tableContainerRef.current?.scrollTo(0, savedScrollPosition.current);
+      }, 50);
+    }
+  }, []);
 
   const { data: venues, isLoading } = useQuery({
     queryKey: ["known-venues"],
@@ -91,8 +109,10 @@ export const KnownVenuesManager = () => {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+    onSuccess: async () => {
+      saveScrollPosition();
+      await queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+      restoreScrollPosition();
       toast({ title: "Venue added successfully" });
       resetForm();
     },
@@ -117,8 +137,10 @@ export const KnownVenuesManager = () => {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+    onSuccess: async () => {
+      saveScrollPosition();
+      await queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+      restoreScrollPosition();
       toast({ title: "Venue updated successfully" });
       resetForm();
     },
@@ -132,8 +154,10 @@ export const KnownVenuesManager = () => {
       const { error } = await supabase.from("known_venues").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+    onSuccess: async () => {
+      saveScrollPosition();
+      await queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+      restoreScrollPosition();
       toast({ title: "Venue deleted successfully" });
     },
     onError: (error: any) => {
@@ -313,7 +337,7 @@ export const KnownVenuesManager = () => {
         </div>
       </CardHeader>
       <CardContent className="p-4 md:p-6 pt-0">
-        <div className="rounded-md border overflow-x-auto">
+        <div ref={tableContainerRef} className="rounded-md border overflow-x-auto max-h-[600px] overflow-y-auto">
           <Table>
             <TableHeader>
               <TableRow>

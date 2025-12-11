@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -43,6 +43,24 @@ export const UnmatchedVenuesViewer = () => {
     lat: "",
     lng: "",
   });
+
+  // Scroll position preservation
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollPosition = useRef<number>(0);
+
+  const saveScrollPosition = useCallback(() => {
+    if (tableContainerRef.current) {
+      savedScrollPosition.current = tableContainerRef.current.scrollTop;
+    }
+  }, []);
+
+  const restoreScrollPosition = useCallback(() => {
+    if (tableContainerRef.current) {
+      setTimeout(() => {
+        tableContainerRef.current?.scrollTo(0, savedScrollPosition.current);
+      }, 50);
+    }
+  }, []);
 
   // Fetch unmatched venues - those with location_name but no coordinates
   const { data: unmatchedVenues, isLoading } = useQuery({
@@ -128,9 +146,11 @@ export const UnmatchedVenuesViewer = () => {
         if (updateError) console.error("Re-geocode error:", updateError);
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["unmatched-venues"] });
-      queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+    onSuccess: async () => {
+      saveScrollPosition();
+      await queryClient.invalidateQueries({ queryKey: ["unmatched-venues"] });
+      await queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+      restoreScrollPosition();
       toast({ title: "Venue added and posts re-geocoded" });
       setSelectedVenue(null);
       setFormData({ name: "", aliases: "", address: "", city: "", lat: "", lng: "" });
@@ -201,7 +221,7 @@ export const UnmatchedVenuesViewer = () => {
         </div>
       </CardHeader>
       <CardContent className="p-4 md:p-6 pt-0">
-        <div className="rounded-md border overflow-x-auto max-h-96 overflow-y-auto">
+        <div ref={tableContainerRef} className="rounded-md border overflow-x-auto max-h-96 overflow-y-auto">
           <Table>
             <TableHeader className="sticky top-0 bg-background">
               <TableRow>
