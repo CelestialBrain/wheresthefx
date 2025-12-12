@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PriceDisplay } from "./PriceDisplay";
 import { SubEventsDisplay } from "./SubEventsDisplay";
+import { PerformersDisplay } from "./PerformersDisplay";
 import { Json } from "@/integrations/supabase/types";
 
 interface Post {
@@ -802,6 +803,9 @@ export function ConsolidatedReviewQueue() {
 
                           {/* Sub-Events Display for multi-event posts */}
                           <SubEventsDisplay subEvents={post.sub_events} />
+                          
+                          {/* Performers Display for events with featured artists */}
+                          <PerformersDisplay subEvents={post.sub_events} />
 
                           {/* Completeness meter */}
                           <div className="space-y-1">
