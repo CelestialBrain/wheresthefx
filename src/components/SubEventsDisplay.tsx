@@ -28,11 +28,13 @@ export const SubEventsDisplay = ({ subEvents, className = "" }: SubEventsDisplay
   if (Array.isArray(subEvents)) {
     events = subEvents as SubEvent[];
   } else if (typeof subEvents === 'object' && subEvents !== null) {
-    // If it's an object with nested events
     events = [subEvents as SubEvent];
   }
 
-  if (events.length === 0) {
+  // Filter to only scheduled events (with dates) - performers are displayed separately
+  const scheduledEvents = events.filter(e => e.date && e.description !== 'performer');
+
+  if (scheduledEvents.length === 0) {
     return null;
   }
 
@@ -54,11 +56,11 @@ export const SubEventsDisplay = ({ subEvents, className = "" }: SubEventsDisplay
     <div className={`space-y-2 ${className}`}>
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Music className="h-3.5 w-3.5" />
-        <span>Multi-Event Schedule ({events.length} events)</span>
+        <span>Schedule ({scheduledEvents.length} events)</span>
       </div>
       
       <div className="space-y-1.5 pl-2 border-l-2 border-accent/30">
-        {events.map((event, index) => (
+        {scheduledEvents.map((event, index) => (
           <div 
             key={index} 
             className="bg-muted/50 rounded-md px-2 py-1.5 text-xs space-y-0.5"
@@ -101,7 +103,7 @@ export const SubEventsDisplay = ({ subEvents, className = "" }: SubEventsDisplay
             </div>
             
             {/* Description */}
-            {event.description && (
+            {event.description && event.description !== 'performer' && (
               <p className="text-muted-foreground text-[11px] line-clamp-2">
                 {event.description}
               </p>
