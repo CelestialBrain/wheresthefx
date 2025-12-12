@@ -431,6 +431,24 @@ Caption: "DM for slots" → signupUrl: "dm_for_slots", urlType: "dm"
 ═══════════════════════════════════════════════════════════════
 When a post contains MULTIPLE scheduled activities, you MUST extract them as subEvents.
 
+⚠️ DATE RANGE EXPANSION - CRITICAL:
+- "Dec 12-13" → EXPAND to 2 subEvents (Dec 12 AND Dec 13)
+- "Dec 19-21" → EXPAND to 3 subEvents (Dec 19, 20, AND 21)
+- Each day in the range gets its own subEvent entry
+
+EXAMPLE 0 - Date Range with Different Times Per Day:
+"""
+Dec 12-14
+7pm Fri & Sat, 2pm Sat & Sun
+"""
+→ EXPAND the date range and assign correct times:
+   subEvents: [
+     {"title": "Main Event", "date": "2025-12-12", "time": "19:00", "description": "Friday evening"},
+     {"title": "Main Event", "date": "2025-12-13", "time": "14:00", "description": "Saturday matinee"},
+     {"title": "Main Event", "date": "2025-12-13", "time": "19:00", "description": "Saturday evening"},
+     {"title": "Main Event", "date": "2025-12-14", "time": "14:00", "description": "Sunday matinee"}
+   ]
+
 EXAMPLE 1 - Film Festival Schedule:
 """
 Dec 12 Friday:
@@ -569,6 +587,18 @@ PRICE EXTRACTION:
 - Range: "₱300-500" → priceMin: 300, priceMax: 500
 - Tiered: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
 - Free or PWYC: "Free entry", "PWYC" → isFree: true
+- US Dollar prices: "$12-$28" → priceMin: 12, priceMax: 28, priceNotes: "USD pricing"
+  ⚠️ If you see $ pricing (not ₱), this may be an INTERNATIONAL event!
+
+⚠️ INTERNATIONAL/NON-NCR VENUE DETECTION:
+Set isEvent: false and category: "outside_service_area" if you detect:
+- US phone area codes (541-, 212-, 310-, etc.)
+- US street formats: "W Olive Street", "123 Main St", numbered streets
+- US/international domains: coastarts.org, .com.au, .co.uk (not Philippine)
+- Explicit US locations: "Oregon", "California", "New York", etc.
+- Non-Philippine countries: "USA", "Australia", "Japan", etc.
+- International venue names: "Oregon Coast Aquarium", "Newport Performing Arts Center" (Oregon)
+This app only covers METRO MANILA (NCR) Philippines events!
 
 CONFIDENCE GUIDELINES:
 ${hasImage ? `- 0.9+ ONLY if all core fields clear in BOTH image AND caption
