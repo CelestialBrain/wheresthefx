@@ -594,6 +594,23 @@ Jan 1: 12PM - 9PM
 ⚠️ IMPORTANT: Store hours / mall hours posts are typically NOT events!
 Set isEvent: false for posts that are just announcing operating hours.
 
+⚠️ CRITICAL: END TIME EXTRACTION FOR SUB-EVENTS
+- ALWAYS extract endTime for each subEvent when available
+- For DJ lineups: estimate 1-1.5 hour sets (e.g., 8PM DJ → endTime: "21:30")
+- For multi-day same-event: inherit endTime from main event
+- For different weekday/weekend hours, use separate subEvents:
+  EXAMPLE - Different Hours on Different Days:
+  """
+  Open 6 PM - 1 AM (Tues-Fri)
+  6 PM - 3 AM on weekends
+  """
+  → Main eventTime: "18:00", endTime: "01:00" (weekday default)
+  → Add in description: "Extended to 3 AM on Fri/Sat"
+  → Or use subEvents: [
+       {"title": "Weekday Hours", "time": "18:00", "endTime": "01:00", "description": "Tues-Fri"},
+       {"title": "Weekend Hours", "time": "18:00", "endTime": "03:00", "description": "Sat-Sun"}
+     ]
+
 ═══════════════════════════════════════════════════════════════
 
 ⚠️ CRITICAL: HISTORICAL POST DETECTION
@@ -614,6 +631,8 @@ CRITICAL VALIDATION RULES:
 9. Prices in Philippines are typically ₱100-₱5000 for events
 
 ⚠️ NOT AN EVENT - Set isEvent: false if:
+- This is a GIVEAWAY/RAFFLE post (contains "giveaway", "raffle", "win a", "winners announced", "lucky winner", "how to enter", "tag 2 friends", "follow this page", "like & share")
+  → Social media giveaways/contests are NOT physical events! They are online promotions.
 - This is a THANK YOU / RECAP post (contains "thank you", "merci", "what a night", "until next time")
 - This is a THROWBACK post (contains "#tbt", "#throwback", "look back", "memories")
 - This is a VENUE PROMO (contains "host your events", "book our space", "private events", "for bookings")
