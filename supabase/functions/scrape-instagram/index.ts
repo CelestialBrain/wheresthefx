@@ -874,13 +874,60 @@ Deno.serve(async (req) => {
           .select()
           .single();
         
-        if (runError && runError.code !== '23505') { // Ignore duplicate key errors
+        if (runError) {
           console.error('[GH-INGEST] Failed to create scrape_run:', runError);
+          
+          // If duplicate key error (23505), the providedRunId doesn't exist in DB
+          // (was deleted or never created) - create a fresh run with new ID
+          if (runError.code === '23505' || !ingestRun) {
+            console.log('[GH-INGEST] Creating fresh run with new ID...');
+            const { data: freshRun, error: freshError } = await supabase
+              .from('scrape_runs')
+              .insert({
+                run_type: 'github_actions_ingest',
+                status: 'running',
+                dataset_id: body.datasetId || null,
+              })
+              .select()
+              .single();
+            
+            if (freshRun) {
+              ingestRunId = freshRun.id;
+              console.log(`[GH-INGEST] Created fresh run: ${ingestRunId}`);
+            } else {
+              console.error('[GH-INGEST] Failed to create fresh run:', freshError);
+              ingestRunId = null; // Logger will be null, but logs won't fail FK
+            }
+          }
         } else if (ingestRun) {
           ingestRunId = ingestRun.id;
         }
         
-        console.log(`[GH-INGEST] Created/using run: ${ingestRunId}`);
+        console.log(`[GH-INGEST] Using run: ${ingestRunId}`);
+      } else {
+        // For subsequent batches, verify the run exists before using it
+        const { data: existingRun } = await supabase
+          .from('scrape_runs')
+          .select('id')
+          .eq('id', providedRunId)
+          .single();
+        
+        if (!existingRun) {
+          console.warn(`[GH-INGEST] Provided runId ${providedRunId} not found, creating new run`);
+          const { data: freshRun } = await supabase
+            .from('scrape_runs')
+            .insert({
+              run_type: 'github_actions_ingest',
+              status: 'running',
+              dataset_id: body.datasetId || null,
+            })
+            .select()
+            .single();
+          
+          if (freshRun) {
+            ingestRunId = freshRun.id;
+          }
+        }
       }
       
       // Initialize logger for ingest
