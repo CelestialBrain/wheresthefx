@@ -35,7 +35,24 @@ jobs:
 
       - name: Process scrape
         working-directory: scripts
-        run: node process-scrape.js "${{ github.event.inputs.dataset_url }}"
+        run: |
+          # Retry up to 3 times if script fails
+          for attempt in 1 2 3; do
+            echo "🔄 Attempt $attempt of 3..."
+            if node process-scrape.js "${{ github.event.inputs.dataset_url }}"; then
+              echo "✅ Process completed successfully on attempt $attempt"
+              exit 0
+            else
+              exit_code=$?
+              echo "⚠️ Attempt $attempt failed with exit code $exit_code"
+              if [ $attempt -lt 3 ]; then
+                echo "⏳ Waiting 30 seconds before retry..."
+                sleep 30
+              fi
+            fi
+          done
+          echo "❌ All 3 attempts failed"
+          exit 1
 
       - name: Upload results
         if: always()

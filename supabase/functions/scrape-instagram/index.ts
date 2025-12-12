@@ -1606,30 +1606,47 @@ Deno.serve(async (req) => {
                 console.warn(`Error inserting allEventDates for ${post.postId}:`, err);
               }
             }
-            // NEW: Handle subEvents with dates (mall hours, film schedules, etc.)
+            // NEW: Handle subEvents with dates (film schedules, workshop schedules, etc.)
+            // IMPORTANT: Sub-events WITHOUT dates are performers/artists - keep in sub_events JSON only
+            // Sub-events WITH dates are scheduled screenings/activities - store in event_dates
             const subEvents = (post.aiExtraction as any)?.subEvents;
             if (upsertedPost?.id && subEvents && Array.isArray(subEvents) && subEvents.length > 0) {
               try {
-                // Filter sub-events that have specific dates
+                // Filter sub-events that have specific dates (scheduled screenings, activities)
                 const subEventsWithDates = subEvents.filter((e: any) => e.date);
+                
+                // Sub-events without dates are performers - keep in sub_events JSON only (already saved above)
+                const performerSubEvents = subEvents.filter((e: any) => !e.date);
+                if (performerSubEvents.length > 0) {
+                  await ingestLogger?.info('save', `${performerSubEvents.length} performer/artist sub-events stored in sub_events JSON`, { 
+                    postId: post.postId, 
+                    performers: performerSubEvents.map((e: any) => e.title) 
+                  });
+                }
                 
                 if (subEventsWithDates.length > 0) {
                   // Delete existing and insert new
                   await supabase.from('event_dates').delete().eq('instagram_post_id', upsertedPost.id);
                   
+                  // FIXED: Use actual venue name for venue_name, store activity description in venue_address
                   const dateRecords = subEventsWithDates.map((e: any) => ({
                     instagram_post_id: upsertedPost.id,
                     event_date: e.date,
                     event_time: e.time || validation.correctedData.eventTime || null,
                     end_time: e.endTime || validation.correctedData.endTime || null,
-                    venue_name: e.title || canonicalVenue || null, // Use sub-event title as descriptor
+                    venue_name: canonicalVenue || validation.correctedData.locationName || null, // Use ACTUAL venue
+                    venue_address: e.title || e.description || null, // Store sub-event title/activity as address descriptor
                   }));
                   
                   const { error: subEventsError } = await supabase.from('event_dates').insert(dateRecords);
                   if (subEventsError) {
                     console.warn(`Failed to insert subEvents dates for ${post.postId}:`, subEventsError.message);
                   } else {
-                    await ingestLogger?.info('save', `Stored ${dateRecords.length} sub-event dates`, { postId: post.postId, subEvents: subEventsWithDates.map((e: any) => e.title) });
+                    await ingestLogger?.info('save', `Stored ${dateRecords.length} scheduled sub-event dates with venue: ${canonicalVenue || 'unknown'}`, { 
+                      postId: post.postId, 
+                      venue: canonicalVenue,
+                      activities: subEventsWithDates.map((e: any) => e.title) 
+                    });
                   }
                 }
               } catch (err) {

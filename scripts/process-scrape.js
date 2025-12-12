@@ -459,7 +459,7 @@ Saturday Classes:
   {"title": "Advanced Ceramics", "description": "with Ben", "time": "14:00"}
 ]
 
-EXAMPLE 3 - Concert Lineup:
+EXAMPLE 3 - Concert Lineup with Specific Times:
 """
 Dec 14 at XX XX:
 8PM - The Itchyworms
@@ -469,6 +469,24 @@ Dec 14 at XX XX:
   {"title": "The Itchyworms", "date": "2025-12-14", "time": "20:00"},
   {"title": "Urbandub", "date": "2025-12-14", "time": "22:00"}
 ]
+
+EXAMPLE 5 - Concert Lineup (PERFORMERS) - NO SPECIFIC TIMES:
+"""
+w/ performance by: Project Goo, Rock Town Asia, Rainy Weekend, Miguel Galicia
+"""
+→ Extract ALL performers as subEvents WITHOUT dates (they're performers, not schedules):
+   subEvents: [
+     {"title": "Project Goo", "description": "performer"},
+     {"title": "Rock Town Asia", "description": "performer"},
+     {"title": "Rainy Weekend", "description": "performer"},
+     {"title": "Miguel Galicia", "description": "performer"}
+   ]
+
+⚠️ PERFORMER EXTRACTION RULE: When you see these patterns, extract EACH name as a subEvent:
+- "performance by:", "featuring:", "with:", "w/", "live set by:", "special guests:", "lineup:"
+- followed by comma-separated names
+- Each performer → {"title": "Name", "description": "performer"}
+- Do NOT add dates to performers (they perform at the main event date/time)
 
 EXAMPLE 4 - Mall/Store Holiday Hours:
 """
@@ -763,16 +781,22 @@ async function processPost(post) {
     // NCR SERVICE AREA FILTERING - Detect non-Metro Manila venues
     // ═══════════════════════════════════════════════════════════════
     const NON_NCR_KEYWORDS = [
+      // Philippine provinces outside NCR
       'pampanga', 'angeles city', 'san fernando pampanga', 'clark', 'clark freeport',
       'bulacan', 'malolos', 'meycauayan bulacan', 'san jose del monte',
       'cavite', 'tagaytay', 'silang cavite', 'dasmarinas cavite', 'imus cavite',
       'general trias', 'kawit cavite', 'rosario cavite',
       'laguna', 'los banos', 'los baños', 'san pablo laguna', 'sta. rosa laguna',
-      'calamba laguna', 'binan laguna',
+      'calamba laguna', 'binan laguna', 'nuvali', 'solenad',
       'batangas', 'lipa batangas', 'tanauan batangas', 'batangas city',
       'rizal province', 'antipolo rizal', 'taytay rizal', 'binangonan rizal',
       'tanay rizal', 'angono rizal', 'morong rizal',
-      'nueva ecija', 'tarlac', 'zambales', 'pangasinan', 'quezon province'
+      'nueva ecija', 'tarlac', 'zambales', 'pangasinan', 'quezon province',
+      'cebu', 'baguio', 'subic', 'la union', 'iloilo', 'davao', 'cagayan de oro',
+      // International locations
+      'oregon', 'usa', 'california', 'new york', 'texas', 'florida', 'washington',
+      'canada', 'uk', 'united kingdom', 'australia', 'japan', 'korea', 'singapore',
+      'hong kong', 'europe', 'coastarts.org', 'newport, or',
     ];
     
     const captionLower = (caption || '').toLowerCase();
