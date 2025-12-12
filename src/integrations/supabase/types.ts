@@ -682,6 +682,7 @@ export type Database = {
           event_status: string | null
           event_time: string | null
           event_title: string | null
+          extracted_hours: Json | null
           extraction_method: string | null
           hashtags: string[] | null
           id: string
@@ -691,6 +692,7 @@ export type Database = {
           is_duplicate: boolean | null
           is_event: boolean | null
           is_free: boolean
+          is_hours_post: boolean | null
           is_recurring: boolean | null
           likes_count: number | null
           location_address: string | null
@@ -745,6 +747,7 @@ export type Database = {
           event_status?: string | null
           event_time?: string | null
           event_title?: string | null
+          extracted_hours?: Json | null
           extraction_method?: string | null
           hashtags?: string[] | null
           id?: string
@@ -754,6 +757,7 @@ export type Database = {
           is_duplicate?: boolean | null
           is_event?: boolean | null
           is_free?: boolean
+          is_hours_post?: boolean | null
           is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
@@ -808,6 +812,7 @@ export type Database = {
           event_status?: string | null
           event_time?: string | null
           event_title?: string | null
+          extracted_hours?: Json | null
           extraction_method?: string | null
           hashtags?: string[] | null
           id?: string
@@ -817,6 +822,7 @@ export type Database = {
           is_duplicate?: boolean | null
           is_event?: boolean | null
           is_free?: boolean
+          is_hours_post?: boolean | null
           is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
@@ -911,6 +917,7 @@ export type Database = {
           learned_from_corrections: boolean | null
           lng: number | null
           name: string
+          operating_hours: Json | null
           updated_at: string | null
         }
         Insert: {
@@ -925,6 +932,7 @@ export type Database = {
           learned_from_corrections?: boolean | null
           lng?: number | null
           name: string
+          operating_hours?: Json | null
           updated_at?: string | null
         }
         Update: {
@@ -939,6 +947,7 @@ export type Database = {
           learned_from_corrections?: boolean | null
           lng?: number | null
           name?: string
+          operating_hours?: Json | null
           updated_at?: string | null
         }
         Relationships: []

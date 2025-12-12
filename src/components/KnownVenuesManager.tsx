@@ -22,7 +22,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, Search, MapPin, Download, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, MapPin, Download, Clock } from "lucide-react";
+import { VenueHoursEditor } from "./VenueHoursEditor";
+
+interface OperatingHours {
+  monday?: { open?: string; close?: string; closed?: boolean };
+  tuesday?: { open?: string; close?: string; closed?: boolean };
+  wednesday?: { open?: string; close?: string; closed?: boolean };
+  thursday?: { open?: string; close?: string; closed?: boolean };
+  friday?: { open?: string; close?: string; closed?: boolean };
+  saturday?: { open?: string; close?: string; closed?: boolean };
+  sunday?: { open?: string; close?: string; closed?: boolean };
+  notes?: string;
+  [key: string]: { open?: string; close?: string; closed?: boolean } | string | undefined;
+}
 
 interface KnownVenue {
   id: string;
@@ -36,6 +49,7 @@ interface KnownVenue {
   learned_from_corrections: boolean | null;
   correction_count: number | null;
   created_at: string | null;
+  operating_hours: OperatingHours | null;
 }
 
 interface VenueFormData {
@@ -65,6 +79,8 @@ export const KnownVenuesManager = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<VenueFormData>(emptyFormData);
+  const [hoursEditorOpen, setHoursEditorOpen] = useState(false);
+  const [editingHoursVenue, setEditingHoursVenue] = useState<KnownVenue | null>(null);
   
   // Scroll position preservation
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -162,6 +178,27 @@ export const KnownVenuesManager = () => {
     },
     onError: (error: any) => {
       toast({ title: "Error deleting venue", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateHoursMutation = useMutation({
+    mutationFn: async ({ id, hours }: { id: string; hours: OperatingHours }) => {
+      const { error } = await supabase
+        .from("known_venues")
+        .update({ operating_hours: hours as any })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      saveScrollPosition();
+      await queryClient.invalidateQueries({ queryKey: ["known-venues"] });
+      restoreScrollPosition();
+      toast({ title: "Venue hours updated successfully" });
+      setHoursEditorOpen(false);
+      setEditingHoursVenue(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error updating hours", description: error.message, variant: "destructive" });
     },
   });
 
@@ -344,6 +381,7 @@ export const KnownVenuesManager = () => {
                 <TableHead>Name</TableHead>
                 <TableHead>Aliases</TableHead>
                 <TableHead>City</TableHead>
+                <TableHead>Hours</TableHead>
                 <TableHead>Coordinates</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -369,6 +407,16 @@ export const KnownVenuesManager = () => {
                     </div>
                   </TableCell>
                   <TableCell>{venue.city || "-"}</TableCell>
+                  <TableCell>
+                    {venue.operating_hours ? (
+                      <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
+                        <Clock className="h-3 w-3" />
+                        Set
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">-</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {venue.lat && venue.lng ? `${venue.lat.toFixed(4)}, ${venue.lng.toFixed(4)}` : "-"}
                   </TableCell>
@@ -381,6 +429,17 @@ export const KnownVenuesManager = () => {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => {
+                          setEditingHoursVenue(venue);
+                          setHoursEditorOpen(true);
+                        }}
+                        title="Edit Hours"
+                      >
+                        <Clock className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => startEdit(venue)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -401,7 +460,7 @@ export const KnownVenuesManager = () => {
               ))}
               {filteredVenues?.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     {searchQuery ? "No venues match your search" : "No venues yet"}
                   </TableCell>
                 </TableRow>
@@ -410,6 +469,22 @@ export const KnownVenuesManager = () => {
           </Table>
         </div>
       </CardContent>
+
+      {editingHoursVenue && (
+        <VenueHoursEditor
+          open={hoursEditorOpen}
+          onOpenChange={(open) => {
+            setHoursEditorOpen(open);
+            if (!open) setEditingHoursVenue(null);
+          }}
+          venueName={editingHoursVenue.name}
+          currentHours={editingHoursVenue.operating_hours}
+          onSave={(hours) => {
+            updateHoursMutation.mutate({ id: editingHoursVenue.id, hours });
+          }}
+          isSaving={updateHoursMutation.isPending}
+        />
+      )}
     </Card>
   );
 };

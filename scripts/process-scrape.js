@@ -34,6 +34,7 @@ const eventExtractionSchema = {
   properties: {
     ocrText: { type: SchemaType.STRING, nullable: true, description: "All text extracted from image" },
     isEvent: { type: SchemaType.BOOLEAN, description: "Whether this is an event announcement" },
+    isHoursPost: { type: SchemaType.BOOLEAN, nullable: true, description: "Whether this is a venue hours announcement (not an event)" },
     eventTitle: { type: SchemaType.STRING, nullable: true, description: "Event title/name" },
     eventDate: { type: SchemaType.STRING, nullable: true, description: "Event date (first/next date) in YYYY-MM-DD format" },
     eventEndDate: { type: SchemaType.STRING, nullable: true, description: "End date for multi-day CONTINUOUS events in YYYY-MM-DD format" },
@@ -61,6 +62,77 @@ const eventExtractionSchema = {
     rsvpDeadline: { type: SchemaType.STRING, nullable: true, description: "RSVP deadline in YYYY-MM-DD format" },
     isHistoricalPost: { type: SchemaType.BOOLEAN, description: "Whether this is about a past event" },
     reasoning: { type: SchemaType.STRING, description: "Explanation of extraction decisions" },
+    operatingHours: {
+      type: SchemaType.OBJECT,
+      nullable: true,
+      description: "Structured venue operating hours - only extract from venue hours announcement posts",
+      properties: {
+        monday: { 
+          type: SchemaType.OBJECT, 
+          nullable: true,
+          properties: { 
+            open: { type: SchemaType.STRING, nullable: true }, 
+            close: { type: SchemaType.STRING, nullable: true }, 
+            closed: { type: SchemaType.BOOLEAN, nullable: true } 
+          } 
+        },
+        tuesday: { 
+          type: SchemaType.OBJECT, 
+          nullable: true,
+          properties: { 
+            open: { type: SchemaType.STRING, nullable: true }, 
+            close: { type: SchemaType.STRING, nullable: true }, 
+            closed: { type: SchemaType.BOOLEAN, nullable: true } 
+          } 
+        },
+        wednesday: { 
+          type: SchemaType.OBJECT, 
+          nullable: true,
+          properties: { 
+            open: { type: SchemaType.STRING, nullable: true }, 
+            close: { type: SchemaType.STRING, nullable: true }, 
+            closed: { type: SchemaType.BOOLEAN, nullable: true } 
+          } 
+        },
+        thursday: { 
+          type: SchemaType.OBJECT, 
+          nullable: true,
+          properties: { 
+            open: { type: SchemaType.STRING, nullable: true }, 
+            close: { type: SchemaType.STRING, nullable: true }, 
+            closed: { type: SchemaType.BOOLEAN, nullable: true } 
+          } 
+        },
+        friday: { 
+          type: SchemaType.OBJECT, 
+          nullable: true,
+          properties: { 
+            open: { type: SchemaType.STRING, nullable: true }, 
+            close: { type: SchemaType.STRING, nullable: true }, 
+            closed: { type: SchemaType.BOOLEAN, nullable: true } 
+          } 
+        },
+        saturday: { 
+          type: SchemaType.OBJECT, 
+          nullable: true,
+          properties: { 
+            open: { type: SchemaType.STRING, nullable: true }, 
+            close: { type: SchemaType.STRING, nullable: true }, 
+            closed: { type: SchemaType.BOOLEAN, nullable: true } 
+          } 
+        },
+        sunday: { 
+          type: SchemaType.OBJECT, 
+          nullable: true,
+          properties: { 
+            open: { type: SchemaType.STRING, nullable: true }, 
+            close: { type: SchemaType.STRING, nullable: true }, 
+            closed: { type: SchemaType.BOOLEAN, nullable: true } 
+          } 
+        },
+        notes: { type: SchemaType.STRING, nullable: true, description: "Additional hours notes like 'Extended to 3AM on weekends'" }
+      }
+    },
     subEvents: {
       type: SchemaType.ARRAY,
       items: {
@@ -638,9 +710,33 @@ CRITICAL VALIDATION RULES:
 - This is a VENUE PROMO (contains "host your events", "book our space", "private events", "for bookings")
 - This is a PRODUCT/MENU post (contains "new on the menu", "now serving", "try our", "limited edition")
 - This is a CALL FOR APPLICATIONS (contains "calling all vendors", "now accepting applications", "apply now")
-- Contains operating hours: "6PM — Tues to Sat", "Open Mon-Fri"
+- This is a VENUE HOURS ANNOUNCEMENT post (see below for extraction)
 - Says "Every [day]" without a specific date
 - Generic promo: "Visit us", "Come check out", "Be in the loop"
+
+⚠️ VENUE HOURS POSTS - Extract structured hours but set isEvent: false:
+If this post announces VENUE OPERATING HOURS (not a specific event), extract operatingHours:
+EXAMPLE:
+"""
+🕐 HOURS 🕐
+Tues - Sat: 6PM - 1AM
+Extended to 3AM on Fri-Sat
+Closed Sundays & Mondays
+"""
+→ isEvent: false
+→ isHoursPost: true
+→ operatingHours: {
+    "monday": {"closed": true},
+    "tuesday": {"open": "18:00", "close": "01:00"},
+    "wednesday": {"open": "18:00", "close": "01:00"},
+    "thursday": {"open": "18:00", "close": "01:00"},
+    "friday": {"open": "18:00", "close": "03:00"},
+    "saturday": {"open": "18:00", "close": "03:00"},
+    "sunday": {"closed": true},
+    "notes": "Extended to 3AM on Fri-Sat"
+  }
+
+Indicators of hours posts: "hours", "schedule", "open daily", "operating hours", "we're open", day range + time pattern
 
 ⚠️ RECURRING VS MULTI-DAY - CRITICAL DISTINCTION:
 - MULTI-DAY EVENT (is_recurring: false): "Nov 8-9", "Dec 27-30", "This weekend"
