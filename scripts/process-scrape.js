@@ -16,6 +16,15 @@ const IMAGE_FETCH_TIMEOUT_MS = 15000;
 const IMAGE_FETCH_RETRIES = 2;
 const MIN_CAPTION_LENGTH_FOR_EXTRACTION = 100;
 
+// Timeout handling for GitHub Actions (3 hours = 180 minutes)
+const WORKFLOW_TIMEOUT_MS = 180 * 60 * 1000; // 3 hours
+const SAFETY_BUFFER_MS = 5 * 60 * 1000; // Exit 5 minutes before timeout
+const startTime = Date.now();
+
+// Progress file for resume capability
+const RESULTS_DIR = path.join(process.cwd(), 'results');
+const PROGRESS_FILE = path.join(RESULTS_DIR, 'progress.json');
+
 // Known venues list - will be populated from database
 let KNOWN_VENUES = [];
 
@@ -100,6 +109,62 @@ const results = {
   failed: 0,
   errors: [],
 };
+
+/**
+ * Load progress from checkpoint file for resume capability
+ */
+function loadProgress(datasetUrl) {
+  try {
+    if (fs.existsSync(PROGRESS_FILE)) {
+      const progress = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf-8'));
+      if (progress.datasetUrl === datasetUrl) {
+        console.log(`📂 Found checkpoint from ${progress.lastUpdated}`);
+        console.log(`   Last completed batch: ${progress.lastCompletedBatch}/${progress.totalBatches}`);
+        console.log(`   Already processed: ${progress.processedPostIds?.length || 0} posts`);
+        return progress;
+      }
+      console.log(`⚠️ Checkpoint exists but for different dataset - starting fresh`);
+    }
+  } catch (err) {
+    console.log(`⚠️ Could not load progress file: ${err.message}`);
+  }
+  return null;
+}
+
+/**
+ * Save progress checkpoint after each batch
+ */
+function saveProgress(progress) {
+  try {
+    fs.mkdirSync(RESULTS_DIR, { recursive: true });
+    fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
+    console.log(`   💾 Progress saved (batch ${progress.lastCompletedBatch}/${progress.totalBatches})`);
+  } catch (err) {
+    console.log(`   ⚠️ Could not save progress: ${err.message}`);
+  }
+}
+
+/**
+ * Check if approaching workflow timeout - exit gracefully to allow resume
+ */
+function checkTimeout(currentProgress) {
+  const elapsed = Date.now() - startTime;
+  const remaining = WORKFLOW_TIMEOUT_MS - elapsed;
+  
+  if (remaining < SAFETY_BUFFER_MS) {
+    console.log('\n⏰ Approaching workflow timeout - saving progress for resume...');
+    saveProgress(currentProgress);
+    console.log('📂 Progress saved. Re-run workflow with resume=true to continue.');
+    console.log(`✅ Completed ${currentProgress.lastCompletedBatch}/${currentProgress.totalBatches} batches`);
+    process.exit(0); // Clean exit so artifacts are uploaded
+  }
+  
+  // Log remaining time every 30 minutes
+  const elapsedMinutes = Math.floor(elapsed / 60000);
+  if (elapsedMinutes > 0 && elapsedMinutes % 30 === 0) {
+    console.log(`⏱️ Time remaining: ${Math.floor(remaining / 60000)} minutes`);
+  }
+}
 
 /**
  * Fetch known venues from database
@@ -974,7 +1039,7 @@ async function processPostsConcurrently(posts, concurrency = CONCURRENT_REQUESTS
 }
 
 /**
- * Main function
+ * Main function with resume capability
  */
 async function main() {
   const datasetUrl = process.argv[2];
@@ -1002,6 +1067,18 @@ async function main() {
   console.log('🚀 Starting Instagram scrape processing...\n');
   console.log(`📊 Dataset URL: ${datasetUrl}`);
   console.log(`⚡ Batch size: ${BATCH_SIZE}, Concurrency: ${CONCURRENT_REQUESTS}`);
+  
+  // Load existing progress if resuming
+  const existingProgress = loadProgress(datasetUrl);
+  const runId = existingProgress?.runId || crypto.randomUUID();
+  const processedPostIds = new Set(existingProgress?.processedPostIds || []);
+  const startBatch = existingProgress ? existingProgress.lastCompletedBatch : 0;
+  
+  // Restore results from previous run
+  if (existingProgress?.results) {
+    Object.assign(results, existingProgress.results);
+    console.log(`📊 Restored progress: ${results.processed} processed, ${results.events} events`);
+  }
   
   // Fetch known venues from database
   KNOWN_VENUES = await fetchKnownVenuesFromDatabase();
@@ -1058,21 +1135,46 @@ async function main() {
     console.log(`  ⚠️ Skipped ${skippedCount} posts without valid identifier or image`);
   }
   
-  results.total = validPosts.length;
-  const estimatedTime = Math.ceil((validPosts.length / BATCH_SIZE) * (BATCH_SIZE / CONCURRENT_REQUESTS) * 3 / 60);
-  console.log(`✅ Fetched ${posts.length} posts (${validPosts.length} valid)`);
-  console.log(`⏱️ Estimated processing time: ~${estimatedTime} minutes\n`);
+  // Filter out already processed posts (for resume)
+  const remainingPosts = validPosts.filter(post => {
+    const postId = post.shortCode || post.id;
+    return !processedPostIds.has(postId);
+  });
   
-  // Generate a single run ID
-  const runId = crypto.randomUUID();
+  results.total = validPosts.length;
+  const totalBatches = Math.ceil(validPosts.length / BATCH_SIZE);
+  const remainingBatches = Math.ceil(remainingPosts.length / BATCH_SIZE);
+  
+  console.log(`✅ Fetched ${posts.length} posts (${validPosts.length} valid)`);
+  
+  if (remainingPosts.length < validPosts.length) {
+    console.log(`⏩ Resuming: ${remainingPosts.length} posts remaining (${validPosts.length - remainingPosts.length} already processed)`);
+    console.log(`📦 Starting from batch ${startBatch + 1}/${totalBatches}`);
+  }
+  
+  const estimatedTime = Math.ceil((remainingPosts.length / BATCH_SIZE) * (BATCH_SIZE / CONCURRENT_REQUESTS) * 3 / 60);
+  console.log(`⏱️ Estimated time for remaining: ~${estimatedTime} minutes\n`);
+  
   console.log(`📋 Run ID: ${runId}`);
   
-  // Process in batches with concurrency
-  const totalBatches = Math.ceil(validPosts.length / BATCH_SIZE);
+  // Current progress object for checkpointing
+  let currentProgress = {
+    datasetUrl,
+    runId,
+    lastCompletedBatch: startBatch,
+    processedPostIds: Array.from(processedPostIds),
+    totalBatches,
+    results: { ...results },
+    lastUpdated: new Date().toISOString()
+  };
   
-  for (let i = 0; i < validPosts.length; i += BATCH_SIZE) {
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const batch = validPosts.slice(i, i + BATCH_SIZE);
+  // Process remaining posts in batches with concurrency
+  for (let i = 0; i < remainingPosts.length; i += BATCH_SIZE) {
+    // Check timeout before each batch
+    checkTimeout(currentProgress);
+    
+    const batchNum = startBatch + Math.floor(i / BATCH_SIZE) + 1;
+    const batch = remainingPosts.slice(i, i + BATCH_SIZE);
     
     console.log(`\n📦 Batch ${batchNum}/${totalBatches} (${batch.length} posts, ${CONCURRENT_REQUESTS} concurrent)`);
     console.log('─'.repeat(50));
@@ -1084,6 +1186,11 @@ async function main() {
     for (const result of batchResults) {
       if (result.success) {
         processedPosts.push(result.data);
+        // Track processed post IDs for resume
+        const postId = result.data.postId || result.data.shortCode;
+        if (postId) {
+          processedPostIds.add(postId);
+        }
         if (result.data.aiExtraction?.isEvent) {
           results.events++;
         } else {
@@ -1106,29 +1213,47 @@ async function main() {
       results.errors.push({ batch: batchNum, error: err.message });
     }
     
+    // Update and save progress checkpoint
+    currentProgress = {
+      datasetUrl,
+      runId,
+      lastCompletedBatch: batchNum,
+      processedPostIds: Array.from(processedPostIds),
+      totalBatches,
+      results: { ...results },
+      lastUpdated: new Date().toISOString()
+    };
+    saveProgress(currentProgress);
+    
     // Progress summary
     const progress = ((results.processed / results.total) * 100).toFixed(1);
     console.log(`\n📊 Progress: ${results.processed}/${results.total} (${progress}%)`);
     
     // Delay between batches
-    if (i + BATCH_SIZE < validPosts.length) {
+    if (i + BATCH_SIZE < remainingPosts.length) {
       console.log(`⏳ Waiting ${DELAY_BETWEEN_BATCHES_MS / 1000}s before next batch...`);
       await new Promise(r => setTimeout(r, DELAY_BETWEEN_BATCHES_MS));
     }
   }
   
-  // Save results
-  const resultsDir = path.join(process.cwd(), 'results');
-  fs.mkdirSync(resultsDir, { recursive: true });
+  // Clean up progress file on successful completion
+  if (fs.existsSync(PROGRESS_FILE)) {
+    fs.unlinkSync(PROGRESS_FILE);
+    console.log('🧹 Cleaned up progress file (completed successfully)');
+  }
+  
+  // Save final results
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
   fs.writeFileSync(
-    path.join(resultsDir, 'summary.json'),
-    JSON.stringify({ ...results, completedAt: new Date().toISOString() }, null, 2)
+    path.join(RESULTS_DIR, 'summary.json'),
+    JSON.stringify({ ...results, runId, completedAt: new Date().toISOString() }, null, 2)
   );
   
   // Final summary
   console.log('\n' + '═'.repeat(50));
   console.log('🎉 PROCESSING COMPLETE!');
   console.log('═'.repeat(50));
+  console.log(`📋 Run ID:     ${runId}`);
   console.log(`📊 Total:      ${results.total}`);
   console.log(`✅ Processed:  ${results.processed}`);
   console.log(`📅 Events:     ${results.events}`);
