@@ -454,245 +454,300 @@ function buildExtractionPrompt(caption, post, hasImage = true) {
   
   // Use database venues, limit to reasonable size for prompt
   const venueContext = KNOWN_VENUES.length > 0 ? `
-KNOWN VENUES (use exact spelling if venue matches one of these):
-${KNOWN_VENUES.slice(0, 100).join(', ')}
-${KNOWN_VENUES.length > 100 ? `... and ${KNOWN_VENUES.length - 100} more.` : ''}
-If venue matches a known venue, use the exact spelling from this list.` : '';
+═══════════════════════════════════════════════════════════════
+KNOWN VENUES DATABASE (${KNOWN_VENUES.length} venues - use EXACT spelling if match found):
+═══════════════════════════════════════════════════════════════
+${KNOWN_VENUES.slice(0, 120).join(', ')}
+${KNOWN_VENUES.length > 120 ? `... and ${KNOWN_VENUES.length - 120} more.` : ''}
+
+⚠️ VENUE MATCHING RULE: If the venue in the post matches ANY of these known venues (even partial match), use the EXACT spelling from this list!` : '';
 
   return `You are an expert at extracting event information from Filipino Instagram event posters.
+Your job is to be ACCURATE and PRECISE. When uncertain, set the field to null rather than guess.
 
+═══════════════════════════════════════════════════════════════
+📅 TEMPORAL CONTEXT
+═══════════════════════════════════════════════════════════════
 TODAY'S DATE: ${today}
+CURRENT YEAR: ${currentYear}
 INSTAGRAM POST DATE: ${postDate.toISOString().split('T')[0]} (${postAgeInDays} days ago)${isOldPost ? ' ⚠️ OLD POST - likely historical' : ''}
 
-INSTAGRAM CAPTION:
+═══════════════════════════════════════════════════════════════
+📝 INSTAGRAM CAPTION
+═══════════════════════════════════════════════════════════════
 """
 ${caption || '(no caption)'}
 """
 
 ${venueContext}
 
-${hasImage ? 'Extract ALL text visible in the image, then determine if this is an event announcement.' : '⚠️ NOTE: No image available - extract information from caption text only.'}
+${hasImage ? '🖼️ IMAGE AVAILABLE: Extract ALL text visible in the image FIRST, then analyze for event information.' : '⚠️ NO IMAGE: Extract information from caption text only. Be more conservative with confidence.'}
 
 ═══════════════════════════════════════════════════════════════
-⚠️ CRITICAL FIELD: signupUrl - URL EXTRACTION (DO NOT SKIP!)
+🎯 STEP 1: IS THIS AN EVENT? (CRITICAL FIRST DECISION)
 ═══════════════════════════════════════════════════════════════
-LOOK FOR these URL patterns in the caption AND image:
-- bit.ly/xxxxx
-- forms.gle/xxxxx  
-- lnk.to/xxxxx
-- linktr.ee/xxxxx
-- eventbrite.com/...
-- Any https:// or http:// URLs
-- If you see "link in bio", "check bio", "DM for link" → set signupUrl to "link_in_bio" and urlType to "link_in_bio"
 
-EXAMPLES:
-Caption: "Tickets via bit.ly/summer-fest" → signupUrl: "https://bit.ly/summer-fest"
-Caption: "Register: forms.gle/abc123" → signupUrl: "https://forms.gle/abc123"
-Caption: "Get tickets at the link in bio" → signupUrl: "link_in_bio", urlType: "link_in_bio"
-Caption: "DM for slots" → signupUrl: "dm_for_slots", urlType: "dm"
+✅ SET isEvent: true ONLY if this is a REAL, SPECIFIC, UPCOMING event with:
+- A specific date (or dates) for the event
+- An actual activity happening at a specific time
+- A physical location where people will gather
+
+❌ SET isEvent: false for ANY of these:
+SOCIAL MEDIA CONTESTS:
+  - "GIVEAWAY", "raffle", "win a", "winners announced", "lucky winner"
+  - "tag 2 friends", "follow this page", "like & share", "how to enter"
+  → These are ONLINE PROMOTIONS, not physical events!
+
+PAST EVENT CONTENT:
+  - "thank you", "merci", "what a night", "until next time", "see you again"
+  - "#tbt", "#throwback", "look back", "memories", "last night was"
+  - Event date is BEFORE post date (${postDate.toISOString().split('T')[0]})
+
+PROMOTIONAL/MARKETING:
+  - "host your events", "book our space", "private events", "for bookings"
+  - "new on the menu", "now serving", "try our", "limited edition"
+  - "calling all vendors", "now accepting applications", "apply now"
+  - "Visit us", "Come check out", "Be in the loop", "We're open"
+
+VENUE HOURS ONLY:
+  - Just announcing operating hours without a specific event
+  - "Open Mon-Sat 6PM-2AM" without event details
+
+VAGUE/RECURRING WITHOUT DATE:
+  - "Every Friday" without a specific upcoming Friday date
+  - "Weekly jam sessions" without next session date
 
 ═══════════════════════════════════════════════════════════════
-⚠️ CRITICAL FIELD: subEvents - MULTI-SCHEDULE EXTRACTION
+📅 STEP 2: DATE EXTRACTION (IF isEvent: true)
 ═══════════════════════════════════════════════════════════════
-When a post contains MULTIPLE scheduled activities, you MUST extract them as subEvents.
 
-⚠️ DATE RANGE EXPANSION - CRITICAL:
-- "Dec 12-13" → EXPAND to 2 subEvents (Dec 12 AND Dec 13)
-- "Dec 19-21" → EXPAND to 3 subEvents (Dec 19, 20, AND 21)
-- Each day in the range gets its own subEvent entry
+CRITICAL DATE RULES:
+1. eventDate MUST be on or after POST date (${postDate.toISOString().split('T')[0]})
+2. eventDate year MUST be ${currentYear} or ${currentYear + 1} ONLY
+3. If date is BEFORE today (${today}), set isEvent: false (already passed)
+4. NEVER auto-increment year! "May 3" in a May 5 post = PAST event, not next year!
 
-EXAMPLE 0 - Date Range with Different Times Per Day:
+FILIPINO DATE PATTERNS:
+- "Dis 15" / "Disyembre 15" = December 15
+- "Enero 3" = January 3
+- "ngayong Sabado" = this Saturday (calculate from post date)
+- "sa Biyernes" = on Friday (calculate next Friday from post date)
+
+DATE RANGE vs NON-CONTINUOUS DATES:
+- CONTINUOUS: "Dec 12-15" → eventDate: first day, eventEndDate: last day, create subEvents for each day
+- NON-CONTINUOUS: "Dec 7, 13, 14, 20" → eventDate: first, allEventDates: [all dates as YYYY-MM-DD]
+
+═══════════════════════════════════════════════════════════════
+⏰ STEP 3: TIME EXTRACTION (CRITICAL - ALWAYS EXTRACT BOTH START AND END)
+═══════════════════════════════════════════════════════════════
+
+⚠️ MANDATORY: Always look for BOTH eventTime (start) AND endTime (end)!
+
+TIME FORMAT PATTERNS TO RECOGNIZE:
+- "7PM" → "19:00"
+- "7:30PM" → "19:30"
+- "19:00" → "19:00" (already 24-hour)
+- "alas-7 ng gabi" → "19:00" (Filipino: 7 PM)
+- "alas-10 ng umaga" → "10:00" (Filipino: 10 AM)
+
+TIME RANGES - EXTRACT BOTH START AND END:
+- "6PM - 1AM" → eventTime: "18:00", endTime: "01:00"
+- "10:00 AM - 6:00 PM" → eventTime: "10:00", endTime: "18:00"
+- "Doors 7PM, Show 8PM until 12MN" → eventTime: "19:00", endTime: "00:00"
+- "6PM onwards" → eventTime: "18:00", endTime: null (no end specified)
+
+DIFFERENT HOURS FOR DIFFERENT DAYS:
+When a venue has different hours on weekdays vs weekends, create separate subEvents:
+- "6PM-1AM weekdays, 6PM-3AM weekends" →
+  Main event: eventTime: "18:00", endTime: "01:00"
+  PLUS create subEvents:
+    [{"title": "Weekend Session", "time": "18:00", "endTime": "03:00", "description": "Fri-Sat extended hours"}]
+
+⚠️ NEVER CONFUSE THESE AS TIMES:
+- Years: "2025", "2024" are NOT times
+- Phone numbers: "09171234567" is NOT a time
+- Prices: "500" alone is NOT a time
+- Addresses: "Unit 205" is NOT a time
+
+═══════════════════════════════════════════════════════════════
+💰 STEP 4: PRICE EXTRACTION (ACCURATE PESO AMOUNTS)
+═══════════════════════════════════════════════════════════════
+
+PRICE PATTERNS TO RECOGNIZE:
+- "₱500" / "PHP 500" / "P500" / "500 pesos" → price: 500
+- "Free" / "Libre" / "Free admission" / "No cover" → isFree: true, price: null
+- "PWYC" / "Pay what you can" → isFree: true, priceNotes: "PWYC"
+
+PRICE RANGES (extract min AND max):
+- "₱300-500" → priceMin: 300, priceMax: 500
+- "₱500 to ₱1000" → priceMin: 500, priceMax: 1000
+- "starts at ₱350" → priceMin: 350, price: 350
+
+TIERED PRICING (extract all tiers in priceNotes):
+- "₱500 GA / ₱1500 VIP" → 
+    priceMin: 500, priceMax: 1500, 
+    priceNotes: "GA ₱500, VIP ₱1500"
+- "Early bird ₱800, Regular ₱1000, Door ₱1200" →
+    priceMin: 800, priceMax: 1200,
+    priceNotes: "Early bird ₱800, Regular ₱1000, Door ₱1200"
+
+⚠️ PRICE VALIDATION:
+- Philippine event prices are typically ₱100 - ₱5000
+- If price > ₱10,000, it might be a phone number - set to null
+- "0917..." or "0915..." are phone numbers, NOT prices!
+- If isFree: true, then price should be null (not 0)
+
+USD PRICES (may indicate international event):
+- "$12-$28" → priceNotes: "USD pricing - $12-$28"
+  ⚠️ Dollar pricing may indicate international event - check location!
+
+═══════════════════════════════════════════════════════════════
+📍 STEP 5: VENUE/LOCATION EXTRACTION (ACCURATE VENUE NAME)
+═══════════════════════════════════════════════════════════════
+
+VENUE EXTRACTION PRIORITY ORDER:
+1. 📍 emoji followed by venue name (HIGHEST PRIORITY)
+2. "Location:", "Venue:", "Where:", "at:" labels
+3. Known venue names mentioned in caption
+4. Address-like text (street, building names)
+
+⚠️ CRITICAL VENUE RULES:
+- If venue matches a KNOWN VENUE from the database, use EXACT spelling
+- NEVER extract venue from @mentions (those are usually photographers/sponsors)
+- NEVER use hashtags as venue names
+- If venue is "TBA", "TBD", "check bio", "DM for location" → set venueName: null
+
+VENUE NAME CLEANING:
+- Remove trailing details: "Cinema '76, Anonas" → "Cinema '76"
+- Keep identifying numbers: "225 Lounge" (keep the 225)
+- Remove time/date info accidentally included
+
+⚠️ VAGUE VENUE INDICATORS (set venueName to null):
+- "TBA", "TBD", "To be announced"
+- "Check bio", "DM for location", "Message for details"
+- "Secret location", "Location reveal soon"
+
+═══════════════════════════════════════════════════════════════
+🔗 STEP 6: URL EXTRACTION (DO NOT SKIP!)
+═══════════════════════════════════════════════════════════════
+
+SCAN CAPTION AND IMAGE FOR URLS:
+- bit.ly/xxxxx → signupUrl: "https://bit.ly/xxxxx"
+- forms.gle/xxxxx → signupUrl: "https://forms.gle/xxxxx"
+- lnk.to/xxxxx → signupUrl: "https://lnk.to/xxxxx"
+- linktr.ee/xxxxx → signupUrl: "https://linktr.ee/xxxxx"
+- eventbrite.com/... → signupUrl: full URL
+- Any https:// or http:// URL
+
+SPECIAL URL INDICATORS:
+- "link in bio", "check bio" → signupUrl: "link_in_bio", urlType: "link_in_bio"
+- "DM for slots", "DM to register" → signupUrl: "dm_for_slots", urlType: "dm"
+- "RSVP via", "Register at" → extract the URL that follows
+
+═══════════════════════════════════════════════════════════════
+📋 STEP 7: SUB-EVENTS EXTRACTION (MULTI-ACTIVITY POSTS)
+═══════════════════════════════════════════════════════════════
+
+CREATE subEvents WHEN POST HAS:
+- Multiple screenings/shows with different times
+- Different performers with set times
+- Workshop schedule with multiple sessions
+- Market with different vendor time slots
+- Multi-day event with activities each day
+
+⚠️ DATE RANGE EXPANSION (CRITICAL):
+"Dec 12-14" must become 3 separate subEvents:
+[
+  {"title": "Event Name", "date": "2025-12-12", "time": "19:00", "endTime": "23:00"},
+  {"title": "Event Name", "date": "2025-12-13", "time": "19:00", "endTime": "23:00"},
+  {"title": "Event Name", "date": "2025-12-14", "time": "19:00", "endTime": "23:00"}
+]
+
+⚠️ INHERIT TIMES FROM MAIN EVENT:
+If main event is "11:00 AM - 6:00 PM" and has multiple days:
+Each subEvent should have time: "11:00" and endTime: "18:00"
+
+FILM/SCREENING SCHEDULE EXAMPLE:
 """
-Dec 12-14
-7pm Fri & Sat, 2pm Sat & Sun
-"""
-→ EXPAND the date range and assign correct times:
-   subEvents: [
-     {"title": "Main Event", "date": "2025-12-12", "time": "19:00", "description": "Friday evening"},
-     {"title": "Main Event", "date": "2025-12-13", "time": "14:00", "description": "Saturday matinee"},
-     {"title": "Main Event", "date": "2025-12-13", "time": "19:00", "description": "Saturday evening"},
-     {"title": "Main Event", "date": "2025-12-14", "time": "14:00", "description": "Sunday matinee"}
-   ]
-
-EXAMPLE 1 - Film Festival Schedule:
-"""
-Dec 12 Friday:
-4PM - Padamlagan  
-6:30PM - Bloom Where You Are Planted
-
-Dec 13 Saturday:
-1:30PM - Paglilitis ni Mang Serapio
-4PM - May Araw Pa Pagkatapos ng Dilim
+Dec 12 (Fri): 4PM Padamlagan | 6:30PM Bloom
+Dec 13 (Sat): 1:30PM Mang Serapio | 4PM May Araw Pa
 """
 → subEvents: [
   {"title": "Padamlagan", "date": "2025-12-12", "time": "16:00"},
-  {"title": "Bloom Where You Are Planted", "date": "2025-12-12", "time": "18:30"},
-  {"title": "Paglilitis ni Mang Serapio", "date": "2025-12-13", "time": "13:30"},
-  {"title": "May Araw Pa Pagkatapos ng Dilim", "date": "2025-12-13", "time": "16:00"}
+  {"title": "Bloom", "date": "2025-12-12", "time": "18:30"},
+  {"title": "Mang Serapio", "date": "2025-12-13", "time": "13:30"},
+  {"title": "May Araw Pa", "date": "2025-12-13", "time": "16:00"}
 ]
 
-EXAMPLE 2 - Workshop Schedule:
-"""
-Saturday Classes:
-10AM - Pottery Basics with Ana
-2PM - Advanced Ceramics with Ben
-"""
+PERFORMERS/LINEUP (NO specific times given):
+"w/ Project Goo, Rock Town Asia, Rainy Weekend"
 → subEvents: [
-  {"title": "Pottery Basics", "description": "with Ana", "time": "10:00"},
-  {"title": "Advanced Ceramics", "description": "with Ben", "time": "14:00"}
+  {"title": "Project Goo", "description": "performer"},
+  {"title": "Rock Town Asia", "description": "performer"},
+  {"title": "Rainy Weekend", "description": "performer"}
 ]
+Note: Performers WITHOUT dates - they play at main event time
 
-EXAMPLE 3 - Concert Lineup with Specific Times:
-"""
-Dec 14 at XX XX:
-8PM - The Itchyworms
-10PM - Urbandub
-"""
+DJ SETS (estimate 1-1.5 hour sets):
+"8PM DJ Rico, 10PM DJ Mia"
 → subEvents: [
-  {"title": "The Itchyworms", "date": "2025-12-14", "time": "20:00"},
-  {"title": "Urbandub", "date": "2025-12-14", "time": "22:00"}
+  {"title": "DJ Rico", "time": "20:00", "endTime": "22:00"},
+  {"title": "DJ Mia", "time": "22:00", "endTime": "23:30"}
 ]
-
-EXAMPLE 5 - Concert Lineup (PERFORMERS) - NO SPECIFIC TIMES:
-"""
-w/ performance by: Project Goo, Rock Town Asia, Rainy Weekend, Miguel Galicia
-"""
-→ Extract ALL performers as subEvents WITHOUT dates (they're performers, not schedules):
-   subEvents: [
-     {"title": "Project Goo", "description": "performer"},
-     {"title": "Rock Town Asia", "description": "performer"},
-     {"title": "Rainy Weekend", "description": "performer"},
-     {"title": "Miguel Galicia", "description": "performer"}
-   ]
-
-⚠️ PERFORMER EXTRACTION RULE: When you see these patterns, extract EACH name as a subEvent:
-- "performance by:", "featuring:", "with:", "w/", "live set by:", "special guests:", "lineup:"
-- followed by comma-separated names
-- Each performer → {"title": "Name", "description": "performer"}
-- Do NOT add dates to performers (they perform at the main event date/time)
-
-EXAMPLE 4 - Mall/Store Holiday Hours:
-"""
-Extended Holiday Hours:
-Dec 12-23: 10AM - 10PM
-Dec 24: 10AM - 8PM
-Dec 25: CLOSED
-Dec 26-30: 10AM - 10PM
-Dec 31: 10AM - 8PM
-Jan 1: 12PM - 9PM
-"""
-→ This is NOT an event (set isEvent: false) - these are operating hours
-→ But if you must extract schedule info, use:
-  subEvents: [
-    {"title": "Extended Hours Dec 12-23", "date": "2025-12-12", "time": "10:00", "endTime": "22:00"},
-    {"title": "Christmas Eve Hours", "date": "2025-12-24", "time": "10:00", "endTime": "20:00"},
-    {"title": "Post-Christmas Hours Dec 26-30", "date": "2025-12-26", "time": "10:00", "endTime": "22:00"},
-    {"title": "New Year's Eve Hours", "date": "2025-12-31", "time": "10:00", "endTime": "20:00"},
-    {"title": "New Year's Day Hours", "date": "2026-01-01", "time": "12:00", "endTime": "21:00"}
-  ]
-
-⚠️ IMPORTANT: Store hours / mall hours posts are typically NOT events!
-Set isEvent: false for posts that are just announcing operating hours.
-
-⚠️ CRITICAL: END TIME EXTRACTION FOR SUB-EVENTS
-- ALWAYS extract endTime for each subEvent when available
-- For DJ lineups: estimate 1-1.5 hour sets (e.g., 8PM DJ → endTime: "21:30")
-- For multi-day same-event: inherit endTime from main event
-- For different weekday/weekend hours, use separate subEvents:
-  EXAMPLE - Different Hours on Different Days:
-  """
-  Open 6 PM - 1 AM (Tues-Fri)
-  6 PM - 3 AM on weekends
-  """
-  → Main eventTime: "18:00", endTime: "01:00" (weekday default)
-  → Add in description: "Extended to 3 AM on Fri/Sat"
-  → Or use subEvents: [
-       {"title": "Weekday Hours", "time": "18:00", "endTime": "01:00", "description": "Tues-Fri"},
-       {"title": "Weekend Hours", "time": "18:00", "endTime": "03:00", "description": "Sat-Sun"}
-     ]
 
 ═══════════════════════════════════════════════════════════════
+🌏 STEP 8: GEOGRAPHIC FILTERING (NCR ONLY)
+═══════════════════════════════════════════════════════════════
 
-⚠️ CRITICAL: HISTORICAL POST DETECTION
-- This post was made ${postAgeInDays} days ago
-- If the extracted event date is BEFORE the post date, this is a HISTORICAL POST about a past event
-- DO NOT increment the year! A "May 3" post from May 2025 is NOT a May 2026 event
-- If the event date has already passed, set isEvent: false and note "Historical post - event already occurred"
+This app covers METRO MANILA (NCR) PHILIPPINES ONLY!
 
-CRITICAL VALIDATION RULES:
-1. eventDate MUST be on or after the POST date (${postDate.toISOString().split('T')[0]}), not today
-2. If an event date is in the past relative to TODAY (${today}), it's already passed - set isEvent: false
-3. DO NOT auto-increment year for past dates! "May 3" in a May 5 post means May 3 (already passed), NOT next year
-4. eventDate year MUST be ${currentYear} or ${currentYear + 1}
-5. If you see past dates, check if it's a recurring event - if so, calculate the NEXT occurrence
-6. DO NOT extract phone numbers as prices (e.g., 09171234567 is NOT a price)
-7. DO NOT extract years as times (e.g., 2025 is NOT a time)
-8. Times should be in HH:MM format (24-hour)
-9. Prices in Philippines are typically ₱100-₱5000 for events
+SET isEvent: false and category: "outside_service_area" if you detect:
+- US phone area codes: 541-, 212-, 310-, 415-, etc.
+- US address formats: "W Olive Street", "123 Main St"
+- International domains: .org (non-PH), .com.au, .co.uk
+- Explicit non-NCR locations: "Pampanga", "Cavite", "Laguna", "Bulacan", "Batangas"
+- International locations: "Oregon", "California", "Japan", "Singapore"
 
-⚠️ NOT AN EVENT - Set isEvent: false if:
-- This is a GIVEAWAY/RAFFLE post (contains "giveaway", "raffle", "win a", "winners announced", "lucky winner", "how to enter", "tag 2 friends", "follow this page", "like & share")
-  → Social media giveaways/contests are NOT physical events! They are online promotions.
-- This is a THANK YOU / RECAP post (contains "thank you", "merci", "what a night", "until next time")
-- This is a THROWBACK post (contains "#tbt", "#throwback", "look back", "memories")
-- This is a VENUE PROMO (contains "host your events", "book our space", "private events", "for bookings")
-- This is a PRODUCT/MENU post (contains "new on the menu", "now serving", "try our", "limited edition")
-- This is a CALL FOR APPLICATIONS (contains "calling all vendors", "now accepting applications", "apply now")
-- This is a VENUE HOURS ANNOUNCEMENT (just announcing operating hours with no specific event) - set isEvent: false
-- Says "Every [day]" without a specific date
-- Generic promo: "Visit us", "Come check out", "Be in the loop"
+═══════════════════════════════════════════════════════════════
+🔄 STEP 9: RECURRING vs MULTI-DAY DISTINCTION
+═══════════════════════════════════════════════════════════════
 
-⚠️ RECURRING VS MULTI-DAY - CRITICAL DISTINCTION:
-- MULTI-DAY EVENT (is_recurring: false): "Nov 8-9", "Dec 27-30", "This weekend"
-  → Set eventDate to first day, eventEndDate to last day
-- RECURRING EVENT (is_recurring: true): ONLY if explicit pattern language exists:
-  ✅ "Every Friday", "Weekly", "Monthly", "First Saturday of every month"
-  ❌ "Friday and Saturday" (NOT recurring)
-  ❌ "Nov 8-9" (NOT recurring)
+MULTI-DAY EVENT (isRecurring: false):
+- "Nov 8-9", "Dec 27-30", "This weekend"
+- Set eventDate to first day, eventEndDate to last day
+- Create subEvents for each day with times
 
-⚠️ NON-CONTINUOUS MULTI-DATE EVENTS:
-- "Dec 7, 13, 14, 20, 21" → eventDate: "2025-12-07", allEventDates: ["2025-12-07", "2025-12-13", "2025-12-14", "2025-12-20", "2025-12-21"]
+RECURRING EVENT (isRecurring: true) - ONLY with explicit pattern:
+✅ "Every Friday", "Weekly", "Monthly", "First Saturday of every month"
+✅ recurrencePattern format: "weekly:friday", "monthly:first-saturday"
 
-⚠️ NIGHTLIFE MIDNIGHT RULE:
-- In nightlife context, times 12MN to 4AM belong to the NIGHT of the previous date
-- "Dec 5 at 12MN" = party starts late Dec 5 (technically Dec 6 00:00)
+❌ NOT RECURRING:
+- "Friday and Saturday" (just 2 specific days)
+- "Nov 8-9" (date range, not pattern)
+- "This weekend" (specific weekend, not recurring)
 
-VENUE/LOCATION - ⚠️ STRICT RULES:
-- Extract the ACTUAL venue name from the post content
-- PRIORITY ORDER:
-  1. 📍 emoji followed by venue name (MOST RELIABLE)
-  2. "Location:", "Venue:", "Where:" labels
-  3. Explicit venue mentions in caption text
-- If venue matches a KNOWN VENUE, use that EXACT spelling
-- ❌ NEVER extract venue from @mentions or hashtags
+═══════════════════════════════════════════════════════════════
+📊 CONFIDENCE SCORING
+═══════════════════════════════════════════════════════════════
+${hasImage ? `
+0.90-1.00: ALL core fields clearly visible in BOTH image AND caption
+0.80-0.89: Core fields clear in either image OR caption, minor inference needed
+0.70-0.79: Some interpretation needed (AM/PM inference, date format parsing)
+0.60-0.69: Multiple fields inferred, some uncertainty
+< 0.60: High uncertainty - consider setting uncertain fields to null` : 
+`0.60-0.80: Caption-only extraction with clear information
+0.40-0.60: Caption has partial information, some inference
+< 0.40: Very limited caption information`}
 
-PRICE EXTRACTION:
-- Single price: "₱500" → price: 500, priceMin: 500, priceMax: 500
-- Range: "₱300-500" → priceMin: 300, priceMax: 500
-- Tiered: "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, priceNotes: "GA ₱500, VIP ₱1500"
-- Free or PWYC: "Free entry", "PWYC" → isFree: true
-- US Dollar prices: "$12-$28" → priceMin: 12, priceMax: 28, priceNotes: "USD pricing"
-  ⚠️ If you see $ pricing (not ₱), this may be an INTERNATIONAL event!
-
-⚠️ INTERNATIONAL/NON-NCR VENUE DETECTION:
-Set isEvent: false and category: "outside_service_area" if you detect:
-- US phone area codes (541-, 212-, 310-, etc.)
-- US street formats: "W Olive Street", "123 Main St", numbered streets
-- US/international domains: coastarts.org, .com.au, .co.uk (not Philippine)
-- Explicit US locations: "Oregon", "California", "New York", etc.
-- Non-Philippine countries: "USA", "Australia", "Japan", etc.
-- International venue names: "Oregon Coast Aquarium", "Newport Performing Arts Center" (Oregon)
-This app only covers METRO MANILA (NCR) Philippines events!
-
-CONFIDENCE GUIDELINES:
-${hasImage ? `- 0.9+ ONLY if all core fields clear in BOTH image AND caption
-- 0.8-0.89 if fields clear in either image OR caption
-- 0.6-0.79 if interpreting date formats or inferring AM/PM
-- < 0.6 if guessing - consider setting field to null` : 
-`- 0.5-0.7 for caption-only extraction
-- Lower confidence if date, time, or venue is unclear`}
-
-REMEMBER: signupUrl and subEvents are CRITICAL fields. Do not skip them!`;
+═══════════════════════════════════════════════════════════════
+✨ FINAL REMINDERS
+═══════════════════════════════════════════════════════════════
+1. signupUrl - ALWAYS check for URLs, don't skip this field!
+2. endTime - ALWAYS extract when time range is given!
+3. subEvents - ALWAYS expand date ranges and extract multi-activity schedules!
+4. venueName - Use EXACT spelling from known venues database!
+5. When uncertain, set field to null - don't guess!
+6. Include your reasoning in the "reasoning" field!`;
 }
 
 /**
