@@ -541,27 +541,40 @@ DATE RANGE vs NON-CONTINUOUS DATES:
 ⏰ STEP 3: TIME EXTRACTION (CRITICAL - ALWAYS EXTRACT BOTH START AND END)
 ═══════════════════════════════════════════════════════════════
 
-⚠️ MANDATORY: Always look for BOTH eventTime (start) AND endTime (end)!
+⚠️ MANDATORY: ALWAYS look for BOTH eventTime (start) AND endTime (end)!
+⚠️ THIS IS THE #1 MISSED FIELD - PAY CLOSE ATTENTION!
 
 TIME FORMAT PATTERNS TO RECOGNIZE:
 - "7PM" → "19:00"
 - "7:30PM" → "19:30"
 - "19:00" → "19:00" (already 24-hour)
+- "12NN" / "12 noon" → "12:00"
+- "12MN" / "midnight" → "00:00"
 - "alas-7 ng gabi" → "19:00" (Filipino: 7 PM)
 - "alas-10 ng umaga" → "10:00" (Filipino: 10 AM)
 
-TIME RANGES - EXTRACT BOTH START AND END:
+TIME RANGES - EXTRACT BOTH START AND END (CRITICAL!):
 - "6PM - 1AM" → eventTime: "18:00", endTime: "01:00"
 - "10:00 AM - 6:00 PM" → eventTime: "10:00", endTime: "18:00"
+- "11AM - 7PM" → eventTime: "11:00", endTime: "19:00"
 - "Doors 7PM, Show 8PM until 12MN" → eventTime: "19:00", endTime: "00:00"
-- "6PM onwards" → eventTime: "18:00", endTime: null (no end specified)
 
-DIFFERENT HOURS FOR DIFFERENT DAYS:
-When a venue has different hours on weekdays vs weekends, create separate subEvents:
+ESTIMATE END TIME WHEN NOT EXPLICIT:
+- "6PM onwards" → eventTime: "18:00", endTime: "23:00" (nightlife estimate)
+- "Doors open 8PM" → eventTime: "20:00", endTime: "02:00" (nightlife estimate)
+- "3PM" (market/fair) → eventTime: "15:00", endTime: "21:00" (day event estimate)
+- Workshop with no end time → add 2-3 hours to start time
+
+⚠️ DIFFERENT TIMES FOR DIFFERENT DAYS (CRITICAL FOR SUB-EVENTS):
+When multi-day event has DIFFERENT times per day, capture in subEvents:
+- "Dec 13, Sat | 11AM - 7PM" → subEvent: {date: "2025-12-13", time: "11:00", endTime: "19:00"}
+- "Dec 14, Sun | 12NN - 7PM" → subEvent: {date: "2025-12-14", time: "12:00", endTime: "19:00"}
+Each day MUST have its own time and endTime extracted independently!
+
+DIFFERENT HOURS FOR WEEKDAYS VS WEEKENDS:
 - "6PM-1AM weekdays, 6PM-3AM weekends" →
   Main event: eventTime: "18:00", endTime: "01:00"
-  PLUS create subEvents:
-    [{"title": "Weekend Session", "time": "18:00", "endTime": "03:00", "description": "Fri-Sat extended hours"}]
+  PLUS create subEvents with different endTime for weekend days
 
 ⚠️ NEVER CONFUSE THESE AS TIMES:
 - Years: "2025", "2024" are NOT times
@@ -573,29 +586,35 @@ When a venue has different hours on weekdays vs weekends, create separate subEve
 💰 STEP 4: PRICE EXTRACTION (ACCURATE PESO AMOUNTS)
 ═══════════════════════════════════════════════════════════════
 
-PRICE PATTERNS TO RECOGNIZE:
-- "₱500" / "PHP 500" / "P500" / "500 pesos" → price: 500
-- "Free" / "Libre" / "Free admission" / "No cover" → isFree: true, price: null
-- "PWYC" / "Pay what you can" → isFree: true, priceNotes: "PWYC"
+⚠️ PRICE IS OFTEN MISSED - SEARCH CAREFULLY FOR THESE PATTERNS!
 
-PRICE RANGES (extract min AND max):
-- "₱300-500" → priceMin: 300, priceMax: 500
-- "₱500 to ₱1000" → priceMin: 500, priceMax: 1000
-- "starts at ₱350" → priceMin: 350, price: 350
+PRICE PATTERNS TO RECOGNIZE (SCAN ENTIRE CAPTION!):
+- "₱500" / "PHP 500" / "Php500" / "P500" / "500 pesos" → price: 500
+- "₱499 each" / "₱500/head" / "PHP 300 per person" → price: 499, 500, 300
+- "₱250 only" / "only ₱250" / "just P300" → price: 250, 300
+- "consumable" / "₱500 consumable" → price: 500, priceNotes: "consumable"
+- "entrance ₱200" / "door ₱350" / "cover ₱400" → extract the amount
+- "Free" / "Libre" / "Free admission" / "No cover" / "Free entry" → isFree: true, price: null
+- "PWYC" / "Pay what you can" → isFree: false, priceNotes: "PWYC"
+- "Donation based" → isFree: false, priceNotes: "Donation based"
+
+PRICE RANGES (extract BOTH min AND max):
+- "₱300-500" / "₱300 - ₱500" → priceMin: 300, priceMax: 500, price: 300
+- "₱500 to ₱1000" / "₱500-1000" → priceMin: 500, priceMax: 1000, price: 500
+- "starts at ₱350" / "from ₱350" → priceMin: 350, price: 350
+- "up to ₱2000" → priceMax: 2000
 
 TIERED PRICING (extract all tiers in priceNotes):
-- "₱500 GA / ₱1500 VIP" → 
-    priceMin: 500, priceMax: 1500, 
-    priceNotes: "GA ₱500, VIP ₱1500"
-- "Early bird ₱800, Regular ₱1000, Door ₱1200" →
-    priceMin: 800, priceMax: 1200,
-    priceNotes: "Early bird ₱800, Regular ₱1000, Door ₱1200"
+- "₱500 GA / ₱1500 VIP" → priceMin: 500, priceMax: 1500, price: 500, priceNotes: "GA ₱500, VIP ₱1500"
+- "Early bird ₱800, Regular ₱1000, Door ₱1200" → priceMin: 800, priceMax: 1200, price: 800, priceNotes: "Early bird ₱800, Regular ₱1000, Door ₱1200"
+- "Gen Ad ₱350 | VIP ₱500" → priceMin: 350, priceMax: 500, price: 350
 
 ⚠️ PRICE VALIDATION:
-- Philippine event prices are typically ₱100 - ₱5000
-- If price > ₱10,000, it might be a phone number - set to null
-- "0917..." or "0915..." are phone numbers, NOT prices!
-- If isFree: true, then price should be null (not 0)
+- Philippine event prices typically ₱100 - ₱5000
+- If price > ₱10,000, likely a phone number - set to null
+- "0917...", "0915...", "09XX" patterns are phone numbers, NOT prices!
+- If isFree: true, then price MUST be null (never 0)
+- Never set price: 0 - use isFree: true instead
 
 USD PRICES (may indicate international event):
 - "$12-$28" → priceNotes: "USD pricing - $12-$28"
@@ -648,35 +667,52 @@ SPECIAL URL INDICATORS:
 📋 STEP 7: SUB-EVENTS EXTRACTION (MULTI-ACTIVITY POSTS)
 ═══════════════════════════════════════════════════════════════
 
+⚠️ THIS IS CRITICAL FOR MULTI-DAY EVENTS WITH DIFFERENT TIMES!
+
 CREATE subEvents WHEN POST HAS:
 - Multiple screenings/shows with different times
-- Different performers with set times
+- Different performers with set times  
 - Workshop schedule with multiple sessions
 - Market with different vendor time slots
-- Multi-day event with activities each day
+- Multi-day event with DIFFERENT TIMES each day
 
-⚠️ DATE RANGE EXPANSION (CRITICAL):
-"Dec 12-14" must become 3 separate subEvents:
-[
-  {"title": "Event Name", "date": "2025-12-12", "time": "19:00", "endTime": "23:00"},
-  {"title": "Event Name", "date": "2025-12-13", "time": "19:00", "endTime": "23:00"},
-  {"title": "Event Name", "date": "2025-12-14", "time": "19:00", "endTime": "23:00"}
+⚠️ DATE RANGE WITH DIFFERENT TIMES PER DAY (CRITICAL!):
+When each day has its own time listed, capture them SEPARATELY:
+
+Example: "Dec 13, Sat | 11AM - 7PM / Dec 14, Sun | 12NN - 7PM"
+→ subEvents: [
+  {"title": "Saturday Session", "date": "2025-12-13", "time": "11:00", "endTime": "19:00"},
+  {"title": "Sunday Session", "date": "2025-12-14", "time": "12:00", "endTime": "19:00"}
 ]
 
-⚠️ INHERIT TIMES FROM MAIN EVENT:
-If main event is "11:00 AM - 6:00 PM" and has multiple days:
-Each subEvent should have time: "11:00" and endTime: "18:00"
+Example: "Sat 11AM-7PM, Sun 12PM-7PM"  
+→ subEvents: [
+  {"title": "Saturday", "date": "...", "time": "11:00", "endTime": "19:00"},
+  {"title": "Sunday", "date": "...", "time": "12:00", "endTime": "19:00"}
+]
 
-FILM/SCREENING SCHEDULE EXAMPLE:
+⚠️ DATE RANGE EXPANSION (SAME TIME EACH DAY):
+"Dec 12-14, 6PM-11PM" → 3 subEvents with SAME time:
+[
+  {"title": "Event Name", "date": "2025-12-12", "time": "18:00", "endTime": "23:00"},
+  {"title": "Event Name", "date": "2025-12-13", "time": "18:00", "endTime": "23:00"},
+  {"title": "Event Name", "date": "2025-12-14", "time": "18:00", "endTime": "23:00"}
+]
+
+⚠️ INHERIT TIMES FROM MAIN EVENT WHEN NOT SPECIFIED:
+If main event is "11:00 AM - 6:00 PM" and has multiple days:
+Each subEvent MUST have time: "11:00" and endTime: "18:00"
+
+FILM/SCREENING SCHEDULE (ALWAYS INCLUDE endTime - estimate 2hrs for films):
 """
 Dec 12 (Fri): 4PM Padamlagan | 6:30PM Bloom
 Dec 13 (Sat): 1:30PM Mang Serapio | 4PM May Araw Pa
 """
 → subEvents: [
-  {"title": "Padamlagan", "date": "2025-12-12", "time": "16:00"},
-  {"title": "Bloom", "date": "2025-12-12", "time": "18:30"},
-  {"title": "Mang Serapio", "date": "2025-12-13", "time": "13:30"},
-  {"title": "May Araw Pa", "date": "2025-12-13", "time": "16:00"}
+  {"title": "Padamlagan", "date": "2025-12-12", "time": "16:00", "endTime": "18:00"},
+  {"title": "Bloom", "date": "2025-12-12", "time": "18:30", "endTime": "20:30"},
+  {"title": "Mang Serapio", "date": "2025-12-13", "time": "13:30", "endTime": "15:30"},
+  {"title": "May Araw Pa", "date": "2025-12-13", "time": "16:00", "endTime": "18:00"}
 ]
 
 PERFORMERS/LINEUP (NO specific times given):
