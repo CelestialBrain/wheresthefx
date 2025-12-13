@@ -715,14 +715,26 @@ Dec 13 (Sat): 1:30PM Mang Serapio | 4PM May Araw Pa
   {"title": "May Araw Pa", "date": "2025-12-13", "time": "16:00", "endTime": "18:00"}
 ]
 
-PERFORMERS/LINEUP (NO specific times given):
+PERFORMERS/LINEUP EXTRACTION (CRITICAL - ALWAYS EXTRACT ALL ARTISTS):
+Look for patterns: "featuring:", "with:", "lineup:", "performers:", "w/", "ft.", "starring:", "guests:"
+
 "w/ Project Goo, Rock Town Asia, Rainy Weekend"
 → subEvents: [
   {"title": "Project Goo", "description": "performer"},
   {"title": "Rock Town Asia", "description": "performer"},
   {"title": "Rainy Weekend", "description": "performer"}
 ]
-Note: Performers WITHOUT dates - they play at main event time
+
+"lineup: Maybe Later, The Semi Circles, Turnout, No ID No Entry"
+→ subEvents: [
+  {"title": "Maybe Later", "description": "performer"},
+  {"title": "The Semi Circles", "description": "performer"},
+  {"title": "Turnout", "description": "performer"},
+  {"title": "No ID No Entry", "description": "performer"}
+]
+
+⚠️ IMPORTANT: Performers WITHOUT specific times don't need dates - they perform at main event time
+⚠️ Always use description: "performer" for artists/bands/DJs listed without times
 
 DJ SETS (estimate 1-1.5 hour sets):
 "8PM DJ Rico, 10PM DJ Mia"
@@ -959,6 +971,17 @@ async function processPost(post) {
           console.log(`    ⚠️ Caption has time slots but regex couldn't extract - may need manual review`);
         }
       }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // SUB-EVENTS DATE INHERITANCE - CRITICAL FIX
+    // ═══════════════════════════════════════════════════════════════
+    if (aiResult.subEvents && aiResult.subEvents.length > 0 && aiResult.eventDate) {
+      aiResult.subEvents = aiResult.subEvents.map(se => ({
+        ...se,
+        date: se.date || aiResult.eventDate  // Inherit parent date if null
+      }));
+      console.log(`    📅 Applied date inheritance to ${aiResult.subEvents.length} sub-events`);
     }
     
     // ═══════════════════════════════════════════════════════════════

@@ -316,7 +316,8 @@ export function ConsolidatedReviewQueue() {
       let query = supabase
         .from("instagram_posts")
         .select("review_tier, event_date")
-        .eq("is_event", true);
+        .eq("is_event", true)
+        .eq("needs_review", true);
       
       const { data, error } = await query;
       
@@ -347,6 +348,7 @@ export function ConsolidatedReviewQueue() {
           instagram_account:instagram_accounts(username)
         `)
         .eq("is_event", true)
+        .eq("needs_review", true)
         .eq("review_tier", tierTab);
 
       const { data, error } = await query.order("created_at", { ascending: false });
