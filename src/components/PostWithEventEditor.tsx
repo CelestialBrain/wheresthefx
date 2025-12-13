@@ -933,17 +933,35 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
 
           <div className="space-y-2">
             <Label htmlFor="signup">Signup URL</Label>
-            <div className="relative">
-              <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                id="signup"
-                type="url"
-                className="pl-10"
-                value={eventData.signup_url}
-                onChange={(e) => setEventData({ ...eventData, signup_url: e.target.value })}
-                placeholder="https://..."
-              />
-            </div>
+            {['link_in_bio', 'dm_for_slots', 'check_bio'].includes(eventData.signup_url) ? (
+              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
+                <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground italic">
+                  {eventData.signup_url === 'link_in_bio' ? '🔗 Link in Instagram bio' : 
+                   eventData.signup_url === 'dm_for_slots' ? '💬 DM for reservations' :
+                   '📱 Check Instagram bio'}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEventData({ ...eventData, signup_url: "" })}
+                >
+                  Clear
+                </Button>
+              </div>
+            ) : (
+              <div className="relative">
+                <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="signup"
+                  type="url"
+                  className="pl-10"
+                  value={eventData.signup_url}
+                  onChange={(e) => setEventData({ ...eventData, signup_url: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">

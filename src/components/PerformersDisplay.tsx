@@ -32,11 +32,16 @@ export const PerformersDisplay = ({ subEvents, className = "" }: PerformersDispl
   }
 
   // Filter to performers: either explicitly marked, or entries that look like performer names
-  // (short titles without typical event words, often in groups of 3+)
+  const performerDescriptions = ['performer', 'dj set', 'dj', 'b2b', 'live set', 'headliner', 'opening act'];
+  
   const performers = events.filter(e => {
-    // Explicitly marked as performer
+    // Explicitly marked as performer type
+    if (e.description && performerDescriptions.includes(e.description.toLowerCase())) return true;
     if (e.description === 'performer' && !e.date) return true;
     if (e.artist) return true;
+    
+    // Check if description contains performer-like keywords
+    if (e.description && /\b(b2b|dj|set|live)\b/i.test(e.description)) return true;
     
     // If multiple sub-events exist with same date and short titles (likely performers)
     if (e.title && e.title.length < 30) {
