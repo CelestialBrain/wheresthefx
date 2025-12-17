@@ -71,23 +71,39 @@ ALTER TABLE public.event_dates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.event_updates ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies for event_dates
-CREATE POLICY "Event dates are viewable by everyone" 
-ON public.event_dates 
-FOR SELECT 
-USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Event dates are viewable by everyone"
+  ON public.event_dates
+  FOR SELECT
+  USING (true);
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'policy "Event dates are viewable by everyone" already exists, skipping';
+END $$;
 
-CREATE POLICY "Admins can manage event dates" 
-ON public.event_dates 
-FOR ALL 
-USING (has_role(auth.uid(), 'admin'::app_role));
+DO $$ BEGIN
+  CREATE POLICY "Admins can manage event dates"
+  ON public.event_dates
+  FOR ALL
+  USING (has_role(auth.uid(), 'admin'::app_role));
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'policy "Admins can manage event dates" already exists, skipping';
+END $$;
 
 -- RLS policies for event_updates
-CREATE POLICY "Event updates are viewable by everyone" 
-ON public.event_updates 
-FOR SELECT 
-USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Event updates are viewable by everyone"
+  ON public.event_updates
+  FOR SELECT
+  USING (true);
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'policy "Event updates are viewable by everyone" already exists, skipping';
+END $$;
 
-CREATE POLICY "Admins can manage event updates" 
-ON public.event_updates 
-FOR ALL 
-USING (has_role(auth.uid(), 'admin'::app_role));
+DO $$ BEGIN
+  CREATE POLICY "Admins can manage event updates"
+  ON public.event_updates
+  FOR ALL
+  USING (has_role(auth.uid(), 'admin'::app_role));
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'policy "Admins can manage event updates" already exists, skipping';
+END $$;
