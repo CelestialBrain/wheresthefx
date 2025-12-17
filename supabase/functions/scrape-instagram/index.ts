@@ -1203,18 +1203,24 @@ Deno.serve(async (req) => {
           let defaultCategory: string | null = null;
           
           if (post.ownerUsername) {
-            const { data: account } = await supabase
+            const { data: account, error: accountFetchError } = await supabase
               .from('instagram_accounts')
               .select('id, default_category')
               .eq('username', post.ownerUsername.toLowerCase())
               .maybeSingle();
-            
+
+            if (accountFetchError) {
+              await ingestLogger?.error('fetch', `Failed to fetch account @${post.ownerUsername}`, { postId: post.postId }, {
+                error: accountFetchError.message,
+              });
+            }
+
             if (account) {
               accountId = account.id;
               defaultCategory = account.default_category;
             } else {
               // Create new account
-              const { data: newAccount } = await supabase
+              const { data: newAccount, error: accountCreateError } = await supabase
                 .from('instagram_accounts')
                 .insert({
                   username: post.ownerUsername.toLowerCase(),
@@ -1223,12 +1229,31 @@ Deno.serve(async (req) => {
                 })
                 .select('id')
                 .single();
-              
+
+              if (accountCreateError) {
+                await ingestLogger?.error('save', `Failed to create account @${post.ownerUsername}`, { postId: post.postId }, {
+                  error: accountCreateError.message,
+                  code: accountCreateError.code,
+                });
+                failed++;
+                continue; // Skip this post if account creation fails
+              }
+
               if (newAccount) {
                 accountId = newAccount.id;
                 await ingestLogger?.info('save', `Created new account: @${post.ownerUsername}`, { postId: post.postId });
               }
             }
+          }
+
+          // Verify accountId is set before proceeding
+          if (!accountId) {
+            await ingestLogger?.error('validation', `Missing accountId for post ${post.postId}`, {
+              postId: post.postId,
+              ownerUsername: post.ownerUsername
+            });
+            failed++;
+            continue;
           }
           
           // Use account's default_category if AI didn't detect one
