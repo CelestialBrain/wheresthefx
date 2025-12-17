@@ -1,0 +1,57 @@
+-- Add 30+ missing venues to known_venues table
+-- Based on analysis of posts with "No venue match found" warnings
+
+-- INSERT INTO public.known_venues (name, aliases, address, city, lat, lng, instagram_handle)
+VALUES
+  -- Art & Culture Venues
+  ('Drawing Room Manila', ARRAY['Drawing Room', 'drawingroommanila', 'The Drawing Room'], 'Power Plant Mall, Rockwell Center, Makati', 'Makati', 14.56512, 121.03845, 'drawingroommanila'),
+  ('UPFI Film Center', ARRAY['UP Film Institute', 'UP Film Center', 'Film Center UP', 'upfifilmcenter'], 'University of the Philippines, Diliman, Quezon City', 'Quezon City', 14.65453, 121.06654, 'upfifilmcenter'),
+  ('Cinematheque Centre Manila', ARRAY['Cinematheque Manila', 'Cinematheque', 'cinemathequemnl'], '855 TM Kalaw St., Ermita, Manila', 'Manila', 14.58234, 120.98123, 'cinemathequemnl'),
+  ('Vargas Museum', ARRAY['Jorge B. Vargas Museum', 'UP Vargas Museum'], 'Roxas Ave., University of the Philippines, Diliman, Quezon City', 'Quezon City', 14.65612, 121.06234, NULL),
+  ('The Mind Museum', ARRAY['Mind Museum', 'TMM'], 'JY Campos Park, 3rd Avenue, Bonifacio Global City, Taguig', 'Taguig', 14.55012, 121.04567, 'themindmuseum'),
+  
+  -- Nightlife & Bars
+  ('Lost and Found Makati', ARRAY['Lost and Found', 'Lost & Found Makati', 'lostandfoundatmakati', 'Lost+Found'], '4949 Durban St., Poblacion, Makati', 'Makati', 14.56512, 121.02987, 'lostandfoundatmakati'),
+  ('The Beach House Taft', ARRAY['Beach House Taft', 'Beach House Manila', 'thebeachhousetaft'], 'Taft Avenue, Manila', 'Manila', 14.56234, 120.99456, NULL),
+  ('Sanctuary Manila', ARRAY['Sanctuary', 'sanctuary.mnl'], 'Poblacion, Makati', 'Makati', 14.56456, 121.03012, 'sanctuary.mnl'),
+  ('Route 196', ARRAY['Route196', 'route196bar'], '196 Katipunan Ave., Quezon City', 'Quezon City', 14.63123, 121.07345, 'route196bar'),
+  
+  -- Cafes & Food
+  ('Cafe Agapita', ARRAY['Agapita', 'cafeagapita'], 'Maginhawa Street, Quezon City', 'Quezon City', 14.63987, 121.04567, 'cafeagapita'),
+  ('Sevs Cafe', ARRAY['Sev''s Cafe', 'sevscafe'], 'Quezon City', 'Quezon City', 14.63654, 121.04234, 'sevscafe'),
+  ('Coffee Architect', ARRAY['coffeearchitect', 'Coffee Architect PH'], 'Quezon City', 'Quezon City', 14.64012, 121.05123, 'coffeearchitect__'),
+  ('Jungle Base Cafe', ARRAY['Jungle Base', 'junglebasecafe'], 'La Union', 'La Union', 16.61234, 120.31567, NULL),
+  
+  -- Markets & Events Spaces
+  ('Mercato Centrale', ARRAY['Mercato', 'mercatocentrale', 'Mercato Centrale BGC'], 'Bonifacio Global City, Taguig', 'Taguig', 14.55234, 121.04789, 'mercatocentraleph'),
+  ('SMX Aura', ARRAY['SMX Convention Center Aura', 'SMX Aura Premier'], 'SM Aura Premier, Bonifacio Global City, Taguig', 'Taguig', 14.54234, 121.05567, NULL),
+  ('SMX Convention Center', ARRAY['SMX MOA', 'SMX Convention Center MOA'], 'SM Mall of Asia Complex, Pasay', 'Pasay', 14.53234, 120.98345, NULL),
+  ('Sundeck Party Zhostel', ARRAY['Sundeck Zhostel', 'sundeck.zh'], 'Poblacion, Makati', 'Makati', 14.56345, 121.03123, NULL),
+  
+  -- More Art Spaces
+  ('HUB Make Lab', ARRAY['HUB MakeLab', 'hubmakelab'], 'Rockwell Center, Makati', 'Makati', 14.56345, 121.03789, 'hubmakelab'),
+  ('Le Pavillon', ARRAY['Le Pavillon Manila', 'lepavillon'], 'Metropolitan Park, Pasay', 'Pasay', 14.52987, 120.98234, NULL),
+  ('Fusebox Lifestyle Complex', ARRAY['Fusebox', 'fuseboxph'], 'Chino Roces Ave., Makati', 'Makati', 14.55678, 121.02345, NULL),
+  ('White Rabbit Building', ARRAY['White Rabbit', 'whiterabbitbldg'], 'Poblacion, Makati', 'Makati', 14.56478, 121.03056, NULL),
+  
+  -- Theaters & Performance
+  ('UP Amphitheater', ARRAY['UP Amphi', 'UP Ampitheater'], 'University of the Philippines, Diliman, Quezon City', 'Quezon City', 14.65234, 121.06456, NULL),
+  ('UP Sunken Garden', ARRAY['Sunken Garden', 'UP Sunken'], 'University of the Philippines, Diliman, Quezon City', 'Quezon City', 14.65456, 121.06234, NULL),
+  ('CCP Main Theater', ARRAY['Cultural Center of the Philippines', 'CCP', 'CCP Main'], 'CCP Complex, Roxas Blvd., Pasay', 'Pasay', 14.55123, 120.98567, 'culturalcenterph'),
+  ('Tanghalang Nicanor Abelardo', ARRAY['TNA', 'CCP Little Theater'], 'CCP Complex, Roxas Blvd., Pasay', 'Pasay', 14.55156, 120.98534, NULL),
+  ('Metropolitan Theater', ARRAY['Met Theater', 'The Met Manila'], 'Padre Burgos Avenue, Ermita, Manila', 'Manila', 14.58912, 120.98123, NULL),
+  ('Aliw Theater', ARRAY['Aliw', 'aliwtheater'], 'Star City Complex, CCP Complex, Pasay', 'Pasay', 14.54567, 120.98234, NULL),
+  
+  -- Malls & Commercial
+  ('Bos Coffee', ARRAY['Bo''s Coffee', 'BosCoffee'], 'Multiple locations', 'Metro Manila', 14.55000, 121.03000, 'bikinicoffeeph'),
+  ('The Corner House', ARRAY['Corner House', 'thecornerhouseph'], 'Poblacion, Makati', 'Makati', 14.56512, 121.03045, 'thecornerhouseph'),
+  ('Galerie Joaquin', ARRAY['Galerie Joaquin Manila'], 'Rockwell, Makati', 'Makati', 14.56234, 121.03567, NULL)
+  
+-- ON CONFLICT (name) DO UPDATE SET
+  aliases = EXCLUDED.aliases,
+  address = COALESCE(EXCLUDED.address, known_venues.address),
+  city = COALESCE(EXCLUDED.city, known_venues.city),
+  lat = COALESCE(EXCLUDED.lat, known_venues.lat),
+  lng = COALESCE(EXCLUDED.lng, known_venues.lng),
+  instagram_handle = COALESCE(EXCLUDED.instagram_handle, known_venues.instagram_handle),
+  updated_at = now();

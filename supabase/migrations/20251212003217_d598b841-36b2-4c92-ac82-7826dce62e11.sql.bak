@@ -1,0 +1,15 @@
+-- Add missing high-frequency venues to known_venues table
+-- These venues appeared in scraper warnings as "No venue match found"
+
+-- INSERT INTO public.known_venues (name, aliases, address, city, lat, lng)
+VALUES 
+  ('BGC Arts Center', ARRAY['BGC Arts Centre', 'Bonifacio Arts Center', 'Arts Center BGC'], '26th Street, Bonifacio Global City', 'Taguig', 14.5515, 121.0456),
+  ('Proscenium Theater', ARRAY['Proscenium', 'Proscenium Makati', 'The Proscenium'], 'Rockwell, Makati', 'Makati', 14.5550, 121.0240),
+  ('UST', ARRAY['University of Santo Tomas', 'U.S.T.', 'Ust Campus', 'Thomasian Campus', 'UST Main Campus'], 'España Blvd, Sampaloc', 'Manila', 14.6091, 120.9893),
+  ('BGC Amphitheatre', ARRAY['BGC Amphitheater', 'Amphitheatre BGC', 'Bonifacio Amphitheater', 'BGC Ampitheater'], '30th Street, Bonifacio Global City', 'Taguig', 14.5502, 121.0468),
+  ('Century City Mall', ARRAY['Century City', 'Century Mall Makati', 'CCM Makati'], 'Kalayaan Avenue, Makati', 'Makati', 14.5642, 121.0267),
+  ('SM Aura Premier', ARRAY['SM Aura', 'Aura Premier', 'SM BGC'], '26th Street corner McKinley Parkway, BGC', 'Taguig', 14.5489, 121.0556),
+  ('Ateneo de Manila University', ARRAY['ADMU', 'Ateneo', 'Ateneo University', 'Ateneo Katipunan'], 'Katipunan Avenue, Quezon City', 'Quezon City', 14.6407, 121.0769),
+  ('De La Salle University', ARRAY['DLSU', 'La Salle', 'De La Salle', 'DLSU Manila'], 'Taft Avenue, Manila', 'Manila', 14.5648, 120.9932),
+  ('UP Diliman', ARRAY['University of the Philippines', 'UP Campus', 'UPD', 'UP Diliman Campus'], 'Diliman, Quezon City', 'Quezon City', 14.6538, 121.0687)
+-- ON CONFLICT (name) DO NOTHING;
