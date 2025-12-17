@@ -10,13 +10,12 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
       account_venue_stats: {
         Row: {
-          created_at: string | null
           id: string
           instagram_account_id: string | null
           last_used_at: string | null
@@ -24,7 +23,6 @@ export type Database = {
           venue_name: string
         }
         Insert: {
-          created_at?: string | null
           id?: string
           instagram_account_id?: string | null
           last_used_at?: string | null
@@ -32,7 +30,6 @@ export type Database = {
           venue_name: string
         }
         Update: {
-          created_at?: string | null
           id?: string
           instagram_account_id?: string | null
           last_used_at?: string | null
@@ -91,57 +88,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      event_dates: {
-        Row: {
-          created_at: string
-          end_time: string | null
-          event_date: string
-          event_time: string | null
-          id: string
-          instagram_post_id: string | null
-          published_event_id: string | null
-          venue_address: string | null
-          venue_name: string | null
-        }
-        Insert: {
-          created_at?: string
-          end_time?: string | null
-          event_date: string
-          event_time?: string | null
-          id?: string
-          instagram_post_id?: string | null
-          published_event_id?: string | null
-          venue_address?: string | null
-          venue_name?: string | null
-        }
-        Update: {
-          created_at?: string
-          end_time?: string | null
-          event_date?: string
-          event_time?: string | null
-          id?: string
-          instagram_post_id?: string | null
-          published_event_id?: string | null
-          venue_address?: string | null
-          venue_name?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "event_dates_instagram_post_id_fkey"
-            columns: ["instagram_post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_dates_published_event_id_fkey"
-            columns: ["published_event_id"]
-            isOneToOne: false
-            referencedRelation: "published_events"
             referencedColumns: ["id"]
           },
         ]
@@ -282,54 +228,6 @@ export type Database = {
           },
         ]
       }
-      event_updates: {
-        Row: {
-          detected_at: string
-          id: string
-          new_date: string | null
-          old_date: string | null
-          original_post_id: string
-          reason: string | null
-          update_post_id: string | null
-          update_type: string
-        }
-        Insert: {
-          detected_at?: string
-          id?: string
-          new_date?: string | null
-          old_date?: string | null
-          original_post_id: string
-          reason?: string | null
-          update_post_id?: string | null
-          update_type: string
-        }
-        Update: {
-          detected_at?: string
-          id?: string
-          new_date?: string | null
-          old_date?: string | null
-          original_post_id?: string
-          reason?: string | null
-          update_post_id?: string | null
-          update_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "event_updates_original_post_id_fkey"
-            columns: ["original_post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_updates_update_post_id_fkey"
-            columns: ["update_post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       events: {
         Row: {
           capacity: number | null
@@ -455,6 +353,13 @@ export type Database = {
             referencedRelation: "extraction_patterns"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "extraction_corrections_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       extraction_feedback: {
@@ -502,40 +407,14 @@ export type Database = {
             referencedRelation: "extraction_patterns"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "extraction_feedback_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
         ]
-      }
-      extraction_ground_truth: {
-        Row: {
-          created_at: string | null
-          created_by: string | null
-          field_name: string
-          ground_truth_value: string
-          id: string
-          original_text: string | null
-          post_id: string | null
-          source: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          created_by?: string | null
-          field_name: string
-          ground_truth_value: string
-          id?: string
-          original_text?: string | null
-          post_id?: string | null
-          source?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          created_by?: string | null
-          field_name?: string
-          ground_truth_value?: string
-          id?: string
-          original_text?: string | null
-          post_id?: string | null
-          source?: string | null
-        }
-        Relationships: []
       }
       extraction_patterns: {
         Row: {
@@ -582,44 +461,10 @@ export type Database = {
         }
         Relationships: []
       }
-      geo_configuration: {
-        Row: {
-          config_key: string
-          config_type: string
-          config_value: string | null
-          created_at: string | null
-          id: string
-          is_active: boolean | null
-          notes: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          config_key: string
-          config_type: string
-          config_value?: string | null
-          created_at?: string | null
-          id?: string
-          is_active?: boolean | null
-          notes?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          config_key?: string
-          config_type?: string
-          config_value?: string | null
-          created_at?: string | null
-          id?: string
-          is_active?: boolean | null
-          notes?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       instagram_accounts: {
         Row: {
           bio: string | null
           created_at: string
-          default_category: string | null
           display_name: string | null
           follower_count: number | null
           id: string
@@ -634,7 +479,6 @@ export type Database = {
         Insert: {
           bio?: string | null
           created_at?: string
-          default_category?: string | null
           display_name?: string | null
           follower_count?: number | null
           id?: string
@@ -649,7 +493,6 @@ export type Database = {
         Update: {
           bio?: string | null
           created_at?: string
-          default_category?: string | null
           display_name?: string | null
           follower_count?: number | null
           id?: string
@@ -665,41 +508,31 @@ export type Database = {
       }
       instagram_posts: {
         Row: {
-          additional_images: string[] | null
           ai_confidence: number | null
           ai_extraction: Json | null
           ai_reasoning: string | null
-          availability_status: string | null
           caption: string | null
-          category: string | null
           comments_count: number | null
           created_at: string
-          duplicate_of: string | null
           end_time: string | null
           entity_extraction_method: string | null
           event_date: string | null
           event_end_date: string | null
-          event_status: string | null
           event_time: string | null
           event_title: string | null
-          extracted_hours: Json | null
           extraction_method: string | null
           hashtags: string[] | null
           id: string
           image_storage_path: string | null
           image_url: string | null
           instagram_account_id: string
-          is_duplicate: boolean | null
           is_event: boolean | null
           is_free: boolean
-          is_hours_post: boolean | null
-          is_recurring: boolean | null
           likes_count: number | null
           location_address: string | null
           location_lat: number | null
           location_lng: number | null
           location_name: string | null
-          location_status: string | null
           mentions: string[] | null
           needs_review: boolean | null
           ocr_confidence: number | null
@@ -713,58 +546,39 @@ export type Database = {
           post_url: string
           posted_at: string
           price: number | null
-          price_max: number | null
-          price_min: number | null
-          price_notes: string | null
-          recurrence_pattern: string | null
-          review_tier: string | null
           signup_url: string | null
           stored_image_url: string | null
-          sub_events: Json | null
           tags: string[] | null
           topic_confidence: number | null
           topic_label: string | null
           updated_at: string
-          urgency_score: number | null
-          url_type: string | null
-          validation_warnings: string[] | null
         }
         Insert: {
-          additional_images?: string[] | null
           ai_confidence?: number | null
           ai_extraction?: Json | null
           ai_reasoning?: string | null
-          availability_status?: string | null
           caption?: string | null
-          category?: string | null
           comments_count?: number | null
           created_at?: string
-          duplicate_of?: string | null
           end_time?: string | null
           entity_extraction_method?: string | null
           event_date?: string | null
           event_end_date?: string | null
-          event_status?: string | null
           event_time?: string | null
           event_title?: string | null
-          extracted_hours?: Json | null
           extraction_method?: string | null
           hashtags?: string[] | null
           id?: string
           image_storage_path?: string | null
           image_url?: string | null
           instagram_account_id: string
-          is_duplicate?: boolean | null
           is_event?: boolean | null
           is_free?: boolean
-          is_hours_post?: boolean | null
-          is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
           location_lat?: number | null
           location_lng?: number | null
           location_name?: string | null
-          location_status?: string | null
           mentions?: string[] | null
           needs_review?: boolean | null
           ocr_confidence?: number | null
@@ -778,58 +592,39 @@ export type Database = {
           post_url: string
           posted_at: string
           price?: number | null
-          price_max?: number | null
-          price_min?: number | null
-          price_notes?: string | null
-          recurrence_pattern?: string | null
-          review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
-          sub_events?: Json | null
           tags?: string[] | null
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
-          urgency_score?: number | null
-          url_type?: string | null
-          validation_warnings?: string[] | null
         }
         Update: {
-          additional_images?: string[] | null
           ai_confidence?: number | null
           ai_extraction?: Json | null
           ai_reasoning?: string | null
-          availability_status?: string | null
           caption?: string | null
-          category?: string | null
           comments_count?: number | null
           created_at?: string
-          duplicate_of?: string | null
           end_time?: string | null
           entity_extraction_method?: string | null
           event_date?: string | null
           event_end_date?: string | null
-          event_status?: string | null
           event_time?: string | null
           event_title?: string | null
-          extracted_hours?: Json | null
           extraction_method?: string | null
           hashtags?: string[] | null
           id?: string
           image_storage_path?: string | null
           image_url?: string | null
           instagram_account_id?: string
-          is_duplicate?: boolean | null
           is_event?: boolean | null
           is_free?: boolean
-          is_hours_post?: boolean | null
-          is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
           location_lat?: number | null
           location_lng?: number | null
           location_name?: string | null
-          location_status?: string | null
           mentions?: string[] | null
           needs_review?: boolean | null
           ocr_confidence?: number | null
@@ -843,30 +638,14 @@ export type Database = {
           post_url?: string
           posted_at?: string
           price?: number | null
-          price_max?: number | null
-          price_min?: number | null
-          price_notes?: string | null
-          recurrence_pattern?: string | null
-          review_tier?: string | null
           signup_url?: string | null
           stored_image_url?: string | null
-          sub_events?: Json | null
           tags?: string[] | null
           topic_confidence?: number | null
           topic_label?: string | null
           updated_at?: string
-          urgency_score?: number | null
-          url_type?: string | null
-          validation_warnings?: string[] | null
         }
         Relationships: [
-          {
-            foreignKeyName: "instagram_posts_duplicate_of_fkey"
-            columns: ["duplicate_of"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "instagram_posts_instagram_account_id_fkey"
             columns: ["instagram_account_id"]
@@ -917,7 +696,6 @@ export type Database = {
           learned_from_corrections: boolean | null
           lng: number | null
           name: string
-          operating_hours: Json | null
           updated_at: string | null
         }
         Insert: {
@@ -932,7 +710,6 @@ export type Database = {
           learned_from_corrections?: boolean | null
           lng?: number | null
           name: string
-          operating_hours?: Json | null
           updated_at?: string | null
         }
         Update: {
@@ -947,7 +724,6 @@ export type Database = {
           learned_from_corrections?: boolean | null
           lng?: number | null
           name?: string
-          operating_hours?: Json | null
           updated_at?: string | null
         }
         Relationships: []
@@ -1140,45 +916,6 @@ export type Database = {
         }
         Relationships: []
       }
-      pattern_suggestions: {
-        Row: {
-          attempt_count: number | null
-          created_at: string | null
-          expected_value: string | null
-          id: string
-          pattern_type: string
-          reviewed_at: string | null
-          reviewed_by: string | null
-          sample_text: string | null
-          status: string | null
-          suggested_regex: string
-        }
-        Insert: {
-          attempt_count?: number | null
-          created_at?: string | null
-          expected_value?: string | null
-          id?: string
-          pattern_type: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          sample_text?: string | null
-          status?: string | null
-          suggested_regex: string
-        }
-        Update: {
-          attempt_count?: number | null
-          created_at?: string | null
-          expected_value?: string | null
-          id?: string
-          pattern_type?: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          sample_text?: string | null
-          status?: string | null
-          suggested_regex?: string
-        }
-        Relationships: []
-      }
       post_rejections: {
         Row: {
           created_at: string | null
@@ -1207,7 +944,15 @@ export type Database = {
           rejected_by?: string | null
           rejection_reason?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "post_rejections_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "instagram_posts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -1256,9 +1001,7 @@ export type Database = {
       }
       published_events: {
         Row: {
-          availability_status: string | null
           caption: string | null
-          category: string | null
           comments_count: number | null
           created_at: string
           description: string | null
@@ -1266,7 +1009,6 @@ export type Database = {
           end_time: string | null
           event_date: string
           event_end_date: string | null
-          event_status: string | null
           event_time: string | null
           event_title: string
           id: string
@@ -1275,30 +1017,22 @@ export type Database = {
           instagram_post_url: string | null
           is_featured: boolean | null
           is_free: boolean
-          is_recurring: boolean | null
           likes_count: number | null
           location_address: string | null
           location_lat: number
           location_lng: number
           location_name: string
           price: number | null
-          price_max: number | null
-          price_min: number | null
-          price_notes: string | null
-          recurrence_pattern: string | null
           signup_url: string | null
           source_event_id: string | null
           source_post_id: string | null
           stored_image_url: string | null
           topic_label: string | null
           updated_at: string
-          urgency_score: number | null
           verified: boolean | null
         }
         Insert: {
-          availability_status?: string | null
           caption?: string | null
-          category?: string | null
           comments_count?: number | null
           created_at?: string
           description?: string | null
@@ -1306,7 +1040,6 @@ export type Database = {
           end_time?: string | null
           event_date: string
           event_end_date?: string | null
-          event_status?: string | null
           event_time?: string | null
           event_title: string
           id?: string
@@ -1315,30 +1048,22 @@ export type Database = {
           instagram_post_url?: string | null
           is_featured?: boolean | null
           is_free?: boolean
-          is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
           location_lat: number
           location_lng: number
           location_name: string
           price?: number | null
-          price_max?: number | null
-          price_min?: number | null
-          price_notes?: string | null
-          recurrence_pattern?: string | null
           signup_url?: string | null
           source_event_id?: string | null
           source_post_id?: string | null
           stored_image_url?: string | null
           topic_label?: string | null
           updated_at?: string
-          urgency_score?: number | null
           verified?: boolean | null
         }
         Update: {
-          availability_status?: string | null
           caption?: string | null
-          category?: string | null
           comments_count?: number | null
           created_at?: string
           description?: string | null
@@ -1346,7 +1071,6 @@ export type Database = {
           end_time?: string | null
           event_date?: string
           event_end_date?: string | null
-          event_status?: string | null
           event_time?: string | null
           event_title?: string
           id?: string
@@ -1355,24 +1079,18 @@ export type Database = {
           instagram_post_url?: string | null
           is_featured?: boolean | null
           is_free?: boolean
-          is_recurring?: boolean | null
           likes_count?: number | null
           location_address?: string | null
           location_lat?: number
           location_lng?: number
           location_name?: string
           price?: number | null
-          price_max?: number | null
-          price_min?: number | null
-          price_notes?: string | null
-          recurrence_pattern?: string | null
           signup_url?: string | null
           source_event_id?: string | null
           source_post_id?: string | null
           stored_image_url?: string | null
           topic_label?: string | null
           updated_at?: string
-          urgency_score?: number | null
           verified?: boolean | null
         }
         Relationships: [
@@ -1480,7 +1198,6 @@ export type Database = {
           dataset_id: string | null
           error_message: string | null
           id: string
-          last_heartbeat: string | null
           posts_added: number
           posts_updated: number
           run_type: Database["public"]["Enums"]["scrape_run_type"]
@@ -1493,7 +1210,6 @@ export type Database = {
           dataset_id?: string | null
           error_message?: string | null
           id?: string
-          last_heartbeat?: string | null
           posts_added?: number
           posts_updated?: number
           run_type: Database["public"]["Enums"]["scrape_run_type"]
@@ -1506,7 +1222,6 @@ export type Database = {
           dataset_id?: string | null
           error_message?: string | null
           id?: string
-          last_heartbeat?: string | null
           posts_added?: number
           posts_updated?: number
           run_type?: Database["public"]["Enums"]["scrape_run_type"]
@@ -1593,44 +1308,6 @@ export type Database = {
         }
         Relationships: []
       }
-      validation_logs: {
-        Row: {
-          corrected_value: string | null
-          created_at: string | null
-          field_name: string | null
-          id: string
-          instagram_post_id: string | null
-          original_value: string | null
-          warning_type: string
-        }
-        Insert: {
-          corrected_value?: string | null
-          created_at?: string | null
-          field_name?: string | null
-          id?: string
-          instagram_post_id?: string | null
-          original_value?: string | null
-          warning_type: string
-        }
-        Update: {
-          corrected_value?: string | null
-          created_at?: string | null
-          field_name?: string | null
-          id?: string
-          instagram_post_id?: string | null
-          original_value?: string | null
-          warning_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "validation_logs_instagram_post_id_fkey"
-            columns: ["instagram_post_id"]
-            isOneToOne: false
-            referencedRelation: "instagram_posts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       popular_instagram_accounts: {
@@ -1698,12 +1375,8 @@ export type Database = {
       event_type: "party" | "thrift" | "market" | "concert" | "other"
       event_visibility: "public" | "private" | "unlisted"
       report_status: "pending" | "reviewed" | "resolved"
-      scrape_run_status: "running" | "completed" | "failed" | "cancelled"
-      scrape_run_type:
-        | "manual_dataset"
-        | "manual_scrape"
-        | "automated"
-        | "github_actions_ingest"
+      scrape_run_status: "running" | "completed" | "failed"
+      scrape_run_type: "manual_dataset" | "manual_scrape" | "automated"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1837,13 +1510,8 @@ export const Constants = {
       event_type: ["party", "thrift", "market", "concert", "other"],
       event_visibility: ["public", "private", "unlisted"],
       report_status: ["pending", "reviewed", "resolved"],
-      scrape_run_status: ["running", "completed", "failed", "cancelled"],
-      scrape_run_type: [
-        "manual_dataset",
-        "manual_scrape",
-        "automated",
-        "github_actions_ingest",
-      ],
+      scrape_run_status: ["running", "completed", "failed"],
+      scrape_run_type: ["manual_dataset", "manual_scrape", "automated"],
     },
   },
 } as const
