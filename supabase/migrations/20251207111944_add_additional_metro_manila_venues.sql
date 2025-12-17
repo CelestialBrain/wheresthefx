@@ -2,23 +2,23 @@
 -- These venues were identified as frequently appearing in posts but missing coordinates
 -- This improves geocoding success rate for the Quick tier
 
-INSERT INTO public.known_venues (name, lat, lng, address, city, aliases) VALUES
-  ('The Fifth at Rockwell', 14.5649, 121.0545, 'Power Plant Mall', 'Makati', ARRAY['The Fifth', 'Fifth Rockwell']),
-  ('Burgos Park', 14.5528, 121.0502, 'Forbes Town, BGC', 'Taguig', ARRAY['Burgos Park BGC']),
-  ('Gyud Food UP', 14.6537, 121.0686, 'UP Diliman', 'Quezon City', ARRAY['Gyud Food', 'Gyud UP Diliman']),
-  ('3 Torre Lorenzo', 14.5574, 120.9878, 'Taft Avenue', 'Manila', ARRAY['Torre Lorenzo', '3TL']),
-  ('Salcedo Market', 14.5608, 121.0186, 'Jaime Velasquez Park', 'Makati', ARRAY['Salcedo Weekend Market']),
-  ('Nokal', 14.5641, 121.0313, 'Makati Cinema Square', 'Makati', ARRAY['Nokal Manila']),
-  ('New Frontier Theater', 14.6202, 121.0531, 'Araneta City', 'Quezon City', ARRAY['New Frontier']),
-  ('The Filinvest Tent', 14.4156, 121.0392, 'Filinvest City', 'Muntinlupa', ARRAY['Filinvest Tent']),
-  ('Estancia Mall', 14.5826, 121.0603, 'Capitol Commons', 'Pasig', ARRAY['Estancia']),
-  ('Cinema 76', 14.5994, 121.0338, 'San Juan', 'San Juan', ARRAY['Cinema76']),
-  ('Ayala Triangle', 14.5574, 121.0234, 'Ayala Triangle', 'Makati', ARRAY['Ayala Triangle Gardens']),
-  ('Circuit Makati', 14.5673, 121.0396, 'Circuit Makati', 'Makati', ARRAY['Circuit', 'Ayala Circuit'])
-ON CONFLICT (name) DO UPDATE SET
-  lat = EXCLUDED.lat,
-  lng = EXCLUDED.lng,
-  address = EXCLUDED.address,
-  city = EXCLUDED.city,
-  aliases = EXCLUDED.aliases;
-
+-- INSERT INTO public.known_venues (name, lat, lng, address, city, aliases) VALUES
+--   ('The Fifth at Rockwell', 14.5649, 121.0545, 'Power Plant Mall', 'Makati', ARRAY['The Fifth', 'Fifth Rockwell']),
+--   ('Burgos Park', 14.5528, 121.0502, 'Forbes Town, BGC', 'Taguig', ARRAY['Burgos Park BGC']),
+--   ('Gyud Food UP', 14.6537, 121.0686, 'UP Diliman', 'Quezon City', ARRAY['Gyud Food', 'Gyud UP Diliman']),
+--   ('3 Torre Lorenzo', 14.5574, 120.9878, 'Taft Avenue', 'Manila', ARRAY['Torre Lorenzo', '3TL']),
+--   ('Salcedo Market', 14.5608, 121.0186, 'Jaime Velasquez Park', 'Makati', ARRAY['Salcedo Weekend Market']),
+--   ('Nokal', 14.5641, 121.0313, 'Makati Cinema Square', 'Makati', ARRAY['Nokal Manila']),
+--   ('New Frontier Theater', 14.6202, 121.0531, 'Araneta City', 'Quezon City', ARRAY['New Frontier']),
+--   ('The Filinvest Tent', 14.4156, 121.0392, 'Filinvest City', 'Muntinlupa', ARRAY['Filinvest Tent']),
+--   ('Estancia Mall', 14.5826, 121.0603, 'Capitol Commons', 'Pasig', ARRAY['Estancia']),
+--   ('Cinema 76', 14.5994, 121.0338, 'San Juan', 'San Juan', ARRAY['Cinema76']),
+--   ('Ayala Triangle', 14.5574, 121.0234, 'Ayala Triangle', 'Makati', ARRAY['Ayala Triangle Gardens']),
+--   ('Circuit Makati', 14.5673, 121.0396, 'Circuit Makati', 'Makati', ARRAY['Circuit', 'Ayala Circuit'])
+-- -- ON CONFLICT (name) DO UPDATE SET
+--   lat = EXCLUDED.lat,
+--   lng = EXCLUDED.lng,
+--   address = EXCLUDED.address,
+--   city = EXCLUDED.city,
+--   aliases = EXCLUDED.aliases;
+-- 

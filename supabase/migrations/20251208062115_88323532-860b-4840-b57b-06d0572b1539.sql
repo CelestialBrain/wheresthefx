@@ -3,22 +3,22 @@
 
 -- Add missing venues
 INSERT INTO known_venues (name, aliases, lat, lng, city, address) VALUES
-  ('Fireside', ARRAY['Fireside Molito', 'Fireside Bar', 'Fireside by Kettle'], 14.4175, 121.0395, 'Muntinlupa', 'Molito Lifestyle Center'),
-  ('Bench Tower', ARRAY['The Bench Tower', 'Bench Tower BGC', 'Bench Tower Taguig'], 14.5536, 121.0469, 'Taguig', '30th Street, BGC'),
-  ('East Wing Atrium', ARRAY['East Wing', 'Estancia East Wing', 'East Wing Estancia'], 14.5826, 121.0603, 'Pasig', 'Estancia Capitol Commons'),
-  ('SINE POP', ARRAY['SinePop', 'Sine Pop'], 14.5654, 121.0293, 'Makati', 'Poblacion, Makati'),
-  ('Beat The Bar', ARRAY['BeatTheBar', 'Beat the Bar Makati'], 14.5649, 121.0290, 'Makati', 'Poblacion, Makati'),
-  ('M Bakery', ARRAY['M Bakery BGC', 'M Bakery Taguig'], 14.5507, 121.0470, 'Taguig', 'BGC'),
-  ('Odd Cafe', ARRAY['Odd Cafe Makati', 'The Odd Cafe'], 14.5565, 121.0172, 'Makati', 'Legazpi Village'),
-  ('Matheus Bldg', ARRAY['Matheus Building', 'The Matheus Building', 'Matheus Bldg Makati'], 14.5587, 121.0239, 'Makati', 'Poblacion, Makati'),
-  ('Petite Bakery', ARRAY['Petite Bakery Makati', 'Petite BGC'], 14.5505, 121.0515, 'Taguig', 'BGC'),
-  ('Gyud Food', ARRAY['Gyud', 'Gyud Food UP', 'Gyud UP Diliman', 'Gyud Food UP Diliman'], 14.6535, 121.0693, 'Quezon City', 'UP Diliman Campus')
-ON CONFLICT (name) DO UPDATE SET 
-  aliases = EXCLUDED.aliases,
-  lat = EXCLUDED.lat,
-  lng = EXCLUDED.lng,
-  city = EXCLUDED.city,
-  address = COALESCE(EXCLUDED.address, known_venues.address);
+--   ('Fireside', ARRAY['Fireside Molito', 'Fireside Bar', 'Fireside by Kettle'], 14.4175, 121.0395, 'Muntinlupa', 'Molito Lifestyle Center'),
+--   ('Bench Tower', ARRAY['The Bench Tower', 'Bench Tower BGC', 'Bench Tower Taguig'], 14.5536, 121.0469, 'Taguig', '30th Street, BGC'),
+--   ('East Wing Atrium', ARRAY['East Wing', 'Estancia East Wing', 'East Wing Estancia'], 14.5826, 121.0603, 'Pasig', 'Estancia Capitol Commons'),
+--   ('SINE POP', ARRAY['SinePop', 'Sine Pop'], 14.5654, 121.0293, 'Makati', 'Poblacion, Makati'),
+--   ('Beat The Bar', ARRAY['BeatTheBar', 'Beat the Bar Makati'], 14.5649, 121.0290, 'Makati', 'Poblacion, Makati'),
+--   ('M Bakery', ARRAY['M Bakery BGC', 'M Bakery Taguig'], 14.5507, 121.0470, 'Taguig', 'BGC'),
+--   ('Odd Cafe', ARRAY['Odd Cafe Makati', 'The Odd Cafe'], 14.5565, 121.0172, 'Makati', 'Legazpi Village'),
+--   ('Matheus Bldg', ARRAY['Matheus Building', 'The Matheus Building', 'Matheus Bldg Makati'], 14.5587, 121.0239, 'Makati', 'Poblacion, Makati'),
+--   ('Petite Bakery', ARRAY['Petite Bakery Makati', 'Petite BGC'], 14.5505, 121.0515, 'Taguig', 'BGC'),
+--   ('Gyud Food', ARRAY['Gyud', 'Gyud Food UP', 'Gyud UP Diliman', 'Gyud Food UP Diliman'], 14.6535, 121.0693, 'Quezon City', 'UP Diliman Campus')
+-- -- ON CONFLICT (name) DO UPDATE SET 
+--   aliases = EXCLUDED.aliases,
+--   lat = EXCLUDED.lat,
+--   lng = EXCLUDED.lng,
+--   city = EXCLUDED.city,
+--   address = COALESCE(EXCLUDED.address, known_venues.address);
 
 -- PHASE 4: Fix geocodes for Mows Bar (was pointing to wrong city)
 UPDATE known_venues
