@@ -3,9 +3,9 @@
 -- 1. Delete duplicate pattern suggestions (keep the newest of each unique combo)
 DELETE FROM pattern_suggestions
 WHERE id NOT IN (
-  SELECT DISTINCT ON (pattern_type, expected_value, sample_text) id
+  SELECT DISTINCT ON (pattern_type, correct_value, raw_text) id
   FROM pattern_suggestions
-  ORDER BY pattern_type, expected_value, sample_text, created_at DESC
+  ORDER BY pattern_type, correct_value, raw_text, created_at DESC
 );
 
 -- 2. Delete duplicate extraction_patterns (keep oldest/most established)
@@ -18,8 +18,8 @@ WHERE id NOT IN (
 
 -- 3. Add unique constraint on pattern_suggestions to prevent future duplicates
 -- Using a partial unique index that only applies to pending suggestions
-CREATE UNIQUE INDEX IF NOT EXISTS idx_pattern_suggestions_unique_pending 
-ON pattern_suggestions (pattern_type, expected_value, COALESCE(sample_text, ''))
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pattern_suggestions_unique_pending
+ON pattern_suggestions (pattern_type, correct_value, COALESCE(raw_text, ''))
 WHERE status = 'pending';
 
 -- 4. Add unique constraint on extraction_patterns to prevent duplicate patterns

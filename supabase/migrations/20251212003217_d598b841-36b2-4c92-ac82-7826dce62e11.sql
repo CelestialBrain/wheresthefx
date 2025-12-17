@@ -2,7 +2,7 @@
 -- These venues appeared in scraper warnings as "No venue match found"
 
 -- INSERT INTO public.known_venues (name, aliases, address, city, lat, lng)
-VALUES 
+-- VALUES 
 --   ('BGC Arts Center', ARRAY['BGC Arts Centre', 'Bonifacio Arts Center', 'Arts Center BGC'], '26th Street, Bonifacio Global City', 'Taguig', 14.5515, 121.0456),
 --   ('Proscenium Theater', ARRAY['Proscenium', 'Proscenium Makati', 'The Proscenium'], 'Rockwell, Makati', 'Makati', 14.5550, 121.0240),
 --   ('UST', ARRAY['University of Santo Tomas', 'U.S.T.', 'Ust Campus', 'Thomasian Campus', 'UST Main Campus'], 'España Blvd, Sampaloc', 'Manila', 14.6091, 120.9893),

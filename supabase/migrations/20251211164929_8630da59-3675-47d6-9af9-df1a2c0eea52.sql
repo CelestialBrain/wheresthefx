@@ -2,7 +2,7 @@
 -- Based on analysis of posts with "No venue match found" warnings
 
 -- INSERT INTO public.known_venues (name, aliases, address, city, lat, lng, instagram_handle)
-VALUES
+-- VALUES
   -- Art & Culture Venues
 --   ('Drawing Room Manila', ARRAY['Drawing Room', 'drawingroommanila', 'The Drawing Room'], 'Power Plant Mall, Rockwell Center, Makati', 'Makati', 14.56512, 121.03845, 'drawingroommanila'),
 --   ('UPFI Film Center', ARRAY['UP Film Institute', 'UP Film Center', 'Film Center UP', 'upfifilmcenter'], 'University of the Philippines, Diliman, Quezon City', 'Quezon City', 14.65453, 121.06654, 'upfifilmcenter'),

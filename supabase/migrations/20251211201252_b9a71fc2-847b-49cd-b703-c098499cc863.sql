@@ -1,6 +1,6 @@
 -- Add missing venues discovered from logs
 -- INSERT INTO public.known_venues (name, aliases, address, city, lat, lng)
-VALUES 
+-- VALUES 
 --   ('Cabana Club', ARRAY['cabana', 'cabana bgc'], 'Uptown Parade, 9th Ave, BGC, Taguig', 'Taguig', 14.5517, 121.0506),
 --   ('March May Cafe', ARRAY['march may', 'marchmay'], 'Makati City', 'Makati', 14.5547, 121.0244),
 --   ('Sumu Creative Space', ARRAY['sumu', 'sumu creative'], 'Makati City', 'Makati', 14.5650, 121.0300),
