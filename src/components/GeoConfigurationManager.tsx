@@ -68,7 +68,7 @@ export function GeoConfigurationManager() {
     }
   };
 
-  const { ExportButton, ImportButton } = useJsonExportImport({
+  const { ExportButton, ViewJsonButton } = useJsonExportImport({
     tableName: 'geo_configuration',
     displayName: 'geo configuration',
     onImportComplete: fetchConfiguration
@@ -243,7 +243,7 @@ export function GeoConfigurationManager() {
           </div>
           <div className="flex gap-2">
             <ExportButton />
-            <ImportButton />
+            <ViewJsonButton />
           </div>
         </div>
       </CardHeader>
