@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const githubToken = Deno.env.get('GITHUB_PAT');
-    const githubRepo = Deno.env.get('GITHUB_REPO') || 'CelestialBrain/pure-blank-slate';
+    const githubRepo = Deno.env.get('GITHUB_REPO') || 'CelestialBrain/wheresthefx';
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 

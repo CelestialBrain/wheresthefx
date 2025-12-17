@@ -714,7 +714,7 @@ const Admin = () => {
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button asChild>
                   <a 
-                    href="https://github.com/CelestialBrain/pure-blank-slate/actions/workflows/process-scrape.yml" 
+                    href="https://github.com/CelestialBrain/wheresthefx/actions/workflows/process-scrape.yml" 
                     target="_blank"
                     rel="noopener noreferrer"
                   >
