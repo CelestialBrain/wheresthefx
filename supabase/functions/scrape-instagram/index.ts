@@ -90,21 +90,21 @@ function extractCarouselImages(item: ApifyDatasetItem): string[] {
   if (item.type !== 'Sidecar' || !item.childPosts || item.childPosts.length === 0) {
     return [];
   }
-  
+
   const additionalImages: string[] = [];
-  
+
   // Skip first child (it's usually the primary image already in displayUrl)
   // Extract up to MAX_ADDITIONAL_CAROUSEL_IMAGES additional images
   const maxIndex = Math.min(item.childPosts.length, MAX_ADDITIONAL_CAROUSEL_IMAGES + 1);
   for (let i = 1; i < maxIndex; i++) {
     const child = item.childPosts[i];
     const imageUrl = child.displayUrl || child.imageUrl;
-    
+
     if (imageUrl && child.type !== 'Video') {
       additionalImages.push(imageUrl);
     }
   }
-  
+
   return additionalImages;
 }
 
@@ -112,10 +112,10 @@ function extractCarouselImages(item: ApifyDatasetItem): string[] {
 function parseDatasetInput(input: string): { datasetId: string; token: string | undefined } {
   const datasetMatch = input.match(/datasets\/([a-zA-Z0-9]+)/);
   const datasetId = datasetMatch ? datasetMatch[1] : input.trim();
-  
+
   const tokenMatch = input.match(/[?&]token=([^&]+)/);
   const token = tokenMatch ? tokenMatch[1] : undefined;
-  
+
   return { datasetId, token };
 }
 
@@ -135,19 +135,19 @@ function extractUsernameFromUrl(url: string): string | undefined {
  */
 function getSourceAuthority(ownerUsername: string, venueHandles: Set<string>): number {
   const username = ownerUsername.toLowerCase();
-  
+
   // Venue official account (highest authority)
   if (venueHandles.has(username)) return 100;
-  
+
   // Known event organizer patterns
   if (/events?|productions?|presents?|collective/i.test(username)) return 80;
-  
+
   // Artist/performer accounts
   if (/band|music|dj|artist/i.test(username)) return 60;
-  
+
   // Media/promo accounts
   if (/blog|media|promo|ph$/i.test(username)) return 40;
-  
+
   // Default
   return 50;
 }
@@ -193,7 +193,7 @@ interface AIExtractionResult {
  * - Caption is mostly emojis/hashtags
  */
 function shouldExtractFromImage(
-  caption: string | null, 
+  caption: string | null,
   eventInfo: {
     eventDate?: string;
     eventTime?: string;
@@ -201,29 +201,29 @@ function shouldExtractFromImage(
   }
 ): boolean {
   const captionLength = caption?.length || 0;
-  
+
   // Caption is very short (details probably in image)
   const shortCaption = captionLength < SHORT_CAPTION_THRESHOLD;
-  
+
   // Missing critical fields
   const missingDate = !eventInfo.eventDate;
   const missingTime = !eventInfo.eventTime;
   const missingVenue = !eventInfo.locationName;
   const missingMultiple = [missingDate, missingTime, missingVenue].filter(Boolean).length >= 2;
-  
+
   // Has event indicators but no details
   const hasEventKeywords = /join us|see you|save the date|mark your calendar|party|event|concert|gig|market|pop.?up/i.test(caption || '');
-  
+
   // Caption is mostly emojis/hashtags
   const textWithoutEmojisHashtags = (caption || '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/#\w+/g, '')
     .trim();
   const mostlyEmojis = textWithoutEmojisHashtags.length < EMOJI_TEXT_THRESHOLD;
-  
-  return (shortCaption && hasEventKeywords) || 
-         (missingMultiple && hasEventKeywords) || 
-         (mostlyEmojis && captionLength > 0);
+
+  return (shortCaption && hasEventKeywords) ||
+    (missingMultiple && hasEventKeywords) ||
+    (mostlyEmojis && captionLength > 0);
 }
 
 /**
@@ -243,11 +243,11 @@ function needsAIExtraction(eventInfo: {
   const missingDate = !eventInfo.eventDate;
   const missingTime = !eventInfo.eventTime;
   const missingLocation = !eventInfo.locationName;
-  
+
   // Messy extraction (too long) - explicitly convert to boolean
   const messyLocation = Boolean(eventInfo.locationName && eventInfo.locationName.length > MESSY_EXTRACTION_THRESHOLD);
   const messyTitle = Boolean(eventInfo.eventTitle && eventInfo.eventTitle.length > MESSY_EXTRACTION_THRESHOLD);
-  
+
   return missingDate || missingTime || missingLocation || messyLocation || messyTitle;
 }
 
@@ -313,40 +313,40 @@ async function parseEventWithAI(
  */
 function calculateTitleSimilarity(title1: string | null, title2: string | null): number {
   if (!title1 || !title2) return 0;
-  
+
   // Normalize titles: lowercase, remove special chars, trim
   const normalize = (s: string) => s.toLowerCase()
     .replace(/[^\w\s]/g, '')
     .trim()
     .split(/\s+/)
     .filter(w => w.length > 2); // Remove short words
-  
+
   const words1 = normalize(title1);
   const words2 = normalize(title2);
-  
+
   if (words1.length === 0 || words2.length === 0) return 0;
-  
+
   // Calculate Jaccard similarity (intersection over union)
   const set1 = new Set(words1);
   const set2 = new Set(words2);
   const intersection = new Set([...set1].filter(x => set2.has(x)));
   const union = new Set([...set1, ...set2]);
-  
+
   return intersection.size / union.size;
 }
 
 // Parse and normalize date to YYYY-MM-DD format
 function parseAndNormalizeDate(dateStr: string): string | null {
   if (!dateStr) return null;
-  
+
   const currentYear = new Date().getFullYear();
   const today = new Date();
-  
+
   // If already in YYYY-MM-DD format, validate and return
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return dateStr;
   }
-  
+
   // Handle "Month Day" or "Month Day, Year" formats
   const monthDayYearMatch = dateStr.match(/(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (\d{1,2})(?:st|nd|rd|th)?(?:,? (\d{4}))?/i);
   if (monthDayYearMatch) {
@@ -357,17 +357,17 @@ function parseAndNormalizeDate(dateStr: string): string | null {
       august: 7, aug: 7, september: 8, sep: 8, october: 9, oct: 9,
       november: 10, nov: 10, december: 11, dec: 11
     };
-    
+
     if (monthStr && monthMap[monthStr] !== undefined) {
       const day = parseInt(monthDayYearMatch[1]);
       let year = monthDayYearMatch[2] ? parseInt(monthDayYearMatch[2]) : currentYear;
-      
+
       const date = new Date(year, monthMap[monthStr], day);
-      
+
       return date.toISOString().split('T')[0];
     }
   }
-  
+
   // Handle MM/DD or MM/DD/YYYY formats
   const slashMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
   if (slashMatch) {
@@ -375,12 +375,12 @@ function parseAndNormalizeDate(dateStr: string): string | null {
     const day = parseInt(slashMatch[2]);
     let year = slashMatch[3] ? parseInt(slashMatch[3]) : currentYear;
     if (year < 100) year += 2000; // Handle 2-digit years
-    
+
     const date = new Date(year, month, day);
-    
+
     return date.toISOString().split('T')[0];
   }
-  
+
   // Handle DD-MM-YYYY formats
   const dashMatch = dateStr.match(/(\d{1,2})-(\d{1,2})-(\d{2,4})/);
   if (dashMatch) {
@@ -388,12 +388,12 @@ function parseAndNormalizeDate(dateStr: string): string | null {
     const month = parseInt(dashMatch[2]) - 1;
     let year = parseInt(dashMatch[3]);
     if (year < 100) year += 2000;
-    
+
     const date = new Date(year, month, day);
-    
+
     return date.toISOString().split('T')[0];
   }
-  
+
   return null;
 }
 
@@ -401,17 +401,17 @@ function parseAndNormalizeDate(dateStr: string): string | null {
 function parseRelativeDate(text: string): string | null {
   const now = new Date();
   const lowercaseText = text.toLowerCase();
-  
+
   if (lowercaseText.includes('tonight') || lowercaseText.includes('today')) {
     return now.toISOString().split('T')[0];
   }
-  
+
   if (lowercaseText.includes('tomorrow')) {
     const tomorrow = new Date(now);
     tomorrow.setDate(now.getDate() + 1);
     return tomorrow.toISOString().split('T')[0];
   }
-  
+
   if (lowercaseText.includes('this weekend')) {
     const dayOfWeek = now.getDay();
     const daysUntilFriday = dayOfWeek <= 5 ? 5 - dayOfWeek : 0;
@@ -419,7 +419,7 @@ function parseRelativeDate(text: string): string | null {
     friday.setDate(now.getDate() + daysUntilFriday);
     return friday.toISOString().split('T')[0];
   }
-  
+
   return null;
 }
 
@@ -475,18 +475,18 @@ async function parseEventFromCaption(
   // Pre-normalize text to fix OCR issues
   const normalized = preNormalizeText(caption);
   const lowercaseCaption = normalized.toLowerCase();
-  
+
   // STEP 1: Check for vendor/merchant posts using STRICT detection (hard reject)
   if (isVendorPostStrict(normalized)) {
     return { isEvent: false, isFree: true, needsReview: false };
   }
-  
+
   // STEP 1.5: Check for recurring schedule posts (operating hours, not events)
   // e.g., "6PM — Tues to Sat", "Every Friday night", "Open daily"
   if (isRecurringSchedulePost(normalized)) {
     return { isEvent: false, isFree: true, needsReview: false };
   }
-  
+
   // STEP 2: Check for exclusion patterns (skip generic celebrations)
   const exclusionPatterns = [
     /happy\s+birthday(?!\s+(party|celebration|bash|event))/i,
@@ -496,7 +496,7 @@ async function parseEventFromCaption(
     /congratulations(?!\s+on\s+.*?\s+(opening|launch|event))/i,
     /welcome\s+to\s+the\s+team/i,
   ];
-  
+
   for (const pattern of exclusionPatterns) {
     if (pattern.test(normalized)) {
       // Unless it's an anniversary with a date and location
@@ -506,7 +506,7 @@ async function parseEventFromCaption(
         const hasDate = !!dateInfo.eventDate;
         const venueInfo = await extractVenue(normalized, locationName, supabase);
         const hasLocation = locationName || venueInfo.venueName;
-        
+
         if (!hasDate || !hasLocation) {
           return { isEvent: false, isFree: true, needsReview: false };
         }
@@ -515,7 +515,7 @@ async function parseEventFromCaption(
       }
     }
   }
-  
+
   // STEP 3: Check for event indicators (enhanced with temporal event detection)
   const eventKeywords = [
     'party', 'event', 'happening', 'tonight', 'tomorrow', 'this weekend',
@@ -531,7 +531,7 @@ async function parseEventFromCaption(
     'coming to', 'for the first time', 'community market', 'night market'
   ];
   const hasEventKeyword = eventKeywords.some(keyword => lowercaseCaption.includes(keyword));
-  
+
   // Also check for temporal event indicators (date ranges + market/fair/pop-up keywords)
   const hasTemporalIndicators = hasTemporalEventIndicators(normalized);
 
@@ -550,7 +550,7 @@ async function parseEventFromCaption(
   let venueInfo = await extractVenue(normalized, locationName, supabase);
   const signupUrlInfo = await extractSignupUrl(normalized, supabase);
   const signupUrl = signupUrlInfo.url;
-  
+
   // Clean location name if it's messy (>100 chars)
   if (venueInfo.venueName && venueInfo.venueName.length > 100) {
     const cleanedLocation = cleanLocationName(venueInfo.venueName);
@@ -562,16 +562,16 @@ async function parseEventFromCaption(
   // Consider it an event if we have event keywords + (date OR location)
   // OR if we have temporal indicators (date range with market/pop-up keywords)
   const hasMinimumInfo = !!(venueInfo.venueName || dateInfo.eventDate);
-  
+
   // STEP 5: Check for soft vendor signals (merchant-ish content)
   const maybeVendor = isPossiblyVendorPost(normalized);
-  
+
   // STEP 6: Determine if this is a borderline case that needs review
   // Enhanced: temporal indicators (date ranges + market keywords) are a strong signal
   const looksLikeEvent = (hasEventKeyword && hasMinimumInfo) || (hasTemporalIndicators && hasMinimumInfo);
   let needsReview = false;
   let isEvent = false;
-  
+
   if (looksLikeEvent && maybeVendor) {
     // Borderline case: has event structure but also merchant signals
     // Mark as event but flag for manual review to catch merchant posts masquerading as events
@@ -594,7 +594,7 @@ async function parseEventFromCaption(
     isEvent = false;
     needsReview = false;
   }
-  
+
   // Build regex result
   let regexResult = {
     eventTitle,
@@ -627,16 +627,16 @@ async function parseEventFromCaption(
     ocrTextExtracted: undefined as string[] | undefined,
     ocrConfidence: undefined as number | undefined,
   };
-  
+
   // STEP 7: AI extraction fallback (with OCR when image is available)
   // Call AI extraction if regex extraction is incomplete or messy
   // Use OCR+AI if image is available AND details are likely in the image
   if (supabase && postId && needsAIExtraction(regexResult)) {
     const imageUrl = additionalContext?.imageUrl;
     const useOCR = imageUrl && shouldExtractFromImage(caption, regexResult);
-    
+
     console.log(`Attempting AI extraction for post ${postId} (regex incomplete/messy)${useOCR ? ' with OCR' : ''}`);
-    
+
     // Pass full context to AI extraction for smart learning
     const aiResult = await parseEventWithAI({
       caption,
@@ -648,17 +648,17 @@ async function parseEventFromCaption(
       imageUrl: useOCR ? imageUrl : undefined,
       useOCR: !!useOCR,
     }, supabase);
-    
+
     if (aiResult && aiResult.confidence >= 0.6) {
       console.log(`AI extraction succeeded for ${postId} with confidence ${aiResult.confidence}, method=${aiResult.extractionMethod || 'ai'}`);
-      
+
       // Determine extraction method
       const hadRegexResults = regexResult.eventDate || regexResult.eventTime || regexResult.locationName;
       let extractionMethod: 'ai' | 'ai_corrected' | 'ocr_ai' = hadRegexResults ? 'ai_corrected' : 'ai';
       if (aiResult.extractionMethod === 'ocr_ai') {
         extractionMethod = 'ocr_ai';
       }
-      
+
       // Use AI results if they provide better data
       return {
         eventTitle: aiResult.eventTitle || regexResult.eventTitle,
@@ -701,7 +701,7 @@ async function parseEventFromCaption(
       regexResult.ocrConfidence = aiResult.ocrConfidence;
     }
   }
-  
+
   return regexResult;
 }
 
@@ -714,35 +714,35 @@ async function parseEventFromCaption(
  */
 function generateFallbackTitle(category: string | null | undefined, venueName: string | null | undefined): string | null {
   if (!category && !venueName) return null;
-  
+
   // Capitalize and format category (e.g., "art_culture" -> "Art Culture")
-  const formattedCategory = category 
+  const formattedCategory = category
     ? category.charAt(0).toUpperCase() + category.slice(1).replace(/_/g, ' ')
     : 'Event';
-  
+
   if (venueName) {
     return `${formattedCategory} at ${venueName}`;
   }
-  
+
   return formattedCategory;
 }
 
 // Check if event has ended (considering time and Philippine timezone UTC+8)
 function isEventInPast(
-  eventDateStr: string | undefined, 
+  eventDateStr: string | undefined,
   eventEndDateStr?: string | undefined,
   eventTimeStr?: string | undefined,
   endTimeStr?: string | undefined
 ): boolean {
   if (!eventDateStr) return false;
-  
+
   try {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
-    
+
     // Use end date if available, otherwise start date
     const targetDateStr = eventEndDateStr || eventDateStr;
-    
+
     // If event is TODAY (in UTC), check end time, not start time
     // Note: Event times are already in 24-hour format and dates are YYYY-MM-DD
     // This comparison works because both now and endDateTime use the same timezone (system/UTC)
@@ -755,7 +755,7 @@ function isEventInPast(
       }
       return false; // No end time = valid until midnight
     }
-    
+
     // For past dates, check if date has passed
     return new Date(targetDateStr) < new Date(todayStr);
   } catch {
@@ -793,11 +793,11 @@ Deno.serve(async (req) => {
       // Constant-time comparison to prevent timing attacks
       const aBytes = new TextEncoder().encode(a);
       const bBytes = new TextEncoder().encode(b);
-      
+
       if (aBytes.length !== bBytes.length) {
         return false;
       }
-      
+
       // XOR all bytes and accumulate differences
       let result = 0;
       for (let i = 0; i < aBytes.length; i++) {
@@ -808,21 +808,21 @@ Deno.serve(async (req) => {
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.replace('Bearer ', '');
-      
+
       if (!dataIngestToken) {
         return new Response(JSON.stringify({ error: 'DATA_INGEST_TOKEN not configured' }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      
+
       if (!safeCompare(token, dataIngestToken)) {
         return new Response(JSON.stringify({ error: 'Invalid token' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      
+
       console.log('Data ingest token validated');
       isGitHubIngest = true;
     }
@@ -856,12 +856,12 @@ Deno.serve(async (req) => {
       const batchNumber = body.batchNumber || 1;
       const totalBatches = body.totalBatches || 1;
       const providedRunId = body.runId;
-      
+
       console.log(`[GH-INGEST] Batch ${batchNumber}/${totalBatches}: ${body.posts.length} posts (runId: ${providedRunId || 'new'})`);
-      
+
       // Only create scrape_run record on first batch or if no runId provided
       let ingestRunId: string | null = providedRunId || null;
-      
+
       if (isFirstBatch || !providedRunId) {
         const { data: ingestRun, error: runError } = await supabase
           .from('scrape_runs')
@@ -873,10 +873,10 @@ Deno.serve(async (req) => {
           })
           .select()
           .single();
-        
+
         if (runError) {
           console.error('[GH-INGEST] Failed to create scrape_run:', runError);
-          
+
           // If duplicate key error (23505), the providedRunId doesn't exist in DB
           // (was deleted or never created) - create a fresh run with new ID
           if (runError.code === '23505' || !ingestRun) {
@@ -890,7 +890,7 @@ Deno.serve(async (req) => {
               })
               .select()
               .single();
-            
+
             if (freshRun) {
               ingestRunId = freshRun.id;
               console.log(`[GH-INGEST] Created fresh run: ${ingestRunId}`);
@@ -902,7 +902,7 @@ Deno.serve(async (req) => {
         } else if (ingestRun) {
           ingestRunId = ingestRun.id;
         }
-        
+
         console.log(`[GH-INGEST] Using run: ${ingestRunId}`);
       } else {
         // For subsequent batches, verify the run exists before using it
@@ -911,7 +911,7 @@ Deno.serve(async (req) => {
           .select('id')
           .eq('id', providedRunId)
           .single();
-        
+
         if (!existingRun) {
           console.warn(`[GH-INGEST] Provided runId ${providedRunId} not found, creating new run`);
           const { data: freshRun } = await supabase
@@ -923,30 +923,30 @@ Deno.serve(async (req) => {
             })
             .select()
             .single();
-          
+
           if (freshRun) {
             ingestRunId = freshRun.id;
           }
         }
       }
-      
+
       // Initialize logger for ingest
       const ingestLogger = ingestRunId ? new ScraperLogger(supabase, ingestRunId) : null;
-      
+
       if (isFirstBatch) {
-        await ingestLogger?.info('fetch', `GitHub Actions ingest started`, { 
+        await ingestLogger?.info('fetch', `GitHub Actions ingest started`, {
           totalBatches,
           datasetId: body.datasetId || 'unknown',
         });
-        
+
         // Log pre-filter rejections if any were provided
         const preFilterRejections = body.preFilterRejections || [];
-        
+
         if (preFilterRejections.length > 0) {
           await ingestLogger?.info('pre_filter', `${preFilterRejections.length} posts skipped before AI processing`, {
             totalSkipped: preFilterRejections.length,
           });
-          
+
           // Log each rejection individually for visibility
           for (const rejection of preFilterRejections) {
             await ingestLogger?.log({
@@ -958,11 +958,11 @@ Deno.serve(async (req) => {
           }
         }
       }
-      
-      await ingestLogger?.info('fetch', `Processing batch ${batchNumber}/${totalBatches}`, { 
+
+      await ingestLogger?.info('fetch', `Processing batch ${batchNumber}/${totalBatches}`, {
         batchPosts: body.posts.length,
       });
-      
+
       let saved = 0;
       let failed = 0;
       let eventsDetected = 0;
@@ -971,7 +971,7 @@ Deno.serve(async (req) => {
       let imagesStored = 0;
       const categoryBreakdown: Record<string, number> = {};
       const accountsProcessed = new Set<string>();
-      
+
       interface IngestPost {
         postId: string;
         shortCode?: string;
@@ -1017,11 +1017,11 @@ Deno.serve(async (req) => {
             });
             continue;
           }
-          
+
           if (post.ownerUsername) {
             accountsProcessed.add(post.ownerUsername.toLowerCase());
           }
-          
+
           // ENHANCED LOGGING: Log complete AI extraction data for debugging
           await ingestLogger?.log({
             post_id: post.postId,
@@ -1048,7 +1048,7 @@ Deno.serve(async (req) => {
               ownerUsername: post.ownerUsername || null,
             },
           });
-          
+
           // Log non-events explicitly for analysis
           if (!post.aiExtraction?.isEvent) {
             await ingestLogger?.log({
@@ -1066,7 +1066,7 @@ Deno.serve(async (req) => {
               },
             });
           }
-          
+
           // === PHASE 3: NON-EVENT DETECTION ===
           // Check if this is a non-event post (venue promo, recap, etc.) using caption
           // IMPORTANT: Only apply pattern rejection if AI confidence is LOW (<0.85)
@@ -1074,15 +1074,15 @@ Deno.serve(async (req) => {
           let isEvent = post.aiExtraction?.isEvent || false;
           let nonEventReason: string | null = null;
           const aiConfidence = post.aiExtraction?.confidence || 0;
-          
+
           // Only apply caption-based rejection patterns if AI confidence is below threshold
           // This prevents false negatives where AI correctly identified an event
           // but caption patterns like "thank you" or "see you soon" override it
           const shouldApplyPatternRejection = aiConfidence < 0.85;
-          
+
           if (isEvent && post.caption && shouldApplyPatternRejection) {
             const normalizedCaption = preNormalizeText(post.caption);
-            
+
             // Check for non-event patterns
             if (isNotAnEventPost(normalizedCaption)) {
               isEvent = false;
@@ -1100,7 +1100,7 @@ Deno.serve(async (req) => {
                 },
               });
             }
-            
+
             // Check for vendor posts
             if (isEvent && isVendorPostStrict(normalizedCaption)) {
               isEvent = false;
@@ -1117,7 +1117,7 @@ Deno.serve(async (req) => {
                 },
               });
             }
-            
+
             // Check for recurring schedule posts (operating hours, not events)
             if (isEvent && isRecurringSchedulePost(normalizedCaption)) {
               isEvent = false;
@@ -1141,19 +1141,19 @@ Deno.serve(async (req) => {
               aiConfidence,
             });
           }
-          
+
           // === PHASE 1: HISTORICAL POST DETECTION ===
           // Check if this is a historical post (old post about past event)
           let isHistoricalPost = false;
-          
+
           if (isEvent && post.timestamp && post.aiExtraction?.eventDate) {
             const postDate = new Date(post.timestamp);
             const eventDate = new Date(post.aiExtraction.eventDate);
             const today = new Date();
-            
+
             const postAgeInDays = Math.floor((today.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24));
             const eventAgeInDays = Math.floor((today.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24));
-            
+
             // If event date is before post date, this is definitely a historical reference
             if (eventDate < postDate) {
               isEvent = false;
@@ -1190,18 +1190,18 @@ Deno.serve(async (req) => {
               });
             }
           }
-          
+
           if (isEvent) eventsDetected++;
           if (post.imageUrl) withImages++;
-          
+
           // Track category
           const postCategory = post.aiExtraction?.category || 'other';
           categoryBreakdown[postCategory] = (categoryBreakdown[postCategory] || 0) + 1;
-          
+
           // Get or create Instagram account
           let accountId: string | null = null;
           let defaultCategory: string | null = null;
-          
+
           if (post.ownerUsername) {
             const { data: account, error: accountFetchError } = await supabase
               .from('instagram_accounts')
@@ -1255,12 +1255,12 @@ Deno.serve(async (req) => {
             failed++;
             continue;
           }
-          
+
           // Use account's default_category if AI didn't detect one
           const category = post.aiExtraction?.category || defaultCategory || 'other';
-          
+
           // === KNOWLEDGE BASE INTEGRATION ===
-          
+
           // 1. Get raw venue name from AI extraction or post data
           const rawVenueName = post.aiExtraction?.venueName || post.locationName;
           const rawVenueAddress = post.aiExtraction?.venueAddress || null;
@@ -1269,7 +1269,7 @@ Deno.serve(async (req) => {
           let locationLat: number | null = null;
           let locationLng: number | null = null;
           let geocodeSource: string | null = null;
-          
+
           if (rawVenueName) {
             // 2. Canonicalize venue name (apply aliases, clean up)
             const cleaned = cleanLocationName(rawVenueName);
@@ -1277,9 +1277,9 @@ Deno.serve(async (req) => {
               const { canonical } = canonicalizeVenueName(cleaned);
               canonicalVenue = canonical;
             }
-            
+
             const searchName = canonicalVenue || rawVenueName;
-            
+
             // 3. NEW PRIORITY: Check known_venues database FIRST
             // This has verified, meter-accurate coordinates and should be preferred
             try {
@@ -1289,12 +1289,12 @@ Deno.serve(async (req) => {
                 locationLng = knownVenueMatch.lng;
                 canonicalVenue = knownVenueMatch.canonicalName;
                 geocodeSource = 'known_venues_db';
-                
+
                 // Copy address from known_venues if available AND if not already set by AI
                 if (knownVenueMatch.address && !locationAddress) {
                   locationAddress = knownVenueMatch.address;
                 }
-                
+
                 // Log with match type details
                 const matchTypeLabel = {
                   'exact_name': 'exact name match',
@@ -1306,7 +1306,7 @@ Deno.serve(async (req) => {
                   'partial_alias': 'partial alias match',
                   'fuzzy': 'fuzzy match'
                 }[knownVenueMatch.matchType] || knownVenueMatch.matchType;
-                
+
                 await ingestLogger?.success('geocache', `[GEOCODE] known_venues ${matchTypeLabel}: "${searchName}" → "${knownVenueMatch.canonicalName}"`, {
                   postId: post.postId,
                   venue: rawVenueName,
@@ -1325,7 +1325,7 @@ Deno.serve(async (req) => {
                 error: dbError instanceof Error ? dbError.message : 'Unknown error',
               });
             }
-            
+
             // 4. Fall back to static NCR geocache (fast, in-memory)
             if (!locationLat) {
               const cachedVenue = lookupNCRVenue(searchName);
@@ -1333,7 +1333,7 @@ Deno.serve(async (req) => {
                 locationLat = cachedVenue.lat;
                 locationLng = cachedVenue.lng;
                 geocodeSource = 'ncr_cache_exact';
-                
+
                 await ingestLogger?.success('geocache', `NCR cache hit (exact): ${searchName}`, {
                   postId: post.postId,
                   venue: rawVenueName,
@@ -1343,7 +1343,7 @@ Deno.serve(async (req) => {
                 });
               }
             }
-            
+
             // 5. Fall back to fuzzy match in NCR cache
             if (!locationLat) {
               const fuzzyMatch = fuzzyMatchVenue(searchName, DEFAULT_FUZZY_THRESHOLD);
@@ -1351,7 +1351,7 @@ Deno.serve(async (req) => {
                 locationLat = fuzzyMatch.lat;
                 locationLng = fuzzyMatch.lng;
                 geocodeSource = 'ncr_cache_fuzzy';
-                
+
                 await ingestLogger?.success('geocache', `NCR cache hit (fuzzy): ${searchName} → ${fuzzyMatch.matchedName}`, {
                   postId: post.postId,
                   venue: rawVenueName,
@@ -1362,7 +1362,7 @@ Deno.serve(async (req) => {
                 });
               }
             }
-            
+
             // Log if no geocode match found
             if (!locationLat && rawVenueName) {
               await ingestLogger?.warn('geocache', `No venue match found: ${rawVenueName}`, {
@@ -1371,19 +1371,19 @@ Deno.serve(async (req) => {
               });
             }
           }
-          
+
           if (locationLat && locationLng) geocoded++;
-          
+
           // === END KNOWLEDGE BASE INTEGRATION ===
-          
+
           // === AUTO-DOWNLOAD IMAGE ===
           let storedImageUrl: string | null = null;
           const imageUrl = post.imageUrl;
-          
+
           if (imageUrl) {
             try {
               await ingestLogger?.info('image', `Downloading image for ${post.postId}...`, { postId: post.postId });
-              
+
               // Add 15-second timeout to prevent hanging on failed downloads
               const timeoutMs = 15000;
               const imageResponse = await Promise.race([
@@ -1392,32 +1392,32 @@ Deno.serve(async (req) => {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                   }
                 }),
-                new Promise<Response>((_, reject) => 
+                new Promise<Response>((_, reject) =>
                   setTimeout(() => reject(new Error('Image download timeout after 15s')), timeoutMs)
                 )
               ]);
-              
+
               if (imageResponse.ok) {
                 const imageBlob = await imageResponse.blob();
                 const arrayBuffer = await imageBlob.arrayBuffer();
-                
+
                 const fileName = `instagram-posts/${post.postId}.jpg`;
-                
+
                 const { error: uploadError } = await supabase.storage
                   .from('event-images')
                   .upload(fileName, arrayBuffer, {
                     contentType: 'image/jpeg',
                     upsert: true,
                   });
-                
+
                 if (!uploadError) {
                   const { data: urlData } = supabase.storage
                     .from('event-images')
                     .getPublicUrl(fileName);
-                  
+
                   storedImageUrl = urlData.publicUrl;
                   imagesStored++;
-                  
+
                   await ingestLogger?.success('image', `Image stored: ${post.postId}`, {
                     postId: post.postId,
                     fileName,
@@ -1442,7 +1442,7 @@ Deno.serve(async (req) => {
             }
           }
           // === END AUTO-DOWNLOAD IMAGE ===
-          
+
           // === VALIDATION LAYER ===
           const validation = validateExtractedData({
             eventDate: post.aiExtraction?.eventDate,
@@ -1456,7 +1456,7 @@ Deno.serve(async (req) => {
             category: category,
             isFree: post.aiExtraction?.isFree ?? null,
           });
-          
+
           // Prepare new post data for completeness comparison
           const newPostDataForComparison = {
             event_title: post.aiExtraction?.eventTitle || null,
@@ -1471,7 +1471,7 @@ Deno.serve(async (req) => {
             caption: post.caption,
             location_address: locationAddress,
           };
-          
+
           // Check for duplicates with quality-aware comparison
           const duplicateCheck = await checkForDuplicate(
             supabase,
@@ -1481,20 +1481,20 @@ Deno.serve(async (req) => {
             post.aiExtraction?.eventTitle || null,
             newPostDataForComparison
           );
-          
+
           // If new post should replace existing as primary, update the existing post
           let swappedExistingPost = false;
           if (duplicateCheck.isDuplicate && duplicateCheck.shouldReplaceExisting && duplicateCheck.existingPostId) {
             // Mark the existing post as a duplicate of the new post (will update after upsert)
             swappedExistingPost = true;
-            await ingestLogger?.info('save', `New post (score: ${duplicateCheck.newCompleteness}) REPLACES existing (score: ${duplicateCheck.existingCompleteness}) as primary`, { 
+            await ingestLogger?.info('save', `New post (score: ${duplicateCheck.newCompleteness}) REPLACES existing (score: ${duplicateCheck.existingCompleteness}) as primary`, {
               postId: post.postId,
               existingPostId: duplicateCheck.existingPostId,
               newCompleteness: duplicateCheck.newCompleteness,
               existingCompleteness: duplicateCheck.existingCompleteness
             });
           }
-          
+
           // Assign review tier
           const tierAssignment = assignReviewTier(
             post.aiExtraction?.confidence,
@@ -1507,20 +1507,20 @@ Deno.serve(async (req) => {
             !!(locationLat && locationLng),
             !!(locationLat && locationLng) // isKnownVenue = has coordinates
           );
-          
+
           // If duplicate and NOT replacing existing, mark new post as rejected
           // If replacing existing, new post becomes primary (use original tier)
-          const finalTier = (duplicateCheck.isDuplicate && !duplicateCheck.shouldReplaceExisting) 
-            ? 'rejected' 
+          const finalTier = (duplicateCheck.isDuplicate && !duplicateCheck.shouldReplaceExisting)
+            ? 'rejected'
             : tierAssignment.tier;
-          
+
           // Calculate urgency score based on event date proximity
           let urgencyScore = 0;
           if (validation.correctedData.eventDate) {
             const eventDate = new Date(validation.correctedData.eventDate);
             const now = new Date();
             const daysUntil = Math.floor((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-            
+
             if (daysUntil <= 0) urgencyScore = 100; // Today
             else if (daysUntil === 1) urgencyScore = 80; // Tomorrow
             else if (daysUntil <= 3) urgencyScore = 60; // This week
@@ -1528,11 +1528,11 @@ Deno.serve(async (req) => {
             else if (daysUntil <= 14) urgencyScore = 30; // Within 2 weeks
             else urgencyScore = 10; // Future
           }
-          
+
           // Generate fallback title if AI didn't extract one
-          const eventTitle = post.aiExtraction?.eventTitle || 
+          const eventTitle = post.aiExtraction?.eventTitle ||
             (isEvent ? generateFallbackTitle(category, canonicalVenue) : null);
-          
+
           // Upsert the post with enriched data + validation fields
           const { error, data: upsertedPost } = await supabase.from('instagram_posts').upsert({
             post_id: post.postId,
@@ -1571,7 +1571,7 @@ Deno.serve(async (req) => {
             price_max: (post.aiExtraction as any)?.priceMax ?? null,
             price_notes: (post.aiExtraction as any)?.priceNotes ?? null,
             // Event lifecycle status fields
-            event_status: (post.aiExtraction as any)?.isUpdate 
+            event_status: (post.aiExtraction as any)?.isUpdate
               ? ((post.aiExtraction as any)?.updateType === 'cancel' ? 'cancelled' : 'rescheduled')
               : ((post.aiExtraction as any)?.eventStatus ?? 'confirmed'),
             availability_status: (post.aiExtraction as any)?.availabilityStatus ?? 'available',
@@ -1587,9 +1587,9 @@ Deno.serve(async (req) => {
             // Sub-events for multi-event posts (different artists/activities per day)
             sub_events: (post.aiExtraction as any)?.subEvents ?? null,
           }, { onConflict: 'post_id' }).select('id').single();
-          
+
           if (error) {
-            await ingestLogger?.error('save', `Failed to save post ${post.postId}`, { postId: post.postId }, { 
+            await ingestLogger?.error('save', `Failed to save post ${post.postId}`, { postId: post.postId }, {
               error: error.message,
               code: error.code,
             });
@@ -1599,13 +1599,13 @@ Deno.serve(async (req) => {
             if (swappedExistingPost && upsertedPost?.id && duplicateCheck.existingPostId) {
               const { error: swapError } = await supabase
                 .from('instagram_posts')
-                .update({ 
-                  is_duplicate: true, 
+                .update({
+                  is_duplicate: true,
                   duplicate_of: upsertedPost.id,
                   review_tier: 'rejected'
                 })
                 .eq('id', duplicateCheck.existingPostId);
-              
+
               if (swapError) {
                 console.warn(`Failed to swap duplicate roles: ${swapError.message}`);
               } else {
@@ -1615,7 +1615,7 @@ Deno.serve(async (req) => {
                 });
               }
             }
-            
+
             // Log validation warnings to validation_logs table
             if (validation.warnings.length > 0 && upsertedPost?.id) {
               await logValidationWarnings(supabase, upsertedPost.id, validation.warnings, {
@@ -1627,7 +1627,7 @@ Deno.serve(async (req) => {
                 category: category,
               });
             }
-            
+
             // Store schedule data if provided (multi-date/multi-time events)
             const schedule = (post.aiExtraction as any)?.schedule;
             if (upsertedPost?.id && schedule && Array.isArray(schedule) && schedule.length > 0) {
@@ -1639,7 +1639,7 @@ Deno.serve(async (req) => {
                   event_time: string | null;
                   venue_name: string | null;
                 }> = [];
-                
+
                 for (const day of schedule) {
                   if (day.date && day.times && Array.isArray(day.times)) {
                     for (const slot of day.times) {
@@ -1652,21 +1652,21 @@ Deno.serve(async (req) => {
                     }
                   }
                 }
-                
+
                 if (scheduleRecords.length > 0) {
                   // Delete existing and insert new
                   const { error: deleteError } = await supabase.from('event_dates').delete().eq('instagram_post_id', upsertedPost.id);
                   if (deleteError) {
                     console.warn(`Failed to delete existing event_dates for ${post.postId}: ${deleteError.message}`);
                   }
-                  
+
                   const { error: scheduleError } = await supabase
                     .from('event_dates')
                     .upsert(scheduleRecords, {
                       onConflict: 'instagram_post_id,event_date,venue_name',
                       ignoreDuplicates: true
                     });
-                  
+
                   if (scheduleError) {
                     console.warn(`Failed to upsert schedule for ${post.postId}:`, scheduleError.message);
                   } else {
@@ -1686,14 +1686,14 @@ Deno.serve(async (req) => {
                 if (deleteError) {
                   console.warn(`Failed to delete existing event_dates for ${post.postId}: ${deleteError.message}`);
                 }
-                
+
                 const dateRecords = allEventDates.map((dateStr: string) => ({
                   instagram_post_id: upsertedPost.id,
                   event_date: dateStr,
                   event_time: validation.correctedData.eventTime || null,
                   venue_name: canonicalVenue || null,
                 }));
-                
+
                 const { error: datesError } = await supabase.from('event_dates').upsert(dateRecords, {
                   onConflict: 'instagram_post_id,event_date,venue_name',
                   ignoreDuplicates: true
@@ -1715,23 +1715,23 @@ Deno.serve(async (req) => {
               try {
                 // Filter sub-events that have specific dates (scheduled screenings, activities)
                 const subEventsWithDates = subEvents.filter((e: any) => e.date);
-                
+
                 // Sub-events without dates are performers - keep in sub_events JSON only (already saved above)
                 const performerSubEvents = subEvents.filter((e: any) => !e.date);
                 if (performerSubEvents.length > 0) {
-                  await ingestLogger?.info('save', `${performerSubEvents.length} performer/artist sub-events stored in sub_events JSON`, { 
-                    postId: post.postId, 
-                    performers: performerSubEvents.map((e: any) => e.title) 
+                  await ingestLogger?.info('save', `${performerSubEvents.length} performer/artist sub-events stored in sub_events JSON`, {
+                    postId: post.postId,
+                    performers: performerSubEvents.map((e: any) => e.title)
                   });
                 }
-                
+
                 if (subEventsWithDates.length > 0) {
                   // Delete existing event_dates for this post first
                   const { error: deleteError } = await supabase.from('event_dates').delete().eq('instagram_post_id', upsertedPost.id);
                   if (deleteError) {
                     console.warn(`Failed to delete existing event_dates for ${post.postId}: ${deleteError.message}`);
                   }
-                  
+
                   // FIXED: Use actual venue name for venue_name, store activity description in venue_address
                   // Use upsert with ignoreDuplicates to prevent constraint violations
                   const dateRecords = subEventsWithDates.map((e: any) => ({
@@ -1742,7 +1742,7 @@ Deno.serve(async (req) => {
                     venue_name: canonicalVenue || validation.correctedData.locationName || null, // Use ACTUAL venue
                     venue_address: e.title || e.description || null, // Store sub-event title/activity as address descriptor
                   }));
-                  
+
                   const { error: subEventsError } = await supabase.from('event_dates').upsert(dateRecords, {
                     onConflict: 'instagram_post_id,event_date,venue_name',
                     ignoreDuplicates: true
@@ -1750,10 +1750,10 @@ Deno.serve(async (req) => {
                   if (subEventsError) {
                     console.warn(`Failed to upsert subEvents dates for ${post.postId}:`, subEventsError.message);
                   } else {
-                    await ingestLogger?.info('save', `Stored ${dateRecords.length} scheduled sub-event dates with venue: ${canonicalVenue || 'unknown'}`, { 
-                      postId: post.postId, 
+                    await ingestLogger?.info('save', `Stored ${dateRecords.length} scheduled sub-event dates with venue: ${canonicalVenue || 'unknown'}`, {
+                      postId: post.postId,
                       venue: canonicalVenue,
-                      activities: subEventsWithDates.map((e: any) => e.title) 
+                      activities: subEventsWithDates.map((e: any) => e.title)
                     });
                   }
                 }
@@ -1770,14 +1770,14 @@ Deno.serve(async (req) => {
                   event_time: ad.time || null,
                   venue_name: ad.venue,
                 }));
-                
+
                 const { error: datesError } = await supabase
                   .from('event_dates')
-                  .upsert(additionalDatesRecords, { 
+                  .upsert(additionalDatesRecords, {
                     onConflict: 'instagram_post_id,event_date,venue_name',
-                    ignoreDuplicates: false 
+                    ignoreDuplicates: false
                   });
-                
+
                 if (datesError) {
                   console.warn(`Failed to insert additional dates for ${post.postId}:`, datesError.message);
                 } else {
@@ -1787,7 +1787,7 @@ Deno.serve(async (req) => {
                 console.warn(`Error inserting additional dates for ${post.postId}:`, datesInsertError);
               }
             }
-            
+
             await ingestLogger?.success('save', `Saved post ${post.postId}`, {
               postId: post.postId,
               isEvent: post.aiExtraction?.isEvent || false,
@@ -1797,7 +1797,7 @@ Deno.serve(async (req) => {
               validationWarnings: validation.warnings.length,
             });
             saved++;
-            
+
             // PHASE 2: Pattern training with ACTUAL regex testing
             // Run regex extraction to compare with AI and properly track pattern success/failure
             if (post.caption && post.aiExtraction && (post.aiExtraction.confidence ?? 0) >= 0.7) {
@@ -1815,7 +1815,7 @@ Deno.serve(async (req) => {
                     useOCR: false, // Don't re-run AI, just use regex
                   }
                 );
-                
+
                 // Build merged result with ACTUAL source comparison
                 const mergedResult: MergedExtractionResult = {
                   eventTitle: post.aiExtraction.eventTitle || regexResult.eventTitle || null,
@@ -1839,46 +1839,46 @@ Deno.serve(async (req) => {
                   signupUrlPatternId: regexResult.signupUrlPatternId,
                   // Calculate actual sources by comparing regex vs AI
                   sources: {
-                    eventDate: regexResult.eventDate && post.aiExtraction.eventDate 
+                    eventDate: regexResult.eventDate && post.aiExtraction.eventDate
                       ? (regexResult.eventDate === post.aiExtraction.eventDate ? 'both' : 'ai')
                       : (regexResult.eventDate ? 'regex' : 'ai'),
-                    eventTime: regexResult.eventTime && post.aiExtraction.eventTime 
+                    eventTime: regexResult.eventTime && post.aiExtraction.eventTime
                       ? (regexResult.eventTime === post.aiExtraction.eventTime ? 'both' : 'ai')
                       : (regexResult.eventTime ? 'regex' : 'ai'),
-                    locationName: regexResult.locationName && post.aiExtraction.venueName 
+                    locationName: regexResult.locationName && post.aiExtraction.venueName
                       ? 'both' : (regexResult.locationName ? 'regex' : 'ai'),
                     price: regexResult.price !== null && post.aiExtraction.price !== null
                       ? (regexResult.price === post.aiExtraction.price ? 'both' : 'ai')
                       : (regexResult.price !== null ? 'regex' : 'ai'),
-                    signupUrl: regexResult.signupUrl ? 'regex' : 
+                    signupUrl: regexResult.signupUrl ? 'regex' :
                       ((post.aiExtraction as any)?.signupUrl ? 'ai' : undefined),
                   },
                   conflicts: [],
                   overallSource: 'both',
                 };
-                
+
                 // Detect conflicts
-                if (regexResult.eventDate && post.aiExtraction.eventDate && 
-                    regexResult.eventDate !== post.aiExtraction.eventDate) {
+                if (regexResult.eventDate && post.aiExtraction.eventDate &&
+                  regexResult.eventDate !== post.aiExtraction.eventDate) {
                   mergedResult.conflicts.push({
                     field: 'eventDate',
                     regexValue: regexResult.eventDate,
                     aiValue: post.aiExtraction.eventDate,
                   });
                 }
-                if (regexResult.eventTime && post.aiExtraction.eventTime && 
-                    regexResult.eventTime !== post.aiExtraction.eventTime) {
+                if (regexResult.eventTime && post.aiExtraction.eventTime &&
+                  regexResult.eventTime !== post.aiExtraction.eventTime) {
                   mergedResult.conflicts.push({
                     field: 'eventTime',
                     regexValue: regexResult.eventTime,
                     aiValue: post.aiExtraction.eventTime,
                   });
                 }
-                
+
                 await saveGroundTruth(post.postId, post.caption || '', mergedResult, supabase);
                 await trainPatternsFromComparison(post.postId, post.caption || '', mergedResult, supabase);
-                
-                await ingestLogger?.info('save', `Pattern training: ${Object.entries(mergedResult.sources).filter(([,v]) => v === 'both').length} matched, ${mergedResult.conflicts.length} conflicts`, {
+
+                await ingestLogger?.info('save', `Pattern training: ${Object.entries(mergedResult.sources).filter(([, v]) => v === 'both').length} matched, ${mergedResult.conflicts.length} conflicts`, {
                   postId: post.postId,
                   sources: mergedResult.sources,
                   conflicts: mergedResult.conflicts.length,
@@ -1901,7 +1901,7 @@ Deno.serve(async (req) => {
           failed++;
         }
       }
-      
+
       // Log summary
       const summary = {
         total: body.posts.length,
@@ -1914,9 +1914,9 @@ Deno.serve(async (req) => {
         accountsProcessed: accountsProcessed.size,
         categoryBreakdown,
       };
-      
+
       await ingestLogger?.success('fetch', `Batch ${batchNumber}/${totalBatches} complete`, summary);
-      
+
       // Only update scrape_run with final status on last batch
       if (isLastBatch && ingestRunId) {
         // Get current totals from the run to add to them
@@ -1925,10 +1925,10 @@ Deno.serve(async (req) => {
           .select('posts_added, accounts_found')
           .eq('id', ingestRunId)
           .single();
-        
+
         const totalSaved = (currentRun?.posts_added || 0) + saved;
         const totalAccounts = Math.max(currentRun?.accounts_found || 0, accountsProcessed.size);
-        
+
         await supabase.from('scrape_runs').update({
           status: 'completed',
           posts_added: totalSaved,
@@ -1937,13 +1937,13 @@ Deno.serve(async (req) => {
           completed_at: new Date().toISOString(),
           error_message: failed > 0 ? `${failed} posts failed in final batch` : null,
         }).eq('id', ingestRunId);
-        
+
         await ingestLogger?.success('fetch', `GitHub Actions ingest COMPLETE`, {
           totalBatches,
           finalSaved: totalSaved,
         });
         await ingestLogger?.close();
-        
+
         console.log(`[GH-INGEST] ALL BATCHES COMPLETE: ${totalSaved} total saved`);
       } else if (ingestRunId) {
         // Update running totals for non-final batches
@@ -1952,19 +1952,19 @@ Deno.serve(async (req) => {
           .select('posts_added, accounts_found')
           .eq('id', ingestRunId)
           .single();
-        
+
         await supabase.from('scrape_runs').update({
           posts_added: (currentRun?.posts_added || 0) + saved,
           accounts_found: Math.max(currentRun?.accounts_found || 0, accountsProcessed.size),
           last_heartbeat: new Date().toISOString(),
         }).eq('id', ingestRunId);
       }
-      
+
       console.log(`[GH-INGEST] Batch ${batchNumber}/${totalBatches}: ${saved} saved, ${failed} failed, ${eventsDetected} events`);
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
-        saved, 
+
+      return new Response(JSON.stringify({
+        success: true,
+        saved,
         failed,
         total: body.posts.length,
         eventsDetected,
@@ -1985,10 +1985,10 @@ Deno.serve(async (req) => {
     const rawDatasetInput = body.datasetId;
     const isAutomated = body.automated || false;
     const forceImport = body.forceImport || false; // New flag for permissive dataset imports
-    
+
     let datasetId: string | undefined;
     let datasetToken: string | undefined;
-    
+
     if (rawDatasetInput) {
       const parsed = parseDatasetInput(rawDatasetInput);
       datasetId = parsed.datasetId;
@@ -2007,8 +2007,8 @@ Deno.serve(async (req) => {
 
     if (datasetId && !finalToken) {
       return new Response(
-        JSON.stringify({ 
-          error: 'No Apify token available. Either include token=... in the dataset URL or set APIFY_API_KEY in backend secrets.' 
+        JSON.stringify({
+          error: 'No Apify token available. Either include token=... in the dataset URL or set APIFY_API_KEY in backend secrets.'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -2035,14 +2035,14 @@ Deno.serve(async (req) => {
     runId = scrapeRun?.id;
 
     console.log(`Starting Instagram data import... Run ID: ${runId}, Type: ${runType}`);
-    
+
     // Initialize logger
     const logger = new ScraperLogger(supabase, runId!);
-    
+
     // HEARTBEAT MECHANISM: Update last_heartbeat every 30 seconds to detect stuck runs
     const HEARTBEAT_INTERVAL_MS = 30000;
     let heartbeatInterval: number | undefined;
-    
+
     const updateHeartbeat = async () => {
       if (runId) {
         try {
@@ -2055,14 +2055,14 @@ Deno.serve(async (req) => {
         }
       }
     };
-    
+
     // Start heartbeat interval
     if (runId) {
       heartbeatInterval = setInterval(updateHeartbeat, HEARTBEAT_INTERVAL_MS) as unknown as number;
       // Send initial heartbeat
       await updateHeartbeat();
     }
-    
+
     // Helper to stop heartbeat and cleanup
     const stopHeartbeat = () => {
       if (heartbeatInterval !== undefined) {
@@ -2083,9 +2083,9 @@ Deno.serve(async (req) => {
     if (datasetId && finalToken) {
       console.log(`Fetching data from dataset: ${datasetId}`);
       await logger.info('fetch', `Fetching dataset: ${datasetId}`, { datasetId });
-      
+
       const fetchStart = Date.now();
-      
+
       // Use retry logic for Apify dataset fetch
       let apifyResponse: Response;
       try {
@@ -2105,12 +2105,12 @@ Deno.serve(async (req) => {
           }
         );
       } catch (fetchError) {
-        const errorMsg = fetchError instanceof Error 
+        const errorMsg = fetchError instanceof Error
           ? `Failed to fetch dataset: ${fetchError.message}`
           : 'Failed to fetch dataset: Unknown error';
         console.error(errorMsg);
         await logger.error('fetch', 'Dataset fetch failed after retries', { datasetId }, { error: errorMsg });
-        
+
         if (runId) {
           await supabase.from('scrape_runs').update({
             status: 'failed',
@@ -2118,18 +2118,18 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           }).eq('id', runId);
         }
-        
+
         await logger.close();
         throw new Error(errorMsg);
       }
-      
+
       const fetchDuration = Date.now() - fetchStart;
 
       if (!apifyResponse.ok) {
         const errorMsg = `Failed to fetch dataset (${apifyResponse.status}): ${apifyResponse.statusText}`;
         console.error(errorMsg);
         await logger.error('fetch', 'Dataset fetch failed', { datasetId, status: apifyResponse.status }, { error: errorMsg });
-        
+
         if (runId) {
           await supabase.from('scrape_runs').update({
             status: 'failed',
@@ -2137,17 +2137,17 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           }).eq('id', runId);
         }
-        
+
         await logger.close();
         throw new Error(errorMsg);
       }
 
       const apifyData: ApifyDatasetItem[] = await apifyResponse.json();
       console.log(`Dataset returned ${apifyData.length} items`);
-      await logger.success('fetch', `Dataset fetched: ${apifyData.length} items`, { 
-        datasetId, 
+      await logger.success('fetch', `Dataset fetched: ${apifyData.length} items`, {
+        datasetId,
         itemCount: apifyData.length,
-        duration_ms: fetchDuration 
+        duration_ms: fetchDuration
       });
 
       // BATCH PROCESSING: Process posts in smaller batches with progress updates
@@ -2162,7 +2162,7 @@ Deno.serve(async (req) => {
           .from('known_venues')
           .select('instagram_handle')
           .not('instagram_handle', 'is', null);
-        
+
         if (venues) {
           venues.forEach(v => {
             if (v.instagram_handle) {
@@ -2187,28 +2187,28 @@ Deno.serve(async (req) => {
           if (runId) {
             await supabase
               .from('scrape_runs')
-              .update({ 
+              .update({
                 last_heartbeat: new Date().toISOString(),
                 posts_added: totalScrapedPosts,
                 posts_updated: totalUpdatedPosts,
               })
               .eq('id', runId);
           }
-          
+
           // Check if run was cancelled
           const { data: runStatus } = await supabase
             .from('scrape_runs')
             .select('status')
             .eq('id', runId)
             .single();
-          
+
           if (runStatus?.status === 'cancelled') {
             console.log('Scrape run was cancelled by admin');
             stopHeartbeat();
             await logger.info('skip', 'Run cancelled by admin', { processedCount, totalItems });
             await logger.close();
             return new Response(
-              JSON.stringify({ 
+              JSON.stringify({
                 message: 'Scrape cancelled',
                 processedCount,
                 totalItems,
@@ -2254,10 +2254,10 @@ Deno.serve(async (req) => {
         const likesCount = (item.likesCount === -1 || !item.likesCount) ? 0 : item.likesCount;
         const commentsCount = item.commentsCount || 0;
         const postedAt = item.timestamp;
-        
+
         // Calculate source authority for deduplication
         const sourceAuthority = getSourceAuthority(username, venueHandles);
-        
+
         if (!postedAt) {
           totalSkipped++;
           console.log(`Skipping post ${postId} - no timestamp`);
@@ -2267,7 +2267,7 @@ Deno.serve(async (req) => {
         const hashtags = item.hashtags || [];
         const mentions = item.mentions || [];
         const postUrl = item.url || `https://www.instagram.com/p/${item.shortCode}/`;
-        
+
         // Extract image URL early for OCR extraction during parsing
         const imageUrl = item.displayUrl || item.imageUrl;
 
@@ -2343,7 +2343,7 @@ Deno.serve(async (req) => {
           continue;
         }
         const parseDuration = Date.now() - parseStart;
-        
+
         await logger.logParsing(postId, undefined, item.caption || '', eventInfo, parseDuration);
 
         // PHASE 3: Validate and geocode venue if address exists
@@ -2352,7 +2352,7 @@ Deno.serve(async (req) => {
         let locationLng: number | null = null;
         let geocodedAddress: string | null = null;
         let cacheHit = false;
-        
+
         // Helper to clean venue name for geocoding lookups
         const cleanVenueNameForGeocoding = (name: string): string => {
           return name
@@ -2363,10 +2363,10 @@ Deno.serve(async (req) => {
             .replace(/\s+/g, ' ')  // Normalize whitespace
             .trim();
         };
-        
+
         if (eventInfo.locationName) {
           const cleanedVenueName = cleanVenueNameForGeocoding(eventInfo.locationName);
-          
+
           // Try NCR geocache first (exact match)
           const cachedVenue = lookupNCRVenue(cleanedVenueName);
           if (cachedVenue) {
@@ -2374,7 +2374,7 @@ Deno.serve(async (req) => {
             locationLng = cachedVenue.lng;
             geocodedAddress = `${cleanedVenueName}, ${cachedVenue.city}`;
             cacheHit = true;
-            
+
             await logger.success('geocache', 'NCR venue cache hit (exact)', {
               postId,
               venue: eventInfo.locationName,
@@ -2391,7 +2391,7 @@ Deno.serve(async (req) => {
               locationLng = fuzzyMatch.lng;
               geocodedAddress = `${fuzzyMatch.matchedName}, ${fuzzyMatch.city}`;
               cacheHit = true;
-              
+
               await logger.success('geocache', 'NCR venue cache hit (fuzzy)', {
                 postId,
                 venue: eventInfo.locationName,
@@ -2403,41 +2403,41 @@ Deno.serve(async (req) => {
               });
             }
           }
-          
+
           // FALLBACK: Check known_venues database table
           if (!cacheHit) {
             try {
               const searchName = cleanedVenueName.toLowerCase().replace(/[%_]/g, '').trim();
               console.log(`[GEOCODE DEBUG] Attempting known_venues DB lookup for: "${searchName}" (original: "${eventInfo.locationName}")`);
-              
+
               // First, fetch all known venues (they're a small set) for flexible matching
               const { data: allVenues, error: dbError } = await supabase
                 .from('known_venues')
                 .select('name, lat, lng, city, aliases');
-              
+
               if (dbError) {
                 console.log(`[GEOCODE DEBUG] DB query error: ${dbError.message}`);
                 throw dbError;
               }
-              
+
               console.log(`[GEOCODE DEBUG] Fetched ${allVenues?.length || 0} known venues from DB`);
-              
+
               // Check results for exact or alias match with flexible matching
               let matchedVenue = null;
               if (allVenues && allVenues.length > 0) {
                 // Extract words from search name for partial matching
                 const searchWords = searchName.split(/\s+/).filter(w => w.length > 2);
-                
+
                 for (const venue of allVenues) {
                   const venueLower = venue.name.toLowerCase();
-                  
+
                   // Direct name matching (either direction)
                   if (venueLower.includes(searchName) || searchName.includes(venueLower)) {
                     matchedVenue = venue;
                     console.log(`[GEOCODE DEBUG] Matched by name: "${venue.name}"`);
                     break;
                   }
-                  
+
                   // Check aliases (either direction)
                   if (venue.aliases && Array.isArray(venue.aliases)) {
                     for (const alias of venue.aliases) {
@@ -2450,7 +2450,7 @@ Deno.serve(async (req) => {
                     }
                   }
                   if (matchedVenue) break;
-                  
+
                   // Partial word matching - if venue name words appear in search
                   const venueWords = venueLower.split(/\s+/).filter((w: string) => w.length > 2);
                   const matchingWords = venueWords.filter((vw: string) => searchWords.some((sw: string) => sw.includes(vw) || vw.includes(sw)));
@@ -2461,17 +2461,17 @@ Deno.serve(async (req) => {
                   }
                 }
               }
-              
+
               if (!matchedVenue) {
                 console.log(`[GEOCODE DEBUG] No match found for "${searchName}"`);
               }
-              
+
               if (matchedVenue?.lat && matchedVenue?.lng) {
                 locationLat = Number(matchedVenue.lat);
                 locationLng = Number(matchedVenue.lng);
                 geocodedAddress = `${matchedVenue.name}, ${matchedVenue.city || 'Metro Manila'}`;
                 cacheHit = true;
-                
+
                 await logger.success('geocache', 'known_venues DB hit', {
                   postId,
                   venue: eventInfo.locationName,
@@ -2497,28 +2497,28 @@ Deno.serve(async (req) => {
             }
           }
         }
-        
+
         // If no cache hit and we have a valid address, call geocoding API with retry
         if (!cacheHit && eventInfo.locationName && eventInfo.locationAddress && isValidAddress(eventInfo.locationAddress)) {
           try {
-            await logger.info('validation', `Validating venue (cache miss): ${eventInfo.locationName}`, { 
-              postId, 
+            await logger.info('validation', `Validating venue (cache miss): ${eventInfo.locationName}`, {
+              postId,
               venue: eventInfo.locationName,
-              address: eventInfo.locationAddress 
+              address: eventInfo.locationAddress
             });
-            
+
             const geocodeStart = Date.now();
-            
+
             // Use retry logic for geocoding API call
             const geocodeResult = await fetchWithRetry(
               async () => {
                 const { data, error } = await supabase.functions.invoke('validate-venue', {
-                  body: { 
-                    venue: eventInfo.locationName, 
-                    address: eventInfo.locationAddress 
+                  body: {
+                    venue: eventInfo.locationName,
+                    address: eventInfo.locationAddress
                   },
                 });
-                
+
                 if (error) throw error;
                 return data;
               },
@@ -2535,14 +2535,14 @@ Deno.serve(async (req) => {
                 },
               }
             );
-            
+
             const geocodeDuration = Date.now() - geocodeStart;
-            
+
             if (geocodeResult?.isValid) {
               locationLat = geocodeResult.lat;
               locationLng = geocodeResult.lng;
               geocodedAddress = geocodeResult.formattedAddress || eventInfo.locationAddress;
-              
+
               await logger.success('validation', 'Venue geocoded successfully', {
                 postId,
                 venue: eventInfo.locationName,
@@ -2571,11 +2571,11 @@ Deno.serve(async (req) => {
             }
           } catch (err) {
             const error = err as Error;
-            await logger.error('validation', 'Geocoding error', { 
-              postId, 
-              venue: eventInfo.locationName 
-            }, { 
-              error: error.message 
+            await logger.error('validation', 'Geocoding error', {
+              postId,
+              venue: eventInfo.locationName
+            }, {
+              error: error.message
             });
           }
         }
@@ -2583,9 +2583,9 @@ Deno.serve(async (req) => {
         // Skip non-events (unless force import)
         if (!eventInfo.isEvent && !forceImport) {
           totalSkipped++;
-          await logger.logSkip(postId, 'Not an event', { 
+          await logger.logSkip(postId, 'Not an event', {
             caption_preview: item.caption?.substring(0, 100),
-            forceImport 
+            forceImport
           });
           // Also log as rejected post with structured data
           await logger.logRejectedPost({
@@ -2605,9 +2605,9 @@ Deno.serve(async (req) => {
         if (eventInfo.eventDate && !forceImport) {
           if (isEventInPast(eventInfo.eventDate, eventInfo.eventEndDate ?? undefined, eventInfo.eventTime ?? undefined, eventInfo.endTime ?? undefined)) {
             totalSkipped++;
-            await logger.logSkip(postId, 'Event has ended', { 
+            await logger.logSkip(postId, 'Event has ended', {
               eventDate: eventInfo.eventDate,
-              eventEndDate: eventInfo.eventEndDate 
+              eventEndDate: eventInfo.eventEndDate
             });
             // Also log as rejected post with structured data
             await logger.logRejectedPost({
@@ -2652,7 +2652,7 @@ Deno.serve(async (req) => {
               posts_updated: totalUpdatedPosts,
             })
             .eq('id', runId!);
-          
+
           return new Response(
             JSON.stringify({
               success: false,
@@ -2718,13 +2718,13 @@ Deno.serve(async (req) => {
               .eq('id', existingPost.id);
             console.log(`Backfilled image_url for post ${postId}`);
           }
-          
+
           // Check if caption changed (indicating potential update)
           if (existingPost.caption !== item.caption) {
             const newEventInfo = await parseEventFromCaption(
-              item.caption || '', 
-              item.locationName, 
-              supabase, 
+              item.caption || '',
+              item.locationName,
+              supabase,
               postId,
               {
                 postedAt: postedAt,
@@ -2733,7 +2733,7 @@ Deno.serve(async (req) => {
                 imageUrl: imageUrl || undefined,
               }
             );
-            
+
             // Only update if new event info is valid
             if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
               await supabase
@@ -2751,7 +2751,7 @@ Deno.serve(async (req) => {
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', existingPost.id);
-              
+
               totalUpdatedPosts++;
               console.log(`Updated post ${postId} with new event info`);
             } else {
@@ -2764,7 +2764,7 @@ Deno.serve(async (req) => {
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', existingPost.id);
-              
+
               totalUpdatedPosts++;
               console.log(`Updated post ${postId} engagement only`);
             }
@@ -2792,23 +2792,23 @@ Deno.serve(async (req) => {
 
           if (similarEvents && similarEvents.length > 0) {
             console.log(`Found ${similarEvents.length} similar event(s) for post ${postId}, checking for duplicates`);
-            
+
             // If this is likely a duplicate, link them in event_groups
             for (const similar of similarEvents) {
               if (similar.post_id !== postId) {
                 // Check title similarity to prevent merging different events at same venue/date
                 const titleSimilarity = calculateTitleSimilarity(eventInfo.eventTitle ?? null, similar.event_title);
                 const SIMILARITY_THRESHOLD = 0.3; // 30% word overlap required
-                
+
                 if (titleSimilarity < SIMILARITY_THRESHOLD) {
                   console.log(`Skipping merge: titles too different (similarity: ${titleSimilarity.toFixed(2)})`);
                   console.log(`  - Current: "${eventInfo.eventTitle}"`);
                   console.log(`  - Existing: "${similar.event_title}"`);
                   continue; // Don't merge events with different titles
                 }
-                
+
                 console.log(`Titles similar enough to merge (similarity: ${titleSimilarity.toFixed(2)})`);
-                
+
                 // Check if already in a group
                 const { data: existingGroup } = await supabase
                   .from('event_groups')
@@ -2832,10 +2832,10 @@ Deno.serve(async (req) => {
                   // Use source_authority first, then likes_count as tiebreaker
                   const currentAuthority = sourceAuthority || 50;
                   const similarAuthority = similar.source_authority || 50;
-                  
+
                   let primaryId: string;
                   let mergedId: string;
-                  
+
                   if (currentAuthority > similarAuthority) {
                     primaryId = postId;
                     mergedId = similar.post_id;
@@ -2847,7 +2847,7 @@ Deno.serve(async (req) => {
                     primaryId = likesCount > similar.likes_count ? postId : similar.post_id;
                     mergedId = likesCount > similar.likes_count ? similar.post_id : postId;
                   }
-                  
+
                   await supabase
                     .from('event_groups')
                     .insert({
@@ -2874,24 +2874,24 @@ Deno.serve(async (req) => {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
               }
             });
-            
+
             if (imageResponse.ok) {
               const imageBlob = await imageResponse.blob();
               const arrayBuffer = await imageBlob.arrayBuffer();
-              
+
               // Compress image using canvas-like approach
               // For simplicity, we'll store as-is but with reasonable size limit
               // Advanced compression would require image processing library
-              
+
               const fileName = `instagram-posts/${postId}.jpg`;
-              
+
               const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('event-images')
                 .upload(fileName, arrayBuffer, {
                   contentType: 'image/jpeg',
                   upsert: true,
                 });
-              
+
               if (uploadError) {
                 console.error(`Failed to upload image for ${postId}:`, uploadError);
               } else {
@@ -2899,7 +2899,7 @@ Deno.serve(async (req) => {
                 const { data: urlData } = supabase.storage
                   .from('event-images')
                   .getPublicUrl(fileName);
-                
+
                 storedImageUrl = urlData.publicUrl;
                 console.log(`✓ Stored image for ${postId}`);
               }
@@ -2922,12 +2922,12 @@ Deno.serve(async (req) => {
         // Determine if post needs review
         // Start with the needsReview flag from parseEventFromCaption (which detects borderline merchant/event cases)
         let needsReview = eventInfo.needsReview || false;
-        
+
         // Also flag for review if missing critical info or time validation failed
         if (forceImport || !eventInfo.eventDate || !eventInfo.eventTime || !eventInfo.locationName || eventInfo.timeValidationFailed) {
           needsReview = true;
         }
-        
+
         // Log time validation failures as rejected post (but continue with post insertion)
         if (eventInfo.timeValidationFailed) {
           await logger.logRejectedPost({
@@ -2939,13 +2939,13 @@ Deno.serve(async (req) => {
             eventTime: eventInfo.rawEventTime || null,
             endTime: eventInfo.rawEndTime || null,
             locationName: eventInfo.locationName || null,
-            extra: { 
+            extra: {
               rawEventTime: eventInfo.rawEventTime,
               rawEndTime: eventInfo.rawEndTime,
             },
           });
         }
-        
+
         // Optional: If post has merchant/promo tags and weak event structure, also flag for review
         const merchantTagsSet = new Set(['sale', 'shop', 'promotion']);
         const hasMerchantTags = tags.some(tag => merchantTagsSet.has(tag));
@@ -2988,7 +2988,7 @@ Deno.serve(async (req) => {
           // Source authority for deduplication
           source_authority: sourceAuthority,
         };
-        
+
         // Add additional images from carousel if available
         if (additionalImages.length > 0) {
           insertData.additional_images = additionalImages;
@@ -2998,12 +2998,12 @@ Deno.serve(async (req) => {
         if (eventInfo.eventTime && !eventInfo.timeValidationFailed) {
           insertData.event_time = eventInfo.eventTime;
         }
-        
+
         // Add end_time if available and valid
         if (eventInfo.endTime && !eventInfo.timeValidationFailed) {
           insertData.end_time = eventInfo.endTime;
         }
-        
+
         // Add event_end_date if available
         if (eventInfo.eventEndDate) {
           insertData.event_end_date = eventInfo.eventEndDate;
@@ -3081,10 +3081,15 @@ Deno.serve(async (req) => {
       }
 
     } else {
-      // MODE 2 & 3: Manual or Automated Scraping
-      if (!apifyApiKeySecret) {
-        throw new Error('APIFY_API_KEY secret not configured. Please add it in backend settings.');
-      }
+      // MODE 2 & 3: Manual or Automated Scraping (deprecated - use GitHub Actions ingest)
+      // Return a proper response instead of throwing to prevent marking runs as failed
+      return new Response(
+        JSON.stringify({
+          error: 'Direct Apify scraping mode is deprecated. Use GitHub Actions ingest workflow instead.',
+          hint: 'Go to GitHub Actions > Process Instagram Scrape > Run workflow with your Apify dataset URL'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
 
       // PHASE 2: Get active Instagram accounts with scrape_depth
       const { data: accounts, error: accountsError } = await supabase
@@ -3098,14 +3103,14 @@ Deno.serve(async (req) => {
 
       if (!accounts || accounts.length === 0) {
         console.log('No active Instagram accounts configured');
-        
+
         if (runId) {
           await supabase.from('scrape_runs').update({
             status: 'completed',
             completed_at: new Date().toISOString(),
           }).eq('id', runId);
         }
-        
+
         return new Response(
           JSON.stringify({ message: 'No active accounts configured', newPostsAdded: 0 }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -3122,13 +3127,13 @@ Deno.serve(async (req) => {
       // Scrape each account
       for (const account of accounts) {
         accountsFound.add(account.username);
-        
+
         try {
           console.log(`Scraping account: @${account.username}`);
 
           // PHASE 2: Use configurable scrape depth per account
           const scrapeDepth = account.scrape_depth || 5;
-          
+
           const apifyResponse = await fetch(
             `https://api.apify.com/v2/acts/nH2AHrwxeTRJoN5hX/run-sync-get-dataset-items?token=${apifyApiKeySecret}`,
             {
@@ -3177,13 +3182,13 @@ Deno.serve(async (req) => {
           // Process each post
           for (const post of recentPosts) {
             const postId = post.id || post.shortCode || 'unknown';
-            
+
             const likesCount = (post.likesCount === -1 || !post.likesCount) ? 0 : post.likesCount;
             const commentsCount = post.commentsCount || 0;
             const hashtags = post.hashtags || [];
             const mentions = post.mentions || [];
             const postUrl = post.url || `https://www.instagram.com/p/${post.shortCode}/`;
-            
+
             // Extract image URL early for OCR extraction during parsing
             const postImageUrl = post.displayUrl || post.imageUrl;
 
@@ -3191,15 +3196,15 @@ Deno.serve(async (req) => {
             let eventInfo;
             try {
               eventInfo = await parseEventFromCaption(
-                post.caption || '', 
-                post.locationName, 
-                supabase, 
+                post.caption || '',
+                post.locationName,
+                supabase,
                 postId,
                 {
                   postedAt: post.timestamp,
                   ownerUsername: account.username,
                   instagramAccountId: account.id,
-                    imageUrl: postImageUrl || undefined,
+                  imageUrl: postImageUrl || undefined,
                 }
               );
             } catch (parseError) {
@@ -3256,7 +3261,7 @@ Deno.serve(async (req) => {
                   accounts_found: accountsFound.size,
                 })
                 .eq('id', runId!);
-              
+
               return new Response(
                 JSON.stringify({
                   success: false,
@@ -3278,9 +3283,9 @@ Deno.serve(async (req) => {
               // Check for caption changes
               if (existingPost.caption !== post.caption) {
                 const newEventInfo = await parseEventFromCaption(
-                  post.caption || '', 
-                  post.locationName, 
-                  supabase, 
+                  post.caption || '',
+                  post.locationName,
+                  supabase,
                   postId,
                   {
                     postedAt: post.timestamp,
@@ -3289,27 +3294,27 @@ Deno.serve(async (req) => {
                     imageUrl: postImageUrl || undefined,
                   }
                 );
-                
+
                 if (newEventInfo.isEvent && newEventInfo.eventDate && newEventInfo.locationName) {
                   await supabase
                     .from('instagram_posts')
                     .update({
-                    caption: post.caption,
-                    event_date: newEventInfo.eventDate,
-                    event_end_date: newEventInfo.eventEndDate,
-                    event_time: newEventInfo.eventTime,
-                    end_time: newEventInfo.endTime,
-                    location_name: newEventInfo.locationName,
-                    location_address: newEventInfo.locationAddress,
-                    price: newEventInfo.price,
-                    is_free: newEventInfo.isFree,
-                    signup_url: newEventInfo.signupUrl,
-                    likes_count: likesCount,
-                    comments_count: commentsCount,
-                    updated_at: new Date().toISOString(),
+                      caption: post.caption,
+                      event_date: newEventInfo.eventDate,
+                      event_end_date: newEventInfo.eventEndDate,
+                      event_time: newEventInfo.eventTime,
+                      end_time: newEventInfo.endTime,
+                      location_name: newEventInfo.locationName,
+                      location_address: newEventInfo.locationAddress,
+                      price: newEventInfo.price,
+                      is_free: newEventInfo.isFree,
+                      signup_url: newEventInfo.signupUrl,
+                      likes_count: likesCount,
+                      comments_count: commentsCount,
+                      updated_at: new Date().toISOString(),
                     })
                     .eq('id', existingPost.id);
-                  
+
                   totalUpdatedPosts++;
                 }
               }
@@ -3353,7 +3358,7 @@ Deno.serve(async (req) => {
                     } else {
                       const primaryId = likesCount > similar.likes_count ? postId : similar.post_id;
                       const mergedId = likesCount > similar.likes_count ? similar.post_id : postId;
-                      
+
                       await supabase
                         .from('event_groups')
                         .insert({
@@ -3388,16 +3393,16 @@ Deno.serve(async (req) => {
                 hashtags: hashtags,
                 mentions: mentions,
                 is_event: true,
-              event_title: eventInfo.eventTitle,
-              event_date: eventInfo.eventDate,
-              event_end_date: eventInfo.eventEndDate,
-              event_time: eventInfo.eventTime,
-              end_time: eventInfo.endTime,
-              location_name: eventInfo.locationName,
-              location_address: eventInfo.locationAddress,
-              signup_url: eventInfo.signupUrl,
-              price: eventInfo.price,
-              is_free: eventInfo.isFree,
+                event_title: eventInfo.eventTitle,
+                event_date: eventInfo.eventDate,
+                event_end_date: eventInfo.eventEndDate,
+                event_time: eventInfo.eventTime,
+                end_time: eventInfo.endTime,
+                location_name: eventInfo.locationName,
+                location_address: eventInfo.locationAddress,
+                signup_url: eventInfo.signupUrl,
+                price: eventInfo.price,
+                is_free: eventInfo.isFree,
                 needs_review: needsReview,
                 ocr_processed: false,
               })
@@ -3440,7 +3445,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         message: datasetId ? 'Dataset import completed' : 'Scraping completed',
         accountsProcessed: accountsFound.size,
         newPostsAdded: totalScrapedPosts,
@@ -3457,14 +3462,14 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error in scrape-instagram function:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    
+
     // Update scrape run as failed if we have a runId
     if (runId) {
       try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        
+
         await supabase.from('scrape_runs').update({
           status: 'failed',
           error_message: errorMessage,
@@ -3474,7 +3479,7 @@ Deno.serve(async (req) => {
         console.error('Failed to update scrape run status:', updateError);
       }
     }
-    
+
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
