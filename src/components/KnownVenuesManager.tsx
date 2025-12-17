@@ -60,6 +60,7 @@ interface VenueFormData {
   city: string;
   lat: string;
   lng: string;
+  instagram_handle: string;
 }
 
 const emptyFormData: VenueFormData = {
@@ -69,6 +70,7 @@ const emptyFormData: VenueFormData = {
   city: "",
   lat: "",
   lng: "",
+  instagram_handle: "",
 };
 
 export const KnownVenuesManager = () => {
@@ -86,7 +88,7 @@ export const KnownVenuesManager = () => {
     displayName: 'venues',
     onImportComplete: () => queryClient.invalidateQueries({ queryKey: ['known-venues'] })
   });
-
+  
   // Scroll position preservation
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const savedScrollPosition = useRef<number>(0);
@@ -126,6 +128,7 @@ export const KnownVenuesManager = () => {
         city: data.city || null,
         lat: data.lat ? parseFloat(data.lat) : null,
         lng: data.lng ? parseFloat(data.lng) : null,
+        instagram_handle: data.instagram_handle || null,
       });
       if (error) throw error;
     },
@@ -152,6 +155,7 @@ export const KnownVenuesManager = () => {
           city: data.city || null,
           lat: data.lat ? parseFloat(data.lat) : null,
           lng: data.lng ? parseFloat(data.lng) : null,
+          instagram_handle: data.instagram_handle || null,
         })
         .eq("id", id);
       if (error) throw error;
@@ -231,6 +235,7 @@ export const KnownVenuesManager = () => {
       city: venue.city || "",
       lat: venue.lat?.toString() || "",
       lng: venue.lng?.toString() || "",
+      instagram_handle: venue.instagram_handle || "",
     });
     setEditingId(venue.id);
     setIsDialogOpen(true);
@@ -347,7 +352,14 @@ export const KnownVenuesManager = () => {
                       />
                     </div>
                   </div>
-
+                  <div>
+                    <Label>Instagram Handle</Label>
+                    <Input
+                      value={formData.instagram_handle}
+                      onChange={(e) => setFormData({ ...formData, instagram_handle: e.target.value })}
+                      placeholder="e.g., @thevictor_ph"
+                    />
+                  </div>
                   <div className="flex justify-end gap-2 pt-4">
                     <Button variant="outline" onClick={resetForm}>Cancel</Button>
                     <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
@@ -388,8 +400,8 @@ export const KnownVenuesManager = () => {
                 <TableRow key={venue.id}>
                   <TableCell className="font-medium">
                     <div>{venue.name}</div>
-                    {venue.address && (
-                      <div className="text-xs text-muted-foreground">{venue.address}</div>
+                    {venue.instagram_handle && (
+                      <div className="text-xs text-muted-foreground">{venue.instagram_handle}</div>
                     )}
                   </TableCell>
                   <TableCell>
@@ -425,9 +437,9 @@ export const KnownVenuesManager = () => {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
                         onClick={() => {
                           setEditingHoursVenue(venue);
                           setHoursEditorOpen(true);

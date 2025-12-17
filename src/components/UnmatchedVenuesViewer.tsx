@@ -21,8 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
-import { MapPinOff, Plus, Download, Search, ExternalLink, Code } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { MapPinOff, Plus, Download, Search, ExternalLink } from "lucide-react";
 
 interface UnmatchedVenue {
   location_name: string;
@@ -36,7 +35,6 @@ export const UnmatchedVenuesViewer = () => {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVenue, setSelectedVenue] = useState<UnmatchedVenue | null>(null);
-  const [jsonViewOpen, setJsonViewOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     aliases: "",
@@ -95,7 +93,7 @@ export const UnmatchedVenuesViewer = () => {
       posts?.forEach(post => {
         const name = post.location_name?.trim();
         if (!name) return;
-
+        
         // Skip if already known
         if (knownNames.has(name.toLowerCase())) return;
 
@@ -144,7 +142,7 @@ export const UnmatchedVenuesViewer = () => {
             location_status: "confirmed",
           })
           .ilike("location_name", `%${data.name}%`);
-
+        
         if (updateError) console.error("Re-geocode error:", updateError);
       }
     },
@@ -186,7 +184,7 @@ export const UnmatchedVenuesViewer = () => {
     URL.revokeObjectURL(url);
   };
 
-  const filteredVenues = unmatchedVenues?.filter(v =>
+  const filteredVenues = unmatchedVenues?.filter(v => 
     v.location_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -207,16 +205,10 @@ export const UnmatchedVenuesViewer = () => {
               AI-extracted venues that failed to match known_venues - add them to improve geocoding
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <Download className="h-4 w-4 mr-1" />
-              Export
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setJsonViewOpen(true)}>
-              <Code className="h-4 w-4 mr-1" />
-              View JSON
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-1" />
+            Export
+          </Button>
         </div>
         <div className="mt-4 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -338,42 +330,13 @@ export const UnmatchedVenuesViewer = () => {
             </p>
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => setSelectedVenue(null)}>Cancel</Button>
-              <Button
-                onClick={() => addVenueMutation.mutate(formData)}
+              <Button 
+                onClick={() => addVenueMutation.mutate(formData)} 
                 disabled={addVenueMutation.isPending || !formData.name}
               >
                 Add Venue
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* View JSON Dialog */}
-      <Dialog open={jsonViewOpen} onOpenChange={setJsonViewOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>Unmatched Venues JSON ({unmatchedVenues?.length || 0} venues)</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-[60vh] mt-4">
-            <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto">
-              {JSON.stringify(unmatchedVenues, null, 2)}
-            </pre>
-          </ScrollArea>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard.writeText(JSON.stringify(unmatchedVenues, null, 2));
-                toast({ title: "Copied to clipboard" });
-              }}
-            >
-              Copy
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setJsonViewOpen(false)}>
-              Close
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
