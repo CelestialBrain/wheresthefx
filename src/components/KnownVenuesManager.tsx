@@ -24,6 +24,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Plus, Pencil, Trash2, Search, MapPin, Download, Clock } from "lucide-react";
 import { VenueHoursEditor } from "./VenueHoursEditor";
+import { useJsonExportImport } from "@/hooks/use-json-export-import";
 
 interface OperatingHours {
   monday?: { open?: string; close?: string; closed?: boolean };
@@ -81,6 +82,12 @@ export const KnownVenuesManager = () => {
   const [formData, setFormData] = useState<VenueFormData>(emptyFormData);
   const [hoursEditorOpen, setHoursEditorOpen] = useState(false);
   const [editingHoursVenue, setEditingHoursVenue] = useState<KnownVenue | null>(null);
+
+  const { ImportButton } = useJsonExportImport({
+    tableName: 'known_venues',
+    displayName: 'venues',
+    onImportComplete: () => queryClient.invalidateQueries({ queryKey: ['known-venues'] })
+  });
   
   // Scroll position preservation
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -278,6 +285,7 @@ export const KnownVenuesManager = () => {
               <Download className="h-4 w-4 mr-1" />
               Export
             </Button>
+            <ImportButton />
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" onClick={() => { resetForm(); setIsDialogOpen(true); }}>

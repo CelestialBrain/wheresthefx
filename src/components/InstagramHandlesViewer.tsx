@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Instagram, Search, Download, Users, AtSign, ExternalLink } from "lucide-react";
+import { useJsonExportImport } from "@/hooks/use-json-export-import";
 
 interface TrackedAccount {
   id: string;
@@ -36,6 +37,13 @@ interface DiscoveredMention {
 export const InstagramHandlesViewer = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("tracked");
+  const queryClient = useQueryClient();
+
+  const { ExportButton, ImportButton } = useJsonExportImport({
+    tableName: 'instagram_accounts',
+    displayName: 'accounts',
+    onImportComplete: () => queryClient.invalidateQueries({ queryKey: ['instagram-accounts'] })
+  });
 
   // Fetch tracked accounts with post counts
   const { data: trackedAccounts, isLoading: loadingTracked } = useQuery({
@@ -167,6 +175,10 @@ export const InstagramHandlesViewer = () => {
             <p className="text-sm text-muted-foreground mt-1">
               All tracked accounts and discovered @mentions from captions
             </p>
+          </div>
+          <div className="flex gap-2">
+            <ExportButton />
+            <ImportButton />
           </div>
         </div>
         <div className="mt-4 relative">

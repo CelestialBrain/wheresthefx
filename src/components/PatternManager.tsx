@@ -16,6 +16,7 @@ import { PatternCreationForm } from "./PatternCreationForm";
 import { PatternSuggestionsReview } from "./PatternSuggestionsReview";
 import { PatternSuggestionsBulkActions } from "./PatternSuggestionsBulkActions";
 import { GroundTruthViewer } from "./GroundTruthViewer";
+import { useJsonExportImport } from "@/hooks/use-json-export-import";
 
 interface PatternTestResult {
   patternId: string;
@@ -40,6 +41,12 @@ export const PatternManager = () => {
   const [showAllPatterns, setShowAllPatterns] = useState(false);
   const [editingPattern, setEditingPattern] = useState<EditingPattern | null>(null);
   const queryClient = useQueryClient();
+
+  const { ExportButton, ImportButton } = useJsonExportImport({
+    tableName: 'extraction_patterns',
+    displayName: 'patterns',
+    onImportComplete: () => queryClient.invalidateQueries({ queryKey: ['extraction-patterns'] })
+  });
 
   const { data: patterns, isLoading } = useQuery({
     queryKey: ["extraction-patterns", selectedType],
@@ -294,6 +301,10 @@ export const PatternManager = () => {
                 </option>
               ))}
             </select>
+            <div className="flex gap-2">
+              <ExportButton />
+              <ImportButton />
+            </div>
           </div>
 
           <div className="grid gap-3">

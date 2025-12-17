@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Search, Plus, MapPin, Globe, ChevronDown, Trash2, Save } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { useJsonExportImport } from "@/hooks/use-json-export-import";
 
 interface GeoConfig {
   id: string;
@@ -24,6 +25,12 @@ export function GeoConfigurationManager() {
   const { toast } = useToast();
   const [keywords, setKeywords] = useState<GeoConfig[]>([]);
   const [bounds, setBounds] = useState<GeoConfig[]>([]);
+
+  const { ExportButton, ImportButton } = useJsonExportImport({
+    tableName: 'geo_configuration',
+    displayName: 'geo configuration',
+    onImportComplete: loadGeoConfig
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isKeywordsOpen, setIsKeywordsOpen] = useState(true);
@@ -224,13 +231,21 @@ export function GeoConfigurationManager() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Globe className="h-5 w-5" />
-          Geo Configuration
-        </CardTitle>
-        <CardDescription>
-          Manage NCR boundaries and non-NCR location keywords for filtering
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Geo Configuration
+            </CardTitle>
+            <CardDescription>
+              Manage NCR boundaries and non-NCR location keywords for filtering
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <ExportButton />
+            <ImportButton />
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* NCR Bounds Section */}
