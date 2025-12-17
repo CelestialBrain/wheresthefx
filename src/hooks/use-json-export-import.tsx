@@ -258,8 +258,13 @@ export const useJsonExportImport = ({ tableName, displayName, onImportComplete }
           const { created_at, updated_at, ...recordData } = record;
 
           // Handle table-specific transformations
-          if (tableName === 'instagram_accounts' && recordData.username) {
-            recordData.username = recordData.username.toLowerCase();
+          if (tableName === 'instagram_accounts') {
+            // Strip computed fields that don't exist in the table
+            delete recordData.post_count;
+            // Normalize username
+            if (recordData.username) {
+              recordData.username = recordData.username.toLowerCase();
+            }
           }
 
           return recordData;
