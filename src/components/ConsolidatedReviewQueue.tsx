@@ -709,27 +709,28 @@ export function ConsolidatedReviewQueue() {
       )}
 
       {/* Main Review Queue with Tier Tabs */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold">Review Queue</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Tiered review system - Ready posts can be batch published
-          </p>
-        </div>
-        {tierTab === 'ready' && (tierCounts?.ready || 0) > 0 && (
-          <Button
-            onClick={() => batchPublishMutation.mutate()}
-            disabled={batchPublishMutation.isPending}
-            className="bg-green-600 hover:bg-green-700 frosted-glass-button"
-          >
-            <CheckCheck className="w-4 h-4 mr-2" />
-            {batchPublishMutation.isPending ? "Publishing..." : `Publish All Ready (${tierCounts?.ready || 0})`}
-          </Button>
-        )}
-      </div>
-
-      <div className="frosted-glass border border-border/50 rounded-xl p-4 md:p-6 bg-white/50 dark:bg-black/20">
-        <CardContent className="p-4 md:p-6 pt-0">
+      <Card className="frosted-glass border-border/50">
+        <CardHeader className="p-4 md:p-6 border-b border-border/30">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold">Review Queue</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Tiered review system - Ready posts can be batch published
+              </p>
+            </div>
+            {tierTab === 'ready' && (tierCounts?.ready || 0) > 0 && (
+              <Button
+                onClick={() => batchPublishMutation.mutate()}
+                disabled={batchPublishMutation.isPending}
+                className="bg-green-600 hover:bg-green-700 frosted-glass-button"
+              >
+                <CheckCheck className="w-4 h-4 mr-2" />
+                {batchPublishMutation.isPending ? "Publishing..." : `Publish All Ready (${tierCounts?.ready || 0})`}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 md:p-6">
           <Tabs value={tierTab} onValueChange={(v) => {
             setTierTab(v as TierTab);
             setCurrentPage(0);
@@ -1012,7 +1013,7 @@ export function ConsolidatedReviewQueue() {
             </TabsContent>
           </Tabs>
         </CardContent>
-      </div>
+      </Card>
 
       {/* Rejection Dialog */}
       <AlertDialog open={!!postToReject} onOpenChange={(open) => !open && setPostToReject(null)}>
@@ -1088,6 +1089,6 @@ export function ConsolidatedReviewQueue() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </div >
   );
 }

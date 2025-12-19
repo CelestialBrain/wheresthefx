@@ -361,123 +361,120 @@ export const PublishedEventsManager = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold">Published Events</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {events?.length || 0} events • Manage your published events
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleUndo}
-          disabled={undoStack.length === 0}
-          className="w-full md:w-auto frosted-glass"
-        >
-          <Undo2 className="w-4 h-4 mr-2" />
-          Undo Last Change
-        </Button>
-      </div>
-
-      {/* Search */}
-      <Card className="frosted-glass border-border/50">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by title or venue..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-background/50"
-            />
+    <Card className="frosted-glass border-border/50">
+      <CardHeader className="p-4 md:p-6 border-b border-border/30">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <CardTitle className="text-xl">Published Events</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              {events?.length || 0} events • Manage your published events
+            </p>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Events Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {events?.map((event) => (
-          <Card
-            key={event.id}
-            className={`cursor-pointer frosted-glass border-border/50 hover:border-accent/50 hover:shadow-lg transition-all duration-300 ${event.event_status === 'cancelled' ? 'opacity-60' : ''}`}
-            onClick={() => setSelectedEvent(event)}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            className="w-full md:w-auto frosted-glass"
           >
-            <CardHeader className="p-4 pb-3">
-              <div className="flex items-start gap-3">
-                {(event.stored_image_url || event.image_url) && (
-                  <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 group">
-                    <img
-                      src={event.stored_image_url || event.image_url || ''}
-                      alt=""
-                      className={`w-full h-full object-cover transition-transform group-hover:scale-110 ${event.event_status === 'cancelled' ? 'grayscale' : ''}`}
-                    />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <CardTitle className={`text-sm md:text-base truncate ${event.event_status === 'cancelled' ? 'line-through' : ''}`}>
-                      {event.event_title}
-                    </CardTitle>
-                    {isPastEvent(event.event_date) && (
-                      <UIBadge variant="secondary" className="text-[10px] h-5 shrink-0">Done</UIBadge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                    <Calendar className="w-3 h-3" />
-                    <span>{formatDateRange(event.event_date, event.event_end_date)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                    <Clock className="w-3 h-3" />
-                    <span>{formatTimeRange(event.event_time, event.end_time) || 'TBA'}</span>
+            <Undo2 className="w-4 h-4 mr-2" />
+            Undo Last Change
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-4 md:p-6">
+        {/* Search */}
+        <div className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by title or venue..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 bg-background/50"
+          />
+        </div>
+
+        {/* Events Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {events?.map((event) => (
+            <Card
+              key={event.id}
+              className={`cursor-pointer frosted-glass border-border/50 hover:border-accent/50 hover:shadow-lg transition-all duration-300 ${event.event_status === 'cancelled' ? 'opacity-60' : ''}`}
+              onClick={() => setSelectedEvent(event)}
+            >
+              <CardHeader className="p-4 pb-3">
+                <div className="flex items-start gap-3">
+                  {(event.stored_image_url || event.image_url) && (
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 group">
+                      <img
+                        src={event.stored_image_url || event.image_url || ''}
+                        alt=""
+                        className={`w-full h-full object-cover transition-transform group-hover:scale-110 ${event.event_status === 'cancelled' ? 'grayscale' : ''}`}
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CardTitle className={`text-sm md:text-base truncate ${event.event_status === 'cancelled' ? 'line-through' : ''}`}>
+                        {event.event_title}
+                      </CardTitle>
+                      {isPastEvent(event.event_date) && (
+                        <UIBadge variant="secondary" className="text-[10px] h-5 shrink-0">Done</UIBadge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <Calendar className="w-3 h-3" />
+                      <span>{formatDateRange(event.event_date, event.event_end_date)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      <span>{formatTimeRange(event.event_time, event.end_time) || 'TBA'}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 pt-0 space-y-3">
-              <div className="flex items-start gap-2 text-sm">
-                <MapPin className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
-                <span className="line-clamp-1">{event.location_name || "No location"}</span>
-              </div>
+              </CardHeader>
+              <CardContent className="p-4 pt-0 space-y-3">
+                <div className="flex items-start gap-2 text-sm">
+                  <MapPin className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
+                  <span className="line-clamp-1">{event.location_name || "No location"}</span>
+                </div>
 
-              {/* Price Display */}
-              <PriceDisplay
-                isFree={event.is_free}
-                priceMin={event.price_min}
-                priceMax={event.price_max}
-                priceNotes={event.price_notes}
-                size="sm"
-              />
-
-              {/* Badges Row */}
-              <div className="flex flex-wrap gap-1">
-                {event.category && (
-                  <UIBadge variant="outline" className="text-[10px] h-5">
-                    {CATEGORY_LABELS[event.category] || event.category}
-                  </UIBadge>
-                )}
-                <RecurringEventBadge
-                  isRecurring={event.is_recurring}
-                  pattern={event.recurrence_pattern}
+                {/* Price Display */}
+                <PriceDisplay
+                  isFree={event.is_free}
+                  priceMin={event.price_min}
+                  priceMax={event.price_max}
+                  priceNotes={event.price_notes}
                   size="sm"
                 />
-                {event.event_status && event.event_status !== 'confirmed' &&
-                  getStatusBadge(event.event_status, EVENT_STATUS_OPTIONS)
-                }
-                {event.availability_status && event.availability_status !== 'available' &&
-                  getStatusBadge(event.availability_status, AVAILABILITY_STATUS_OPTIONS)
-                }
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
-      {(!events || events.length === 0) && (
-        <Card className="frosted-glass border-border/50">
-          <CardContent className="py-12 text-center">
+                {/* Badges Row */}
+                <div className="flex flex-wrap gap-1">
+                  {event.category && (
+                    <UIBadge variant="outline" className="text-[10px] h-5">
+                      {CATEGORY_LABELS[event.category] || event.category}
+                    </UIBadge>
+                  )}
+                  <RecurringEventBadge
+                    isRecurring={event.is_recurring}
+                    pattern={event.recurrence_pattern}
+                    size="sm"
+                  />
+                  {event.event_status && event.event_status !== 'confirmed' &&
+                    getStatusBadge(event.event_status, EVENT_STATUS_OPTIONS)
+                  }
+                  {event.availability_status && event.availability_status !== 'available' &&
+                    getStatusBadge(event.availability_status, AVAILABILITY_STATUS_OPTIONS)
+                  }
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {(!events || events.length === 0) && (
+          <div className="frosted-glass border border-border/50 rounded-xl p-12 text-center mt-6">
             <div className="mx-auto w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
               <Calendar className="w-6 h-6 text-muted-foreground" />
             </div>
@@ -485,9 +482,9 @@ export const PublishedEventsManager = () => {
             <p className="text-muted-foreground mt-1 max-w-sm mx-auto">
               {searchQuery ? "No events match your search." : "Events you publish will appear here."}
             </p>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
+      </CardContent>
 
       {/* Event Detail Modal */}
       <Dialog open={!!selectedEvent} onOpenChange={(open) => {
@@ -900,6 +897,6 @@ export const PublishedEventsManager = () => {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </Card >
   );
 };
