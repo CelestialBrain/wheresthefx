@@ -662,31 +662,31 @@ const Admin = () => {
           <TabsList className="flex w-full overflow-x-auto scrollbar-hide bg-muted/30 p-1 rounded-xl border border-border/50 backdrop-blur-sm sticky top-4 z-50">
             <TabsTrigger value="scraping" className="flex-1 items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-accent transition-all py-2.5">
               <Instagram className="w-4 h-4" />
-              <span className="text-sm font-medium">Scraping</span>
+              <span className="hidden md:inline text-sm font-medium">Scraping</span>
             </TabsTrigger>
             <TabsTrigger value="review" className="flex-1 items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-accent transition-all py-2.5">
               <ClipboardList className="w-4 h-4" />
-              <span className="text-sm font-medium text-nowrap">Review</span>
+              <span className="hidden md:inline text-sm font-medium text-nowrap">Review</span>
             </TabsTrigger>
             <TabsTrigger value="published" className="flex-1 items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-accent transition-all py-2.5">
               <FolderKanban className="w-4 h-4" />
-              <span className="text-sm font-medium text-nowrap">Events</span>
+              <span className="hidden md:inline text-sm font-medium text-nowrap">Events</span>
             </TabsTrigger>
             <TabsTrigger value="patterns" className="flex-1 items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-accent transition-all py-2.5">
               <TrendingUp className="w-4 h-4" />
-              <span className="text-sm font-medium text-nowrap">Patterns</span>
+              <span className="hidden md:inline text-sm font-medium text-nowrap">Patterns</span>
             </TabsTrigger>
             <TabsTrigger value="templates" className="flex-1 items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-accent transition-all py-2.5">
               <MapPin className="w-4 h-4" />
-              <span className="text-sm font-medium text-nowrap">Loc</span>
+              <span className="hidden md:inline text-sm font-medium text-nowrap">Loc</span>
             </TabsTrigger>
             <TabsTrigger value="knowledge" className="flex-1 items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-accent transition-all py-2.5">
               <Database className="w-4 h-4" />
-              <span className="text-sm font-medium text-nowrap">Data</span>
+              <span className="hidden md:inline text-sm font-medium text-nowrap">Data</span>
             </TabsTrigger>
             <TabsTrigger value="logs" className="flex-1 items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-accent transition-all py-2.5">
               <Eye className="w-4 h-4" />
-              <span className="text-sm font-medium text-nowrap">Logs</span>
+              <span className="hidden md:inline text-sm font-medium text-nowrap">Logs</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1037,19 +1037,19 @@ const Admin = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="review">
+          <TabsContent value="review" className="mt-6">
             <ConsolidatedReviewQueue />
           </TabsContent>
 
-          <TabsContent value="published">
+          <TabsContent value="published" className="mt-6">
             <PublishedEventsManager />
           </TabsContent>
 
-          <TabsContent value="patterns">
+          <TabsContent value="patterns" className="mt-6">
             <PatternManager />
           </TabsContent>
 
-          <TabsContent value="templates">
+          <TabsContent value="templates" className="mt-6">
             <LocationTemplatesManager />
           </TabsContent>
 
@@ -1062,7 +1062,7 @@ const Admin = () => {
             <AccountVenueStatsViewer />
           </TabsContent>
 
-          <TabsContent value="logs">
+          <TabsContent value="logs" className="mt-6">
             <ScraperLogs />
           </TabsContent>
         </Tabs>

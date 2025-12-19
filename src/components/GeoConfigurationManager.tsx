@@ -47,10 +47,10 @@ export function GeoConfigurationManager() {
 
       const keywordConfigs = data?.filter(c => c.config_type === 'non_ncr_keyword') || [];
       const boundConfigs = data?.filter(c => c.config_type === 'ncr_bounds') || [];
-      
+
       setKeywords(keywordConfigs);
       setBounds(boundConfigs);
-      
+
       // Initialize edited bounds
       const boundsMap: Record<string, string> = {};
       boundConfigs.forEach(b => {
@@ -87,7 +87,7 @@ export function GeoConfigurationManager() {
 
       if (error) throw error;
 
-      setKeywords(prev => prev.map(k => 
+      setKeywords(prev => prev.map(k =>
         k.id === id ? { ...k, is_active: !currentStatus } : k
       ));
 
@@ -216,7 +216,7 @@ export function GeoConfigurationManager() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-xl">
             <Globe className="h-5 w-5" />
             Geo Configuration
           </CardTitle>
@@ -233,7 +233,7 @@ export function GeoConfigurationManager() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-xl">
               <Globe className="h-5 w-5" />
               Geo Configuration
             </CardTitle>
@@ -283,10 +283,10 @@ export function GeoConfigurationManager() {
                 );
               })}
             </div>
-            <Button 
-              onClick={saveBounds} 
+            <Button
+              onClick={saveBounds}
               disabled={isSavingBounds}
-              size="sm" 
+              size="sm"
               className="mt-3"
             >
               <Save className="h-3 w-3 mr-1" />
@@ -369,11 +369,10 @@ export function GeoConfigurationManager() {
                 </p>
               ) : (
                 filteredKeywords.map(keyword => (
-                  <div 
+                  <div
                     key={keyword.id}
-                    className={`flex items-center justify-between p-2 rounded-md hover:bg-muted/50 ${
-                      !keyword.is_active ? 'opacity-50' : ''
-                    }`}
+                    className={`flex items-center justify-between p-2 rounded-md hover:bg-muted/50 ${!keyword.is_active ? 'opacity-50' : ''
+                      }`}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
