@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { groupEventsByProximity, type LocationMarker } from "@/utils/markerUtils";
 
 interface UseEventMarkersOptions {
@@ -12,90 +11,78 @@ interface UseEventMarkersOptions {
   category?: string;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 export function useEventMarkers(options: UseEventMarkersOptions = {}) {
   return useQuery({
     queryKey: ['event-markers', options],
     queryFn: async (): Promise<LocationMarker[]> => {
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Read from published_events (canonical feed)
-      let query = supabase
-        .from('published_events')
-        .select('*, stored_image_url, event_end_date, end_time, signup_url, instagram_post_url, caption, source_post_id') as any;
+      // Build query params for the Express API
+      const params = new URLSearchParams();
 
-      // Filter by date range or default to future events only
       if (options.dateRange) {
-        const startDate = options.dateRange.start.toISOString().split('T')[0];
-        const endDate = options.dateRange.end.toISOString().split('T')[0];
-        query = query.gte('event_date', startDate).lte('event_date', endDate);
-      } else {
-        // Show only upcoming events: either event_end_date >= today OR (no end_date AND event_date >= today)
-        query = query.or(`event_end_date.gte.${today},and(event_end_date.is.null,event_date.gte.${today})`);
+        params.set('date_from', options.dateRange.start.toISOString().split('T')[0]);
+        params.set('date_to', options.dateRange.end.toISOString().split('T')[0]);
       }
 
-      // Apply ordering
-      query = query.order('likes_count', { ascending: false });
-
-      // Filter by price
-      if (options.priceFilter === 'free') {
-        query = query.eq('is_free', true);
-      } else if (options.priceFilter === 'paid') {
-        query = query.eq('is_free', false);
-      }
-
-      // Filter by search query (location or account)
-      if (options.searchQuery) {
-        query = query.or(
-          `location_name.ilike.%${options.searchQuery}%,location_address.ilike.%${options.searchQuery}%,instagram_account_username.ilike.%${options.searchQuery}%`
-        );
-      }
-
-      // Filter by interest tags
-      if (options.interestTags && options.interestTags.length > 0) {
-        const tagFilters = options.interestTags
-          .map(tag => `event_title.ilike.%${tag}%,description.ilike.%${tag}%`)
-          .join(',');
-        query = query.or(tagFilters);
-      }
-
-      // Filter by category
       if (options.category && options.category !== 'all') {
-        query = query.eq('category', options.category);
+        params.set('category', options.category);
       }
 
-      const { data, error } = await query;
+      if (options.priceFilter === 'free') {
+        params.set('free', 'true');
+      } else if (options.priceFilter === 'paid') {
+        params.set('free', 'false');
+      }
 
-      if (error) throw error;
-      
-      // Transform published_events to match expected format
-      const transformedData = (data || []).map((event: any) => ({
+      if (options.searchQuery) {
+        params.set('search', options.searchQuery);
+      }
+
+      const query = params.toString();
+      const url = `${API_BASE}/api/events/map${query ? '?' + query : ''}`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const json = await res.json();
+
+      // API returns snake_case with all fields needed by sidebar cards
+      const transformedData = (json.data || []).map((event: any) => ({
         id: event.id,
-        post_id: event.post_id,
-        source_post_id: event.source_post_id,
-        post_url: event.instagram_post_url,
-        caption: event.caption || event.description,
-        event_title: event.event_title,
+        post_id: null,
+        source_post_id: null,
+        post_url: null,
+        caption: null,
+        event_title: event.title,
         event_date: event.event_date,
         event_time: event.event_time,
-        event_end_date: event.event_end_date,
-        end_time: event.end_time,
-        location_name: event.location_name,
-        location_address: event.location_address,
-        location_lat: event.location_lat,
-        location_lng: event.location_lng,
+        event_end_date: event.event_end_date || null,
+        end_time: event.end_time || null,
+        location_name: event.venue_name,
+        location_address: event.venue_address || null,
+        location_lat: event.venue_lat,
+        location_lng: event.venue_lng,
         image_url: event.image_url,
-        stored_image_url: event.stored_image_url,
+        stored_image_url: null,
         is_free: event.is_free,
         price: event.price,
-        signup_url: event.signup_url,
-        likes_count: event.likes_count,
-        comments_count: event.comments_count,
+        price_min: event.price_min || null,
+        price_max: event.price_max || null,
+        price_notes: event.price_notes || null,
+        signup_url: event.signup_url || null,
+        event_status: event.event_status || 'confirmed',
+        availability_status: event.availability_status || 'available',
+        is_recurring: event.is_recurring || false,
+        recurrence_pattern: event.recurrence_pattern || null,
+        likes_count: 0,
+        comments_count: 0,
         category: event.category || 'other',
-        instagram_accounts: event.instagram_account_username ? {
-          username: event.instagram_account_username
+        instagram_account_username: event.source_username || null,
+        instagram_accounts: event.source_username ? {
+          username: event.source_username
         } : null
       }));
-      
+
       return groupEventsByProximity(transformedData, 100);
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -106,16 +93,18 @@ export function useMostPopularEvent() {
   return useQuery({
     queryKey: ['most-popular-event'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('published_events')
-        .select('location_lat, location_lng')
-        .gte('event_date', new Date().toISOString().split('T')[0])
-        .order('likes_count', { ascending: false })
-        .limit(1)
-        .single();
+      const today = new Date().toISOString().split('T')[0];
+      const res = await fetch(`${API_BASE}/api/events/map?date_from=${today}`);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const json = await res.json();
 
-      if (error) throw error;
-      return data;
+      if (json.data && json.data.length > 0) {
+        return {
+          location_lat: json.data[0].venue_lat,
+          location_lng: json.data[0].venue_lng,
+        };
+      }
+      return null;
     },
   });
 }
