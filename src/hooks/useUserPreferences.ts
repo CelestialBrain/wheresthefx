@@ -14,9 +14,10 @@ export function useUserPreferences() {
     queryFn: async () => {
       if (!isLoggedIn()) return null;
       const user = await getMe();
+      const prefs = Array.isArray(user.preferences) ? user.preferences : [];
       return {
-        preferences: { interest_tags: user.preferences || [] } as UserPreferences,
-        has_completed_onboarding: (user.preferences || []).length > 0,
+        preferences: { interest_tags: prefs } satisfies UserPreferences,
+        has_completed_onboarding: prefs.length > 0,
       };
     },
   });
@@ -32,7 +33,7 @@ export function useUserPreferences() {
   });
 
   return {
-    preferences: query.data?.preferences as UserPreferences,
+    preferences: query.data?.preferences,
     hasCompletedOnboarding: query.data?.has_completed_onboarding,
     isLoading: query.isLoading,
     updatePreferences: updatePrefsMutation.mutate,

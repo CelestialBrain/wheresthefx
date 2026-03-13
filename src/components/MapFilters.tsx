@@ -31,12 +31,12 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   const [selectedDate, setSelectedDate] = useState("all");
   const [selectedPrice, setSelectedPrice] = useState("all");
   const [savedDrawerOpen, setSavedDrawerOpen] = useState(false);
-  const [user, setUser] = useState<boolean>(isLoggedIn());
+  const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(isLoggedIn());
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
-    setUser(isLoggedIn());
+    setIsUserLoggedIn(isLoggedIn());
   }, []);
 
   const handleSearchChange = (value: string) => {
@@ -119,7 +119,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
   const handleSignOut = async () => {
     logout();
-    setUser(false);
+    setIsUserLoggedIn(false);
     toast.success("Signed out successfully");
     navigate('/');
   };
@@ -184,7 +184,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
           {/* Right Side - User Menu Only */}
           <div className="flex items-center">
-            {user ? (
+            {isUserLoggedIn ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
