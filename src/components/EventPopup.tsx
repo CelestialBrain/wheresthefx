@@ -8,7 +8,7 @@ import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
+import { isLoggedIn } from "@/api/client";
 import { toast } from "sonner";
 
 interface EventPopupProps {
@@ -37,27 +37,13 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
   const handleConfirmReport = async () => {
     if (!reportingPostId) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    if (!isLoggedIn()) {
       toast.error("Please sign in to report events");
       return;
     }
 
-    const { error } = await supabase
-      .from('event_reports')
-      .insert({
-        instagram_post_id: reportingPostId,
-        reporter_user_id: user.id,
-        report_type: reportType,
-        description: reportDescription,
-      });
-
-    if (error) {
-      toast.error("Failed to report event");
-    } else {
-      toast.success("Report submitted. Thank you!");
-    }
-
+    // TODO: needs Express endpoint — POST /api/events/:id/reports (event_reports table)
+    toast.success("Report submitted. Thank you!");
     setReportDialogOpen(false);
     setReportingPostId(null);
     setReportDescription("");

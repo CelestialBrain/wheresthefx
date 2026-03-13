@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, MapPin, DollarSign, ExternalLink, Eye, CalendarDays, Repeat } from "lucide-react";
 import { LocationCorrectionEditor } from "./LocationCorrectionEditor";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { toast } from "sonner";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -158,7 +159,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       setIsLoadingSchedule(true);
       try {
         // Check if there are existing event_dates for this post
-        const { data: existingDates, error } = await supabase
+        const { data: existingDates, error } = await db
           .from('event_dates')
           .select('*')
           .eq('instagram_post_id', post.id)
@@ -390,7 +391,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
     }
 
     if (corrections.length > 0) {
-      const { error } = await supabase.from("extraction_corrections").insert(corrections);
+      const { error } = await db.from("extraction_corrections").insert(corrections);
       if (error) console.error("Failed to log corrections:", error);
       else console.log(`Logged ${corrections.length} corrections for pattern learning`);
     }
@@ -423,7 +424,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         : eventData.event_end_date;
 
       // Update post with all event data
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from("instagram_posts")
         .update({
           event_title: eventData.event_title,
@@ -457,7 +458,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       // Save multi-day schedule to event_dates table
       if (isMultiDay && scheduleData.length > 0) {
         // First delete any existing event_dates for this post
-        await supabase.from("event_dates").delete().eq("instagram_post_id", post.id);
+        await db.from("event_dates").delete().eq("instagram_post_id", post.id);
         
         // Insert all schedule entries with start AND end times
         const eventDatesInserts = scheduleData.flatMap(day => 
@@ -472,7 +473,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         );
 
         if (eventDatesInserts.length > 0) {
-          const { error: datesError } = await supabase
+          const { error: datesError } = await db
             .from("event_dates")
             .insert(eventDatesInserts);
           
@@ -485,14 +486,14 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
 
       // Now publish to published_events table
       console.log('[Publish] Calling publish-event edge function for post:', post.id);
-      const { data: publishData, error: publishError } = await supabase.functions.invoke("publish-event", {
+      const { data: publishData, error: publishError } = await db.functions.invoke("publish-event", {
         body: { postId: post.id }
       });
 
       if (publishError) {
         console.error('[Publish] Edge function error:', publishError);
         // Revert needs_review back to true since publish failed
-        await supabase.from("instagram_posts").update({ needs_review: true }).eq("id", post.id);
+        await db.from("instagram_posts").update({ needs_review: true }).eq("id", post.id);
         throw publishError;
       }
 
@@ -528,7 +529,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
       : eventData.event_end_date;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("instagram_posts")
         .update({
           event_title: eventData.event_title,
@@ -561,7 +562,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
 
       // Save multi-day schedule to event_dates table
       if (isMultiDay && scheduleData.length > 0) {
-        await supabase.from("event_dates").delete().eq("instagram_post_id", post.id);
+        await db.from("event_dates").delete().eq("instagram_post_id", post.id);
         
         const eventDatesInserts = scheduleData.flatMap(day => 
           day.timeSlots.map(slot => ({
@@ -574,7 +575,7 @@ export const PostWithEventEditor = ({ post, onCreateEvent, onCancel }: PostWithE
         );
 
         if (eventDatesInserts.length > 0) {
-          await supabase.from("event_dates").insert(eventDatesInserts);
+          await db.from("event_dates").insert(eventDatesInserts);
         }
       }
 

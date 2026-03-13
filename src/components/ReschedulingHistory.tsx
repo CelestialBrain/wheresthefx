@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { History, Calendar, MapPin, Clock, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from '@/utils/adminDb';
 
 type UpdateType = 'reschedule' | 'cancel' | 'venue_change' | 'time_change' | 'info_update';
 
@@ -25,7 +26,7 @@ export function ReschedulingHistory({ postId }: ReschedulingHistoryProps) {
 
   useEffect(() => {
     async function fetchUpdates() {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('event_updates')
         .select('*')
         .eq('original_post_id', postId)

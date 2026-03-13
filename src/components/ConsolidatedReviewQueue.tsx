@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
+
+// Local Json type matching the Drizzle JSON field shape
+type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
+
 import { CATEGORY_LABELS, CATEGORY_COLORS } from "@/constants/categoryColors";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -34,7 +39,7 @@ import {
 import { PriceDisplay } from "./PriceDisplay";
 import { SubEventsDisplay } from "./SubEventsDisplay";
 import { PerformersDisplay } from "./PerformersDisplay";
-import { Json } from "@/integrations/supabase/types";
+
 
 interface Post {
   id: string;
@@ -133,7 +138,7 @@ export function ConsolidatedReviewQueue() {
       const today = new Date().toISOString().split('T')[0];
 
       // Fetch ALL posts for current tier (bypass pagination)
-      let query = supabase
+      let query = db
         .from("instagram_posts")
         .select(`
           id, post_id, post_url, caption, ocr_text, ai_reasoning,
@@ -230,7 +235,7 @@ export function ConsolidatedReviewQueue() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      let query = supabase
+      let query = db
         .from("instagram_posts")
         .select(`
           id, post_id, post_url, caption, ocr_text,
@@ -315,7 +320,7 @@ export function ConsolidatedReviewQueue() {
     queryFn: async () => {
       const today = new Date().toISOString().split('T')[0];
 
-      let query = supabase
+      let query = db
         .from("instagram_posts")
         .select("review_tier, event_date")
         .eq("is_event", true)
@@ -343,7 +348,7 @@ export function ConsolidatedReviewQueue() {
   const { data: allPosts, isLoading } = useQuery({
     queryKey: ["consolidated-review-queue", currentPage, tierTab, hidePastEvents],
     queryFn: async () => {
-      let query = supabase
+      let query = db
         .from("instagram_posts")
         .select(`
           *,
@@ -381,7 +386,7 @@ export function ConsolidatedReviewQueue() {
   const { data: ocrPendingCount } = useQuery({
     queryKey: ["ocr-pending-count"],
     queryFn: async () => {
-      const { count } = await supabase
+      const { count } = await db
         .from("instagram_posts")
         .select("*", { count: "exact", head: true })
         .eq("ocr_processed", false);
@@ -392,7 +397,7 @@ export function ConsolidatedReviewQueue() {
   // Force reprocess mutation
   const forceReprocessMutation = useMutation({
     mutationFn: async (postId: string) => {
-      const { error } = await supabase
+      const { error } = await db
         .from("instagram_posts")
         .update({
           ocr_processed: false,
@@ -417,7 +422,7 @@ export function ConsolidatedReviewQueue() {
       const today = new Date().toISOString().split('T')[0];
 
       // Get all ready tier posts with future dates
-      const { data: readyPosts, error: fetchError } = await supabase
+      const { data: readyPosts, error: fetchError } = await db
         .from("instagram_posts")
         .select("id")
         .eq("review_tier", "ready")
@@ -432,7 +437,7 @@ export function ConsolidatedReviewQueue() {
       // Publish each post
       let published = 0;
       for (const post of readyPosts) {
-        const { error } = await supabase.functions.invoke("publish-event", {
+        const { error } = await db.functions.invoke("publish-event", {
           body: { postId: post.id }
         });
         if (!error) published++;
@@ -459,7 +464,7 @@ export function ConsolidatedReviewQueue() {
       notes: string;
     }) => {
       // 1. Log rejection
-      const { error: rejectionError } = await supabase
+      const { error: rejectionError } = await db
         .from("post_rejections")
         .insert({
           post_id: post.id,
@@ -484,7 +489,7 @@ export function ConsolidatedReviewQueue() {
           }));
 
         if (corrections.length > 0) {
-          const { error: correctionError } = await supabase
+          const { error: correctionError } = await db
             .from("extraction_corrections")
             .insert(corrections);
 
@@ -493,7 +498,7 @@ export function ConsolidatedReviewQueue() {
       }
 
       // 3. Delete the post
-      const { error: deleteError } = await supabase
+      const { error: deleteError } = await db
         .from("instagram_posts")
         .delete()
         .eq("id", post.id);
@@ -517,7 +522,7 @@ export function ConsolidatedReviewQueue() {
   // Publish mutation
   const publishMutation = useMutation({
     mutationFn: async (post: Post) => {
-      const { error } = await supabase.functions.invoke("publish-event", {
+      const { error } = await db.functions.invoke("publish-event", {
         body: { postId: post.id }
       });
       if (error) throw error;

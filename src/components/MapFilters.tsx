@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SavedEventsDrawer } from "./SavedEventsDrawer";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { isLoggedIn, logout } from "@/api/client";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 
@@ -31,18 +31,12 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   const [selectedDate, setSelectedDate] = useState("all");
   const [selectedPrice, setSelectedPrice] = useState("all");
   const [savedDrawerOpen, setSavedDrawerOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(isLoggedIn());
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    setIsUserLoggedIn(isLoggedIn());
   }, []);
 
   const handleSearchChange = (value: string) => {
@@ -124,7 +118,8 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    logout();
+    setIsUserLoggedIn(false);
     toast.success("Signed out successfully");
     navigate('/');
   };
@@ -189,7 +184,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
 
           {/* Right Side - User Menu Only */}
           <div className="flex items-center">
-            {user ? (
+            {isUserLoggedIn ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -201,7 +196,7 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                    {user.email}
+                    Signed In
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setSavedDrawerOpen(true)}>

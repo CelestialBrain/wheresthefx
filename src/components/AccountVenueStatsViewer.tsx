@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -26,7 +27,7 @@ export const AccountVenueStatsViewer = () => {
     queryKey: ["account-venue-stats"],
     queryFn: async () => {
       // First get the stats
-      const { data: statsData, error: statsError } = await supabase
+      const { data: statsData, error: statsError } = await db
         .from("account_venue_stats")
         .select("*")
         .order("post_count", { ascending: false });
@@ -38,7 +39,7 @@ export const AccountVenueStatsViewer = () => {
       if (accountIds.length === 0) return statsData as AccountVenueStat[];
 
       // Fetch account usernames
-      const { data: accounts } = await supabase
+      const { data: accounts } = await db
         .from("instagram_accounts")
         .select("id, username")
         .in("id", accountIds);

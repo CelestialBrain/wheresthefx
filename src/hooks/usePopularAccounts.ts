@@ -1,17 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 
+// TODO: needs admin API endpoint — GET /api/accounts/popular
+// No Express endpoint exists yet for popular Instagram accounts.
 export function usePopularAccounts(limit: number = 30) {
   return useQuery({
     queryKey: ['popular-accounts', limit],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('popular_instagram_accounts')
-        .select('*')
-        .limit(limit);
-      
-      if (error) throw error;
-      return data;
+      return [] as any[];
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
   });

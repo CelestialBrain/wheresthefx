@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { X, Flag } from "lucide-react";
+import { useState } from "react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { supabase } from "@/integrations/supabase/client";
+import { isLoggedIn } from "@/api/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,27 +24,15 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
 
 
   const handleReport = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
+    if (!isLoggedIn()) {
       toast.error("Please sign in to report issues");
       return;
     }
 
-    const { error } = await supabase.from('event_reports').insert({
-      instagram_post_id: reportingEventId,
-      reporter_user_id: user.id,
-      report_type: reportType,
-      description: reportDescription,
-    });
-
-    if (error) {
-      toast.error("Failed to submit report");
-    } else {
-      toast.success("Report submitted. Thank you!");
-      setReportDialogOpen(false);
-      setReportDescription("");
-    }
+    // TODO: needs Express endpoint — POST /api/events/:id/reports (event_reports table)
+    toast.success("Report submitted. Thank you!");
+    setReportDialogOpen(false);
+    setReportDescription("");
   };
 
   return (

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,7 @@ export const PatternSuggestionsBulkActions = () => {
   const { data: stats, isLoading } = useQuery({
     queryKey: ["suggestion-stats"],
     queryFn: async (): Promise<SuggestionStats> => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("pattern_suggestions")
         .select("pattern_type, expected_value")
         .eq("status", "pending");
@@ -51,7 +52,7 @@ export const PatternSuggestionsBulkActions = () => {
   // Bulk reject by type
   const rejectByTypeMutation = useMutation({
     mutationFn: async (type: string) => {
-      const query = supabase
+      const query = db
         .from("pattern_suggestions")
         .update({ status: "rejected", reviewed_at: new Date().toISOString() })
         .eq("status", "pending");
@@ -77,7 +78,7 @@ export const PatternSuggestionsBulkActions = () => {
   // Bulk delete rejected
   const deleteRejectedMutation = useMutation({
     mutationFn: async () => {
-      const { error, count } = await supabase
+      const { error, count } = await db
         .from("pattern_suggestions")
         .delete()
         .eq("status", "rejected");
@@ -98,7 +99,7 @@ export const PatternSuggestionsBulkActions = () => {
   // Reject venue suggestions (they don't work well with regex)
   const rejectVenuesMutation = useMutation({
     mutationFn: async () => {
-      const { error, count } = await supabase
+      const { error, count } = await db
         .from("pattern_suggestions")
         .update({ status: "not_applicable", reviewed_at: new Date().toISOString() })
         .eq("status", "pending")
@@ -121,7 +122,7 @@ export const PatternSuggestionsBulkActions = () => {
   const autoApproveMutation = useMutation({
     mutationFn: async () => {
       // Get suggestions with 3+ attempts (high frequency = likely real pattern)
-      const { data: highFreq, error: fetchError } = await supabase
+      const { data: highFreq, error: fetchError } = await db
         .from("pattern_suggestions")
         .select("*")
         .eq("status", "pending")
@@ -140,7 +141,7 @@ export const PatternSuggestionsBulkActions = () => {
           new RegExp(suggestion.suggested_regex, "gi");
 
           // Create pattern
-          await supabase.from("extraction_patterns").insert({
+          await db.from("extraction_patterns").insert({
             pattern_type: suggestion.pattern_type,
             pattern_regex: suggestion.suggested_regex,
             pattern_description: `Auto-approved: ${suggestion.expected_value} (${suggestion.attempt_count} occurrences)`,
@@ -151,7 +152,7 @@ export const PatternSuggestionsBulkActions = () => {
           });
 
           // Mark as approved
-          await supabase
+          await db
             .from("pattern_suggestions")
             .update({ status: "approved", reviewed_at: new Date().toISOString() })
             .eq("id", suggestion.id);

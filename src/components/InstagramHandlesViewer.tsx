@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,7 +50,7 @@ export const InstagramHandlesViewer = () => {
   const { data: trackedAccounts, isLoading: loadingTracked } = useQuery({
     queryKey: ["instagram-handles-tracked"],
     queryFn: async () => {
-      const { data: accounts, error } = await supabase
+      const { data: accounts, error } = await db
         .from("instagram_accounts")
         .select("id, username, display_name, is_active, last_scraped_at, default_category")
         .order("username", { ascending: true });
@@ -57,7 +58,7 @@ export const InstagramHandlesViewer = () => {
       if (error) throw error;
 
       // Get post counts
-      const { data: postCounts } = await supabase
+      const { data: postCounts } = await db
         .from("instagram_posts")
         .select("instagram_account_id")
         .not("instagram_account_id", "is", null);
@@ -80,7 +81,7 @@ export const InstagramHandlesViewer = () => {
     queryKey: ["instagram-handles-discovered"],
     queryFn: async () => {
       // Get all mentions arrays from posts
-      const { data: posts, error } = await supabase
+      const { data: posts, error } = await db
         .from("instagram_posts")
         .select("mentions, created_at")
         .not("mentions", "is", null);
@@ -88,7 +89,7 @@ export const InstagramHandlesViewer = () => {
       if (error) throw error;
 
       // Get tracked usernames for comparison
-      const { data: accounts } = await supabase
+      const { data: accounts } = await db
         .from("instagram_accounts")
         .select("username");
 

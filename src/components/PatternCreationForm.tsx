@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +53,7 @@ export const PatternCreationForm = ({ onSuccess }: PatternCreationFormProps) => 
         throw new Error(validation.error);
       }
 
-      const { error } = await supabase
+      const { error } = await db
         .from("extraction_patterns")
         .insert({
           pattern_type: patternType,

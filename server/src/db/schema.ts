@@ -18,12 +18,12 @@
  * - `sub_events` — Multi-act lineups, screening schedules, etc.
  *
  * ### 2. Platform Features
- * - `users` — Platform user accounts (email + password auth)
- * - `saved_events` — User bookmarks / saved events
- * - `user_preferences` — Category preferences for personalization
+ * - `account` — Platform user accounts (email + password auth)
+ * - `saved_event` — User bookmarks / saved events
+ * - `account_preference` — Category preferences for personalization
  *
  * ### 3. Infrastructure
- * - `blead_sync_log` — Tracks ingest pipeline runs and sync health
+ * - `sync_log` — Tracks ingest pipeline runs and sync health
  *
  * ## Key Design Decisions
  *

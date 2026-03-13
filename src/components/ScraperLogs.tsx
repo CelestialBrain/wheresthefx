@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,7 @@ export const ScraperLogs = () => {
     fetchRuns();
 
     // Subscribe to real-time updates
-    const channel = supabase
+    const channel = db
       .channel('scraper-logs-changes')
       .on(
         'postgres_changes',
@@ -113,7 +114,7 @@ export const ScraperLogs = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      db.removeChannel(channel);
     };
   }, []);
 
@@ -130,7 +131,7 @@ export const ScraperLogs = () => {
   const fetchDbStats = async (runId: string | null) => {
     try {
       const buildCountQuery = (level?: string) => {
-        let q = supabase.from('scraper_logs').select('*', { count: 'exact', head: true });
+        let q = db.from('scraper_logs').select('*', { count: 'exact', head: true });
         if (runId) q = q.eq('run_id', runId);
         if (level) q = q.eq('log_level', level);
         return q;
@@ -160,7 +161,7 @@ export const ScraperLogs = () => {
 
   const fetchLogs = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('scraper_logs')
       .select('*')
       .order('created_at', { ascending: false })
@@ -179,7 +180,7 @@ export const ScraperLogs = () => {
   };
 
   const fetchRuns = async () => {
-    const { data } = await supabase
+    const { data } = await db
       .from('scrape_runs')
       .select('id, started_at')
       .order('started_at', { ascending: false })
@@ -213,7 +214,7 @@ export const ScraperLogs = () => {
     const batchSize = 1000;
 
     while (true) {
-      let query = supabase
+      let query = db
         .from('scraper_logs')
         .select('*')
         .order('created_at', { ascending: false })
@@ -334,7 +335,7 @@ export const ScraperLogs = () => {
       return;
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('scraper_logs')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');

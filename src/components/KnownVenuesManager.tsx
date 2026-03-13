@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,7 +111,7 @@ export const KnownVenuesManager = () => {
   const { data: venues, isLoading } = useQuery({
     queryKey: ["known-venues"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("known_venues")
         .select("*")
         .order("name", { ascending: true });
@@ -121,7 +122,7 @@ export const KnownVenuesManager = () => {
 
   const createMutation = useMutation({
     mutationFn: async (data: VenueFormData) => {
-      const { error } = await supabase.from("known_venues").insert({
+      const { error } = await db.from("known_venues").insert({
         name: data.name,
         aliases: data.aliases ? data.aliases.split(",").map((a) => a.trim()).filter(Boolean) : [],
         address: data.address || null,
@@ -146,7 +147,7 @@ export const KnownVenuesManager = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: VenueFormData }) => {
-      const { error } = await supabase
+      const { error } = await db
         .from("known_venues")
         .update({
           name: data.name,
@@ -174,7 +175,7 @@ export const KnownVenuesManager = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("known_venues").delete().eq("id", id);
+      const { error } = await db.from("known_venues").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -190,7 +191,7 @@ export const KnownVenuesManager = () => {
 
   const updateHoursMutation = useMutation({
     mutationFn: async ({ id, hours }: { id: string; hours: OperatingHours }) => {
-      const { error } = await supabase
+      const { error } = await db
         .from("known_venues")
         .update({ operating_hours: hours as any })
         .eq("id", id);

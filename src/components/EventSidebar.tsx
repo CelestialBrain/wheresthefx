@@ -5,7 +5,8 @@ import { MapPin, Search, Filter, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 
@@ -161,7 +162,7 @@ export const EventSidebar = () => {
   const fetchInstagramPosts = async () => {
     try {
       setIsLoadingPosts(true);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("instagram_posts")
         .select(`
           *,
