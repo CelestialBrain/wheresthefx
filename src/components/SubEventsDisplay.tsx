@@ -1,6 +1,8 @@
 import { Calendar, Clock, User, Music } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Json } from "@/integrations/supabase/types";
+
+// Local Json type matching the Drizzle JSON field shape
+type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 interface SubEvent {
   date?: string;

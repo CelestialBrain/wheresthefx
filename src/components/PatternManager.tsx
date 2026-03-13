@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +52,7 @@ export const PatternManager = () => {
   const { data: patterns, isLoading } = useQuery({
     queryKey: ["extraction-patterns", selectedType],
     queryFn: async () => {
-      let query = supabase
+      let query = db
         .from("extraction_patterns")
         .select("*")
         .order("confidence_score", { ascending: false });
@@ -70,7 +71,7 @@ export const PatternManager = () => {
   const { data: suggestionCount } = useQuery({
     queryKey: ["pattern-suggestions-count"],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { count, error } = await db
         .from("pattern_suggestions")
         .select("*", { count: "exact", head: true })
         .eq("status", "pending");
@@ -82,7 +83,7 @@ export const PatternManager = () => {
   const { data: groundTruthCount } = useQuery({
     queryKey: ["ground-truth-count"],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { count, error } = await db
         .from("extraction_ground_truth")
         .select("*", { count: "exact", head: true });
       if (error) throw error;
@@ -92,7 +93,7 @@ export const PatternManager = () => {
 
   const togglePatternMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("extraction_patterns")
         .update({ is_active: !isActive })
         .eq("id", id)
@@ -121,7 +122,7 @@ export const PatternManager = () => {
         throw new Error(`Invalid regex: ${e instanceof Error ? e.message : 'Unknown error'}`);
       }
 
-      const { error } = await supabase
+      const { error } = await db
         .from("extraction_patterns")
         .update({
           pattern_regex: pattern.regex,
@@ -144,7 +145,7 @@ export const PatternManager = () => {
 
   const deletePatternMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await db
         .from("extraction_patterns")
         .delete()
         .eq("id", id);

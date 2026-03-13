@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { login, register } from "@/api/client";
 import { z } from "zod";
 import { ArrowLeft } from "lucide-react";
 
@@ -35,29 +35,19 @@ const Auth = () => {
       emailSchema.parse(loginEmail.trim());
       passwordSchema.parse(loginPassword);
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail.trim(),
-        password: loginPassword,
-      });
-
-      if (error) {
-        if (error.message.includes("Invalid login credentials")) {
-          toast.error("Invalid email or password");
-        } else if (error.message.includes("Email not confirmed")) {
-          toast.error("Please confirm your email address");
-        } else {
-          toast.error(error.message);
-        }
-        return;
-      }
-
-      if (data.user) {
-        toast.success("Welcome back to f(x)!");
-        navigate("/");
-      }
+      await login(loginEmail.trim(), loginPassword);
+      toast.success("Welcome back to f(x)!");
+      navigate("/");
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
+      } else if (error instanceof Error) {
+        const msg = error.message;
+        if (msg.includes("Invalid") || msg.includes("credentials")) {
+          toast.error("Invalid email or password");
+        } else {
+          toast.error(msg);
+        }
       } else {
         toast.error("An unexpected error occurred");
       }
@@ -74,43 +64,26 @@ const Auth = () => {
       // Validate inputs
       emailSchema.parse(signupEmail.trim());
       passwordSchema.parse(signupPassword);
-      
+
       if (!signupUsername.trim()) {
         toast.error("Username is required");
         setIsLoading(false);
         return;
       }
 
-      const redirectUrl = `${window.location.origin}/`;
-
-      const { data, error } = await supabase.auth.signUp({
-        email: signupEmail.trim(),
-        password: signupPassword,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            username: signupUsername.trim(),
-            display_name: signupDisplayName.trim() || signupUsername.trim(),
-          },
-        },
-      });
-
-      if (error) {
-        if (error.message.includes("User already registered")) {
-          toast.error("This email is already registered. Try logging in instead.");
-        } else {
-          toast.error(error.message);
-        }
-        return;
-      }
-
-      if (data.user) {
-        toast.success("Account created! Welcome to f(x)");
-        navigate("/");
-      }
+      await register(signupEmail.trim(), signupUsername.trim(), signupPassword);
+      toast.success("Account created! Welcome to f(x)");
+      navigate("/");
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
+      } else if (error instanceof Error) {
+        const msg = error.message;
+        if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
+          toast.error("This email is already registered. Try logging in instead.");
+        } else {
+          toast.error(msg);
+        }
       } else {
         toast.error("An unexpected error occurred");
       }

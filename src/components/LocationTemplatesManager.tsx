@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,7 +42,7 @@ export const LocationTemplatesManager = () => {
   const { data: templates, isLoading } = useQuery({
     queryKey: ["location-templates"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("location_templates")
         .select("*")
         .order("usage_count", { ascending: false });
@@ -54,9 +55,9 @@ export const LocationTemplatesManager = () => {
   // Create template
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await db.auth.getUser();
 
-      const { error } = await supabase
+      const { error } = await db
         .from("location_templates")
         .insert({
           ...data,
@@ -76,7 +77,7 @@ export const LocationTemplatesManager = () => {
   // Update template
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const { error } = await supabase
+      const { error } = await db
         .from("location_templates")
         .update(data)
         .eq("id", id);
@@ -94,7 +95,7 @@ export const LocationTemplatesManager = () => {
   // Delete template
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await db
         .from("location_templates")
         .delete()
         .eq("id", id);

@@ -1,17 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchCategories } from "@/api/client";
 
 export function useInterestTags() {
   return useQuery({
     queryKey: ['interest-tags'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('interest_tags')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      return data;
+      // Categories serve as interest tags in the Express backend.
+      const res = await fetchCategories();
+      return (res.data || []).map((cat) => ({
+        id: cat.value,
+        name: cat.label,
+        value: cat.value,
+        emoji: cat.emoji,
+      }));
     },
     staleTime: 60 * 60 * 1000, // 1 hour
   });

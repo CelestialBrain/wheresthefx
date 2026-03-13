@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { supabase } from "@/integrations/supabase/client";
+import { isLoggedIn, toggleSaveEvent } from "@/api/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
@@ -72,48 +72,31 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
   const queryClient = useQueryClient();
   const isCancelled = post.event_status === 'cancelled';
 
-  // Initialize saved state from existing saved events
+  // Initialize saved state — isSaved prop from parent takes priority
   useEffect(() => {
-    if (isSaved !== undefined) return; // Skip if parent provided saved state
-    
-    const checkSavedStatus = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Check by published_event_id first, fallback to instagram_post_id
-      const query = supabase
-        .from('saved_events')
-        .select('id')
-        .eq('user_id', user.id);
-
-      if (post.published_event_id) {
-        query.eq('published_event_id', post.published_event_id);
-      } else {
-        query.eq('instagram_post_id', post.id);
-      }
-
-      const { data } = await query;
-
-      if (data && data.length > 0) {
-        setSavedEvents(prev => new Set(prev).add(post.id));
-      }
-    };
-
-    checkSavedStatus();
+    if (isSaved !== undefined) return;
+    // No Supabase check needed; saved state comes from useSavedEvents hook via parent
   }, [post.id, post.published_event_id, isSaved]);
 
   const handleSave = async (eventId: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
+    if (!isLoggedIn()) {
       toast.error("Please sign in to save events");
       return;
     }
 
-    const isSaved = savedEvents.has(eventId);
-    
+    const eventNumericId = post.published_event_id
+      ? parseInt(post.published_event_id, 10)
+      : parseInt(eventId, 10);
+
+    if (isNaN(eventNumericId)) {
+      toast.error("Unable to save this event");
+      return;
+    }
+
+    const isCurrentlySaved = savedEvents.has(eventId);
+
     // Optimistic update
-    if (isSaved) {
+    if (isCurrentlySaved) {
       setSavedEvents(prev => {
         const newSet = new Set(prev);
         newSet.delete(eventId);
@@ -123,60 +106,23 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
       setSavedEvents(prev => new Set(prev).add(eventId));
     }
 
-    // Perform database operation
-    if (isSaved) {
-      // Delete by published_event_id if available, otherwise by instagram_post_id
-      const deleteQuery = supabase
-        .from('saved_events')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (post.published_event_id) {
-        deleteQuery.eq('published_event_id', post.published_event_id);
-      } else {
-        deleteQuery.eq('instagram_post_id', eventId);
-      }
-
-      const { error } = await deleteQuery;
-
-      if (error) {
-        // Revert optimistic update
+    try {
+      await toggleSaveEvent(eventNumericId);
+      queryClient.invalidateQueries({ queryKey: ['saved-events'] });
+      queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
+      toast.success(isCurrentlySaved ? "Event removed from saved" : "Event saved!");
+    } catch {
+      // Revert optimistic update
+      if (isCurrentlySaved) {
         setSavedEvents(prev => new Set(prev).add(eventId));
-        toast.error("Failed to remove event");
       } else {
-        // Invalidate saved events query for instant sync
-        queryClient.invalidateQueries({ queryKey: ['saved-events'] });
-        queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
-        toast.success("Event removed from saved");
-      }
-    } else {
-      // Save with published_event_id if available, otherwise use instagram_post_id
-      const insertData: any = { user_id: user.id };
-      
-      if (post.published_event_id) {
-        insertData.published_event_id = post.published_event_id;
-      } else {
-        insertData.instagram_post_id = eventId;
-      }
-
-      const { error } = await supabase
-        .from('saved_events')
-        .insert(insertData);
-
-      if (error) {
-        // Revert optimistic update
         setSavedEvents(prev => {
           const newSet = new Set(prev);
           newSet.delete(eventId);
           return newSet;
         });
-        toast.error("Failed to save event");
-      } else {
-        // Invalidate saved events query for instant sync
-        queryClient.invalidateQueries({ queryKey: ['saved-events'] });
-        queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
-        toast.success("Event saved!");
       }
+      toast.error(isCurrentlySaved ? "Failed to remove event" : "Failed to save event");
     }
   };
 

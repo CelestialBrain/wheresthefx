@@ -9,7 +9,7 @@ import { CategoryFilter } from "@/components/CategoryFilter";
 import { Button } from "@/components/ui/button";
 import { UserCircle } from "lucide-react";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { supabase } from "@/integrations/supabase/client";
+import { isLoggedIn } from "@/api/client";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -31,31 +31,15 @@ const Index = () => {
     }
 
     // Check authentication status and skip verification for authenticated users
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const authenticated = !!user;
-      setIsAuthenticated(authenticated);
-      
-      if (authenticated) {
-        // Skip age verification for authenticated users
-        sessionStorage.setItem('age_verified', 'true');
-        setIsVerified(true);
-        setIsMapUnlocked(true);
-      }
-    });
+    const authenticated = isLoggedIn();
+    setIsAuthenticated(authenticated);
 
-    // Listen to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const authenticated = !!session?.user;
-      setIsAuthenticated(authenticated);
-      
-      if (authenticated && !isMapUnlocked) {
-        sessionStorage.setItem('age_verified', 'true');
-        setIsVerified(true);
-        setIsMapUnlocked(true);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    if (authenticated) {
+      // Skip age verification for authenticated users
+      sessionStorage.setItem('age_verified', 'true');
+      setIsVerified(true);
+      setIsMapUnlocked(true);
+    }
   }, []);
 
   useEffect(() => {

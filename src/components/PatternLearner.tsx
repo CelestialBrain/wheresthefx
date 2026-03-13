@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -29,7 +30,7 @@ export const PatternLearner = () => {
   const { data: recentCorrections, isLoading: correctionsLoading } = useQuery({
     queryKey: ["recent-corrections"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("extraction_corrections")
         .select("*")
         .order("created_at", { ascending: false })
@@ -43,7 +44,7 @@ export const PatternLearner = () => {
   const { data: recentFeedback } = useQuery({
     queryKey: ["recent-feedback"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("extraction_feedback")
         .select("*")
         .order("created_at", { ascending: false })
@@ -57,12 +58,12 @@ export const PatternLearner = () => {
   const { data: learningStats } = useQuery({
     queryKey: ["learning-stats"],
     queryFn: async () => {
-      const { data: corrections } = await supabase
+      const { data: corrections } = await db
         .from("extraction_corrections")
         .select("field_name, created_at")
         .order("created_at", { ascending: false });
 
-      const { data: patterns } = await supabase
+      const { data: patterns } = await db
         .from("extraction_patterns")
         .select("source, confidence_score, success_count, failure_count, is_active");
 
@@ -88,19 +89,19 @@ export const PatternLearner = () => {
       });
 
       // Get pending suggestions count
-      const { count: pendingSuggestions } = await supabase
+      const { count: pendingSuggestions } = await db
         .from("pattern_suggestions")
         .select("*", { count: "exact", head: true })
         .eq("status", "pending");
 
       // Get failed suggestions count (for retry button)
-      const { count: failedSuggestions } = await supabase
+      const { count: failedSuggestions } = await db
         .from("pattern_suggestions")
         .select("*", { count: "exact", head: true })
         .eq("status", "generation_failed");
 
       // Get ground truth count
-      const { count: groundTruthCount } = await supabase
+      const { count: groundTruthCount } = await db
         .from("extraction_ground_truth")
         .select("*", { count: "exact", head: true })
         .eq("source", "ai_high_confidence");
@@ -125,7 +126,7 @@ export const PatternLearner = () => {
     mutationFn: async () => {
       setIsGeneratingFromAI(true);
       
-      const { data, error } = await supabase.functions.invoke("generate-patterns-from-ai", {
+      const { data, error } = await db.functions.invoke("generate-patterns-from-ai", {
         body: {
           useGroundTruth: true,
           useSuggestions: true,
@@ -159,7 +160,7 @@ export const PatternLearner = () => {
       setIsDisablingFailing(true);
       
       // Fetch patterns with high failure rate
-      const { data: patterns, error: fetchError } = await supabase
+      const { data: patterns, error: fetchError } = await db
         .from("extraction_patterns")
         .select("id, success_count, failure_count")
         .eq("is_active", true);
@@ -176,7 +177,7 @@ export const PatternLearner = () => {
       }
 
       const ids = toDisable.map(p => p.id);
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from("extraction_patterns")
         .update({ is_active: false })
         .in("id", ids);
@@ -207,7 +208,7 @@ export const PatternLearner = () => {
       setIsRetryingFailed(true);
       
       // Reset all failed suggestions to pending with attempt_count = 0
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("pattern_suggestions")
         .update({ status: "pending", attempt_count: 0 })
         .eq("status", "generation_failed")
@@ -267,7 +268,7 @@ export const PatternLearner = () => {
 
       // Insert validated patterns
       if (validatedPatterns.length > 0) {
-        const { error } = await supabase
+        const { error } = await db
           .from("extraction_patterns")
           .insert(validatedPatterns);
 
@@ -315,7 +316,7 @@ export const PatternLearner = () => {
       
       try {
         updateStep('disable', 'running');
-        const { data: patterns } = await supabase
+        const { data: patterns } = await db
           .from("extraction_patterns")
           .select("id, success_count, failure_count")
           .eq("is_active", true);
@@ -326,7 +327,7 @@ export const PatternLearner = () => {
         }) || [];
         
         if (toDisable.length > 0) {
-          await supabase
+          await db
             .from("extraction_patterns")
             .update({ is_active: false })
             .in("id", toDisable.map(p => p.id));
@@ -342,7 +343,7 @@ export const PatternLearner = () => {
       // Step 2: Reject venue/address suggestions (not applicable for regex)
       try {
         updateStep('reject_venue', 'running');
-        const { data: rejectedVenues } = await supabase
+        const { data: rejectedVenues } = await db
           .from("pattern_suggestions")
           .update({ status: "not_applicable" })
           .in("pattern_type", ["venue", "address"])
@@ -359,7 +360,7 @@ export const PatternLearner = () => {
       // Step 3: Generate patterns from AI
       try {
         updateStep('generate', 'running');
-        const { data, error } = await supabase.functions.invoke("generate-patterns-from-ai", {
+        const { data, error } = await db.functions.invoke("generate-patterns-from-ai", {
           body: {
             useGroundTruth: true,
             useSuggestions: true,
@@ -380,7 +381,7 @@ export const PatternLearner = () => {
       // Step 4: Cleanup rejected suggestions
       try {
         updateStep('cleanup', 'running');
-        const { data: deleted } = await supabase
+        const { data: deleted } = await db
           .from("pattern_suggestions")
           .delete()
           .in("status", ["rejected", "not_applicable"])

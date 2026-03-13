@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -72,7 +73,7 @@ export const LocationCorrectionEditor = ({
   const { data: suggestions } = useQuery({
     queryKey: ['location-suggestions', venueName, streetAddress],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('suggest-location-corrections', {
+      const { data, error } = await db.functions.invoke('suggest-location-corrections', {
         body: { locationName: venueName, locationAddress: streetAddress }
       });
       if (error) throw error;
@@ -88,7 +89,7 @@ export const LocationCorrectionEditor = ({
     queryFn: async () => {
       if (!venueName || venueName.length < 3) return [];
       
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('instagram_posts')
         .select(`
           id,
@@ -164,7 +165,7 @@ export const LocationCorrectionEditor = ({
     try {
       const searchQuery = venueName ? `${venueName}, ${streetAddress}` : streetAddress;
       
-      const { data, error } = await supabase.functions.invoke('geocode-location', {
+      const { data, error } = await db.functions.invoke('geocode-location', {
         body: { locationName: searchQuery }
       });
 

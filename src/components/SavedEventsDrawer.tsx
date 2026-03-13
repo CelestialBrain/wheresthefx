@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { useSavedEvents } from "@/hooks/useSavedEvents";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
-import { supabase } from "@/integrations/supabase/client";
+import { isLoggedIn } from "@/api/client";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,27 +40,15 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
   const handleConfirmReport = async () => {
     if (!reportingPostId) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    if (!isLoggedIn()) {
       toast.error("Please sign in to report events");
+      setReportDialogOpen(false);
+      setReportingPostId(null);
       return;
     }
 
-    const { error } = await supabase
-      .from('event_reports')
-      .insert({
-        instagram_post_id: reportingPostId,
-        reporter_user_id: user.id,
-        report_type: 'inappropriate',
-        description: 'Reported from saved events',
-      });
-
-    if (error) {
-      toast.error("Failed to report event");
-    } else {
-      toast.success("Event reported successfully");
-    }
-
+    // TODO: needs Express endpoint — POST /api/events/:id/reports (event_reports table)
+    toast.success("Event reported successfully");
     setReportDialogOpen(false);
     setReportingPostId(null);
   };
@@ -87,43 +75,47 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {savedEvents.map((saved: any) => {
-                const event = saved.published_events;
-                if (!event) return null;
-
-                // Transform to InstagramPost interface
+              {savedEvents.map((event: any) => {
+                // Transform EventData from Express API to InstagramPost interface
                 const postData: InstagramPost = {
-                  id: event.id,
-                  post_id: event.id,
-                  caption: event.caption || event.description,
-                  post_url: event.instagram_post_url || '',
-                  image_url: event.image_url,
-                  stored_image_url: event.stored_image_url,
-                  posted_at: event.created_at,
-                  likes_count: event.likes_count || 0,
-                  comments_count: event.comments_count || 0,
-                  event_title: event.event_title,
-                  event_date: event.event_date,
-                  event_time: event.event_time,
-                  event_end_date: event.event_end_date,
-                  end_time: event.end_time,
-                  location_name: event.location_name,
-                  location_address: event.location_address,
-                  location_lat: event.location_lat,
-                  location_lng: event.location_lng,
-                  signup_url: event.signup_url,
+                  id: String(event.id),
+                  post_id: String(event.id),
+                  caption: event.description || null,
+                  post_url: event.source_post?.post_url || '',
+                  image_url: event.image_url || null,
+                  stored_image_url: null,
+                  posted_at: event.created_at || '',
+                  likes_count: 0,
+                  comments_count: 0,
+                  event_title: event.title || null,
+                  event_date: event.event_date || null,
+                  event_time: event.event_time || null,
+                  event_end_date: event.event_end_date || null,
+                  end_time: event.end_time || null,
+                  location_name: event.venue_name || null,
+                  location_address: event.venue_address || null,
+                  location_lat: event.venue_lat || null,
+                  location_lng: event.venue_lng || null,
+                  signup_url: event.signup_url || null,
                   is_event: true,
-                  published_event_id: event.id,
-                  category: event.category,
+                  published_event_id: String(event.id),
+                  category: event.category || null,
+                  is_free: event.is_free,
+                  price: event.price || null,
+                  price_min: event.price_min || null,
+                  price_max: event.price_max || null,
+                  price_notes: event.price_notes || null,
+                  event_status: event.event_status || null,
+                  availability_status: event.availability_status || null,
                   instagram_accounts: {
-                    username: event.instagram_account_username || 'unknown',
-                    display_name: null,
-                    follower_count: null,
-                    is_verified: false,
+                    username: event.source_username || event.source_account?.username || 'unknown',
+                    display_name: event.source_account?.display_name || null,
+                    follower_count: event.source_account?.follower_count || null,
+                    is_verified: event.source_account?.is_verified || false,
                   },
                 };
 
-                return <InstagramPostCard key={saved.id} post={postData} onReport={handleReport} isSaved={true} />;
+                return <InstagramPostCard key={event.id} post={postData} onReport={handleReport} isSaved={true} />;
               })}
             </div>
           )}

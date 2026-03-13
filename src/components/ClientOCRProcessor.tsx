@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -28,7 +29,7 @@ export function ClientOCRProcessor() {
   const { data: unprocessedPosts } = useQuery({
     queryKey: ["unprocessed-ocr-posts"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("instagram_posts")
         .select("id, image_url, stored_image_url, ocr_processed, caption")
         .eq("ocr_processed", false)
@@ -68,7 +69,7 @@ export function ClientOCRProcessor() {
         needs_review: true,
       };
 
-      const { error } = await supabase
+      const { error } = await db
         .from("instagram_posts")
         .update(updates)
         .eq("id", postId);
@@ -271,7 +272,7 @@ export function ClientOCRProcessor() {
 
         if (img.width < 200 || img.height < 200) {
           console.log(`Skipping OCR for ${post.id}: Image too small (${img.width}x${img.height})`);
-          await supabase
+          await db
             .from('instagram_posts')
             .update({
               ocr_processed: true,
@@ -285,7 +286,7 @@ export function ClientOCRProcessor() {
 
         // Check OCR cache first - use stored_image_url if available
         const imageHash = post.stored_image_url || post.image_url;
-        const { data: cached } = await supabase
+        const { data: cached } = await db
           .from("ocr_cache")
           .select("*")
           .eq("image_url", imageHash)
@@ -300,7 +301,7 @@ export function ClientOCRProcessor() {
           confidence = cached.ocr_confidence || 0;
           
           // Update cache usage
-          await supabase
+          await db
             .from("ocr_cache")
             .update({ 
               use_count: cached.use_count + 1,
@@ -345,7 +346,7 @@ export function ClientOCRProcessor() {
           confidence = conf / 100; // Normalize to 0-1
 
           // Cache the result
-          await supabase
+          await db
             .from("ocr_cache")
             .insert({
               image_url: imageHash,
@@ -361,7 +362,7 @@ export function ClientOCRProcessor() {
         const entities = extractEntities(ocrText, post.caption);
         
         // Log OCR processing to scraper_logs
-        await supabase.from('scraper_logs').insert({
+        await db.from('scraper_logs').insert({
           log_level: 'info',
           stage: 'ocr',
           message: `Client OCR processed: ${(confidence * 100).toFixed(0)}% confidence`,
@@ -393,7 +394,7 @@ export function ClientOCRProcessor() {
           : error.message || 'Unknown error';
         
         // Log OCR error to scraper_logs
-        await supabase.from('scraper_logs').insert({
+        await db.from('scraper_logs').insert({
           log_level: 'error',
           stage: 'ocr',
           message: `Client OCR failed: ${errorMessage}`,
@@ -408,7 +409,7 @@ export function ClientOCRProcessor() {
         
         // Log error to database for tracking (use direct query to avoid mutation conflicts)
         try {
-          await supabase
+          await db
             .from("instagram_posts")
             .update({
               ocr_error_count: 1,

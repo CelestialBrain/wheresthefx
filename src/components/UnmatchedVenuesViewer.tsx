@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,7 +70,7 @@ export const UnmatchedVenuesViewer = () => {
     queryKey: ["unmatched-venues"],
     queryFn: async () => {
       // Get all location names without coordinates
-      const { data: posts, error } = await supabase
+      const { data: posts, error } = await db
         .from("instagram_posts")
         .select("location_name, id, created_at")
         .not("location_name", "is", null)
@@ -80,7 +81,7 @@ export const UnmatchedVenuesViewer = () => {
       if (error) throw error;
 
       // Get known venues for filtering
-      const { data: knownVenues } = await supabase
+      const { data: knownVenues } = await db
         .from("known_venues")
         .select("name, aliases");
 
@@ -124,7 +125,7 @@ export const UnmatchedVenuesViewer = () => {
   // Add venue mutation
   const addVenueMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { error } = await supabase.from("known_venues").insert({
+      const { error } = await db.from("known_venues").insert({
         name: data.name,
         aliases: data.aliases ? data.aliases.split(",").map(a => a.trim()).filter(Boolean) : [],
         address: data.address || null,
@@ -136,7 +137,7 @@ export const UnmatchedVenuesViewer = () => {
 
       // Re-geocode affected posts if coordinates provided
       if (data.lat && data.lng) {
-        const { error: updateError } = await supabase
+        const { error: updateError } = await db
           .from("instagram_posts")
           .update({
             location_lat: parseFloat(data.lat),

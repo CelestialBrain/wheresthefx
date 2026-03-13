@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, ChevronDown } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from '@/utils/adminDb';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface EventDate {
@@ -45,7 +46,7 @@ export function EventDatesDisplay({
     async function fetchEventDates() {
       const columnName = isPublishedEvent ? 'published_event_id' : 'instagram_post_id';
       
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('event_dates')
         .select('*')
         .eq(columnName, eventId)

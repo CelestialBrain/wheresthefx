@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { isLoggedIn } from "@/api/client";
+import { db } from "@/utils/adminDb";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,8 +87,7 @@ const Admin = () => {
   }, []);
 
   const checkAuth = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    if (!isLoggedIn()) {
       toast({
         title: "Authentication Required",
         description: "Please sign in to access the admin dashboard",
@@ -99,7 +99,7 @@ const Admin = () => {
 
   const fetchAccounts = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("instagram_accounts")
         .select("*")
         .order("created_at", { ascending: false });
@@ -117,7 +117,7 @@ const Admin = () => {
 
   const fetchScrapeRuns = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("scrape_runs")
         .select("*")
         .order("started_at", { ascending: false })
@@ -138,7 +138,7 @@ const Admin = () => {
       setIsLoading(true);
       const username = newUsername.trim().replace("@", "");
 
-      const { error } = await supabase
+      const { error } = await db
         .from("instagram_accounts")
         .insert({ username, is_active: true });
 
@@ -173,7 +173,7 @@ const Admin = () => {
 
   const toggleAccount = async (accountId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("instagram_accounts")
         .update({ is_active: !currentStatus })
         .eq("id", accountId);
@@ -196,7 +196,7 @@ const Admin = () => {
 
   const deleteAccount = async (accountId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("instagram_accounts")
         .delete()
         .eq("id", accountId);
@@ -221,7 +221,7 @@ const Admin = () => {
     try {
       setIsCleaning(true);
 
-      const { data, error } = await supabase.functions.invoke("cleanup-stuck-scrapes", {
+      const { data, error } = await db.functions.invoke("cleanup-stuck-scrapes", {
         body: { timeoutMinutes: 5 },
       });
 
@@ -259,7 +259,7 @@ const Admin = () => {
 
       // First, cleanup any stuck scrapes before starting a new one
       console.log("[Admin] Cleaning up stuck scrapes before starting new scrape...");
-      await supabase.functions.invoke("cleanup-stuck-scrapes", {
+      await db.functions.invoke("cleanup-stuck-scrapes", {
         body: { timeoutMinutes: 5 },
       });
 
@@ -267,7 +267,7 @@ const Admin = () => {
         ? { datasetId: datasetId.trim() }
         : {};
 
-      const { data, error } = await supabase.functions.invoke("scrape-instagram", {
+      const { data, error } = await db.functions.invoke("scrape-instagram", {
         body,
       });
 
@@ -346,20 +346,20 @@ const Admin = () => {
 
       // Delete child tables first (FK constraints)
       // Children of instagram_posts
-      await supabase.from("event_dates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("event_updates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("validation_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("event_dates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("event_updates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("validation_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
       // Children of scrape_runs
-      await supabase.from("scraper_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("scraper_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
       // Main tables
-      await supabase.from("published_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("saved_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("locations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("instagram_posts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("ocr_cache").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabase.from("scrape_runs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("published_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("saved_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("locations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("instagram_posts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("ocr_cache").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await db.from("scrape_runs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
       // PRESERVED: instagram_accounts, known_venues, location_corrections, 
       // account_venue_stats, extraction_patterns, extraction_ground_truth,
@@ -389,7 +389,7 @@ const Admin = () => {
     try {
       setIsStopping(true);
 
-      const { error } = await supabase
+      const { error } = await db
         .from("scrape_runs")
         .update({
           status: 'cancelled' as any,
@@ -421,7 +421,7 @@ const Admin = () => {
     try {
       setIsLoading(true);
 
-      const { data, error } = await supabase.functions.invoke("backfill-images", {
+      const { data, error } = await db.functions.invoke("backfill-images", {
         body: {},
       });
 
@@ -448,7 +448,7 @@ const Admin = () => {
     try {
       setIsBackfillingGroundTruth(true);
 
-      const { data, error } = await supabase.functions.invoke("backfill-ground-truth", {
+      const { data, error } = await db.functions.invoke("backfill-ground-truth", {
         body: {},
       });
 
@@ -476,7 +476,7 @@ const Admin = () => {
       setIsBulkPublishing(true);
 
       // Get all reviewed event posts with coordinates and future dates
-      const { data: postsToPublish, error: fetchError } = await supabase
+      const { data: postsToPublish, error: fetchError } = await db
         .from("instagram_posts")
         .select(`
           id,
@@ -519,7 +519,7 @@ const Admin = () => {
 
       // Get account usernames
       const accountIds = [...new Set(postsToPublish.map(p => p.instagram_account_id))];
-      const { data: accounts } = await supabase
+      const { data: accounts } = await db
         .from("instagram_accounts")
         .select("id, username")
         .in("id", accountIds);
@@ -527,7 +527,7 @@ const Admin = () => {
       const accountMap = new Map(accounts?.map(a => [a.id, a.username]) || []);
 
       // Check which posts are already published
-      const { data: existingPublished } = await supabase
+      const { data: existingPublished } = await db
         .from("published_events")
         .select("source_post_id")
         .in("source_post_id", postsToPublish.map(p => p.id));
@@ -568,7 +568,7 @@ const Admin = () => {
         comments_count: post.comments_count,
       }));
 
-      const { error: insertError } = await supabase
+      const { error: insertError } = await db
         .from("published_events")
         .insert(publishedEvents);
 
@@ -596,7 +596,7 @@ const Admin = () => {
       const today = new Date().toISOString().split('T')[0];
 
       // Find events that meet auto-approval criteria
-      const { data: eventsToApprove, error: fetchError } = await supabase
+      const { data: eventsToApprove, error: fetchError } = await db
         .from("instagram_posts")
         .select("id")
         .eq("is_event", true)
@@ -617,7 +617,7 @@ const Admin = () => {
       }
 
       // Update all matching events
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from("instagram_posts")
         .update({ needs_review: false })
         .in("id", eventsToApprove.map(e => e.id));

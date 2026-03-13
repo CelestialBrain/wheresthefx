@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -125,7 +126,7 @@ export const PublishedEventsManager = () => {
   const { data: events, isLoading } = useQuery({
     queryKey: ["published-events", searchQuery],
     queryFn: async () => {
-      let query = supabase
+      let query = db
         .from("published_events")
         .select("*")
         .order("event_date", { ascending: false });
@@ -147,7 +148,7 @@ export const PublishedEventsManager = () => {
     queryFn: async () => {
       if (!selectedEvent) return [];
 
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("event_edit_history")
         .select("*")
         .eq("event_id", selectedEvent.id)
@@ -171,10 +172,10 @@ export const PublishedEventsManager = () => {
       updates: any;
       oldValues: any;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await db.auth.getUser();
 
       // Update published event
-      const { error } = await supabase
+      const { error } = await db
         .from("published_events")
         .update(updates)
         .eq("id", eventId);
@@ -194,7 +195,7 @@ export const PublishedEventsManager = () => {
         }));
 
       if (historyEntries.length > 0) {
-        const { error: historyError } = await supabase
+        const { error: historyError } = await db
           .from("event_edit_history")
           .insert(historyEntries);
 
@@ -222,7 +223,7 @@ export const PublishedEventsManager = () => {
   // Undo mutation
   const undoMutation = useMutation({
     mutationFn: async (undoItem: { eventId: string; oldValue: any }) => {
-      const { error } = await supabase
+      const { error } = await db
         .from("published_events")
         .update(undoItem.oldValue)
         .eq("id", undoItem.eventId);
@@ -239,15 +240,15 @@ export const PublishedEventsManager = () => {
   // Delete event mutation
   const deleteEventMutation = useMutation({
     mutationFn: async (eventId: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await db.auth.getUser();
 
-      const { data: event } = await supabase
+      const { data: event } = await db
         .from("published_events")
         .select("*")
         .eq("id", eventId)
         .single();
 
-      const { error } = await supabase
+      const { error } = await db
         .from("published_events")
         .delete()
         .eq("id", eventId);
@@ -255,7 +256,7 @@ export const PublishedEventsManager = () => {
       if (error) throw error;
 
       if (event) {
-        await supabase.from("event_edit_history").insert({
+        await db.from("event_edit_history").insert({
           event_id: eventId,
           edited_by: user?.id,
           field_name: "event",
@@ -825,7 +826,7 @@ export const PublishedEventsManager = () => {
                         location_lng: selectedEvent.location_lng,
                       }}
                       onSave={async (correction) => {
-                        const { data: { user } } = await supabase.auth.getUser();
+                        const { data: { user } } = await db.auth.getUser();
 
                         const oldValues = {
                           location_name: selectedEvent.location_name,
@@ -848,7 +849,7 @@ export const PublishedEventsManager = () => {
                         });
 
                         // Save to location_corrections for learning
-                        await supabase.from("location_corrections").insert({
+                        await db.from("location_corrections").insert({
                           corrected_venue_name: correction.venueName,
                           corrected_street_address: correction.streetAddress,
                           manual_lat: correction.lat,

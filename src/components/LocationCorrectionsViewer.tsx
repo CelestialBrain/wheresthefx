@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,7 +30,7 @@ export const LocationCorrectionsViewer = () => {
   const { data: corrections, isLoading } = useQuery({
     queryKey: ["location-corrections"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("location_corrections")
         .select("*")
         .order("correction_count", { ascending: false });

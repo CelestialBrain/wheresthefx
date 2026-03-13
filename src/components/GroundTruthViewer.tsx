@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,7 @@ export const GroundTruthViewer = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["ground-truth", selectedField, page],
     queryFn: async () => {
-      let query = supabase
+      let query = db
         .from("extraction_ground_truth")
         .select("*", { count: "exact" })
         .order("created_at", { ascending: false })
@@ -50,7 +51,7 @@ export const GroundTruthViewer = () => {
   const { data: missingCount } = useQuery({
     queryKey: ["ground-truth-missing-original"],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { count, error } = await db
         .from("extraction_ground_truth")
         .select("*", { count: "exact", head: true })
         .is("original_text", null);
@@ -62,7 +63,7 @@ export const GroundTruthViewer = () => {
   const handleBackfill = async () => {
     try {
       setIsBackfilling(true);
-      const { data, error } = await supabase.functions.invoke("backfill-ground-truth", {
+      const { data, error } = await db.functions.invoke("backfill-ground-truth", {
         body: {},
       });
 
@@ -87,10 +88,10 @@ export const GroundTruthViewer = () => {
       setIsClearing(true);
       
       // Delete ground truth and pattern suggestions
-      const { error: gtError } = await supabase.from("extraction_ground_truth").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      const { error: gtError } = await db.from("extraction_ground_truth").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       if (gtError) throw gtError;
       
-      const { error: psError } = await supabase.from("pattern_suggestions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      const { error: psError } = await db.from("pattern_suggestions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       if (psError) throw psError;
       
       toast.success("Cleared all ground truth and pattern suggestions");

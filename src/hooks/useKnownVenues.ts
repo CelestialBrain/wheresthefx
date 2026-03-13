@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchVenues } from "@/api/client";
 
 export interface KnownVenue {
   id: string;
@@ -15,13 +15,16 @@ export function useKnownVenues() {
   return useQuery({
     queryKey: ["known-venues"],
     queryFn: async (): Promise<KnownVenue[]> => {
-      const { data, error } = await supabase
-        .from("known_venues")
-        .select("id, name, address, city, lat, lng, aliases")
-        .order("name", { ascending: true });
-
-      if (error) throw error;
-      return data || [];
+      const res = await fetchVenues();
+      return (res.data || []).map((v: any) => ({
+        id: String(v.id),
+        name: v.name,
+        address: v.address ?? null,
+        city: v.city ?? null,
+        lat: v.lat ?? null,
+        lng: v.lng ?? null,
+        aliases: v.aliases ?? null,
+      }));
     },
     staleTime: 1000 * 60 * 10, // Cache for 10 minutes
   });

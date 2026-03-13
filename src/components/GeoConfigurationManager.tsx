@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +39,7 @@ export function GeoConfigurationManager() {
   const fetchConfiguration = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("geo_configuration")
         .select("*")
         .order("config_key");
@@ -80,7 +81,7 @@ export function GeoConfigurationManager() {
 
   const toggleKeyword = async (id: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("geo_configuration")
         .update({ is_active: !currentStatus })
         .eq("id", id);
@@ -108,7 +109,7 @@ export function GeoConfigurationManager() {
     if (!newKeyword.trim()) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("geo_configuration")
         .insert({
           config_type: 'non_ncr_keyword',
@@ -151,7 +152,7 @@ export function GeoConfigurationManager() {
     if (!confirm(`Delete "${keyword}" from non-NCR keywords?`)) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("geo_configuration")
         .delete()
         .eq("id", id);
@@ -179,7 +180,7 @@ export function GeoConfigurationManager() {
       for (const bound of bounds) {
         const newValue = editedBounds[bound.config_key];
         if (newValue !== bound.config_value) {
-          const { error } = await supabase
+          const { error } = await db
             .from("geo_configuration")
             .update({ config_value: newValue })
             .eq("id", bound.id);

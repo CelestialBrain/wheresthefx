@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+// TODO: Admin API endpoints not yet implemented. Stub via adminDb.
+import { db } from "@/utils/adminDb";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ export const PatternSuggestionsReview = () => {
   const { data: suggestions, isLoading } = useQuery({
     queryKey: ["pattern-suggestions"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("pattern_suggestions")
         .select("*")
         .eq("status", "pending")
@@ -50,7 +51,7 @@ export const PatternSuggestionsReview = () => {
       }
 
       // Create pattern
-      const { error: patternError } = await supabase
+      const { error: patternError } = await db
         .from("extraction_patterns")
         .insert({
           pattern_type: suggestion.pattern_type,
@@ -65,7 +66,7 @@ export const PatternSuggestionsReview = () => {
       if (patternError) throw patternError;
 
       // Update suggestion status
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from("pattern_suggestions")
         .update({ 
           status: "approved",
@@ -88,7 +89,7 @@ export const PatternSuggestionsReview = () => {
 
   const rejectMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await db
         .from("pattern_suggestions")
         .update({ 
           status: "rejected",
