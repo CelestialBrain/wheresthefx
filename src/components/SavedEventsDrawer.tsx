@@ -56,7 +56,7 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-full sm:max-w-md">
+      <SheetContent side="right" className="w-full sm:max-w-md glass-card border-l-0 sm:mr-[var(--card-margin,16px)] sm:mt-[var(--card-margin,16px)] sm:mb-[var(--card-margin,16px)] sm:rounded-[var(--card-radius,16px)] sm:h-[calc(100vh-32px)]">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Heart className="h-5 w-5 fill-accent text-accent" />

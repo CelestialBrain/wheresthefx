@@ -181,8 +181,8 @@ export const EventSidebar = () => {
   };
 
   return (
-    <aside className="w-full lg:w-80 h-screen border-l border-border/50 bg-card overflow-y-auto">
-      <div className="p-6 space-y-4 sticky top-0 bg-card/95 backdrop-blur-sm z-10 border-b border-border/50">
+    <aside className="fixed top-[var(--card-margin,16px)] right-[var(--card-margin,16px)] bottom-[var(--card-margin,16px)] w-80 z-[900] glass-card flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - 32px)' }}>
+      <div className="p-6 space-y-4 shrink-0 border-b border-border/30">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
             Functions Near You
@@ -214,7 +214,7 @@ export const EventSidebar = () => {
         </div>
       </div>
 
-      <div className="p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {!locationGranted ? (
           <div className="text-center py-12 space-y-3">
             <MapPin className="h-12 w-12 mx-auto text-muted-foreground/30" />
