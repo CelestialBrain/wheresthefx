@@ -37,7 +37,7 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
 
   return (
     <>
-      <div className="fixed top-0 right-0 h-full w-full md:w-[400px] z-[2000] bg-card/95 backdrop-blur-md border-l border-border shadow-2xl animate-slide-in-right">
+      <div className="fixed top-[var(--card-margin,16px)] right-[var(--card-margin,16px)] bottom-[var(--card-margin,16px)] w-[calc(100%-32px)] md:w-[420px] z-[2000] glass-card flex flex-col animate-slide-in-right overflow-hidden" style={{ maxHeight: 'calc(100vh - 32px)' }}>
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="p-4 border-b border-border flex items-center justify-between">

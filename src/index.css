@@ -48,6 +48,14 @@ All colors MUST be HSL.
     /* Frosted glass effects */
     --glass-bg: 255 255 255;
     --glass-bg-dark: 0 0 0;
+
+    /* Floating glass card design system */
+    --glass-panel-bg: rgba(245, 245, 250, 0.82);
+    --glass-panel-border: rgba(0, 0, 0, 0.08);
+    --glass-panel-blur: 20px;
+    --glass-panel-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    --card-radius: 16px;
+    --card-margin: 16px;
   }
 
   .dark {
@@ -77,6 +85,14 @@ All colors MUST be HSL.
 
     --border: 240 8% 20%;
     --input: 240 8% 20%;
+
+    /* Floating glass card design system (dark mode) */
+    --glass-panel-bg: rgba(15, 15, 25, 0.75);
+    --glass-panel-border: rgba(255, 255, 255, 0.08);
+    --glass-panel-blur: 20px;
+    --glass-panel-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --card-radius: 16px;
+    --card-margin: 16px;
   }
 }
 
@@ -169,6 +185,56 @@ All colors MUST be HSL.
 
   .animate-slide-in-from-top {
     animation: slide-in-from-top 0.3s ease-out;
+  }
+
+  /* Slide in from right animation */
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Slide up from bottom animation */
+  @keyframes slide-up {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Floating glass card */
+  .glass-card {
+    background: var(--glass-panel-bg);
+    border: 1px solid var(--glass-panel-border);
+    backdrop-filter: blur(var(--glass-panel-blur));
+    -webkit-backdrop-filter: blur(var(--glass-panel-blur));
+    box-shadow: var(--glass-panel-shadow);
+    border-radius: var(--card-radius);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-slide-in-right,
+    .animate-slide-up,
+    .animate-slide-in-from-top {
+      animation: none;
+    }
   }
 
   /* Remove search input decorations */

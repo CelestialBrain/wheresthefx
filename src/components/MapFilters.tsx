@@ -125,15 +125,15 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[1000]">
-      <div className="container mx-auto px-4 py-3">
-        {/* Desktop and Mobile Row */}
-        <div className="flex items-center gap-2">
+    <div className="fixed top-0 left-0 right-0 z-[1000] pointer-events-none">
+      <div className="container mx-auto px-[var(--card-margin,16px)] py-[var(--card-margin,16px)]" style={{ maxWidth: '1200px' }}>
+        {/* Floating glass bar */}
+        <div className="flex items-center gap-2 pointer-events-auto glass-card px-3 py-2">
           {/* Left Side - Search and Filters */}
           <div className="flex items-center gap-2 flex-1">
             {/* Search - Always visible with dynamic width */}
             <div className="flex-1 min-w-[100px]">
-              <div className="relative h-10 rounded-md frosted-glass-button">
+              <div className="relative h-9 rounded-md frosted-glass-button">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70 pointer-events-none z-20" />
                 <input
                   className="absolute inset-0 w-full h-full bg-transparent pl-9 pr-4 text-sm text-white placeholder:text-white/60 focus:outline-none"

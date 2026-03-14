@@ -51,9 +51,13 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
 
   return (
     <>
-    <div className="fixed inset-0 z-[2000] flex items-end md:items-center md:justify-center bg-black/80 backdrop-blur-sm">
-      <Card className="relative w-full md:max-w-md max-h-[90vh] flex flex-col bg-card border-border rounded-t-2xl md:rounded-lg">
-        <div className="p-4 border-b border-border flex items-center justify-between shrink-0">
+    <div className="fixed inset-0 z-[2000] flex items-end md:items-center md:justify-center bg-black/60 backdrop-blur-sm">
+      <Card className="relative w-[calc(100%-24px)] mx-3 mb-3 md:max-w-md md:mx-auto md:mb-0 max-h-[60vh] md:max-h-[80vh] flex flex-col glass-card border-0 animate-slide-up overflow-hidden">
+        {/* Drag handle — mobile only */}
+        <div className="md:hidden flex justify-center pt-3 pb-1 shrink-0" aria-hidden="true">
+          <div className="w-10 h-1 rounded-full bg-current opacity-20" />
+        </div>
+        <div className="p-4 border-b border-border/40 flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-lg font-semibold">
               {events[0]?.location_name || "Event Location"}

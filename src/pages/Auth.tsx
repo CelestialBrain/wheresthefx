@@ -93,7 +93,11 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 relative">
+    <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Animated gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-accent/10 pointer-events-none" aria-hidden="true" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-accent/5 via-transparent to-transparent pointer-events-none" aria-hidden="true" />
+
       {/* Back button */}
       <Button
         variant="ghost"
@@ -107,7 +111,7 @@ const Auth = () => {
 
       {/* Auth card */}
       <div className="w-full max-w-md relative z-10">
-        <div className="bg-muted/40 backdrop-blur-sm rounded-lg border border-border p-8 shadow-sm space-y-6">
+        <div className="glass-card p-8 space-y-6">
           {/* Header */}
           <div className="space-y-2 text-center">
             <h1 className="text-4xl font-light tracking-tight">

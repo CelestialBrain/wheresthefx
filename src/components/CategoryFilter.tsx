@@ -7,7 +7,7 @@ interface CategoryFilterProps {
 
 export function CategoryFilter({ activeCategory, onCategoryChange }: CategoryFilterProps) {
   return (
-    <div className="flex gap-2 overflow-x-auto px-4 py-2 scrollbar-hide">
+    <div className="flex gap-2 overflow-x-auto px-[var(--card-margin,16px)] py-0 scrollbar-hide">
       {ALL_CATEGORIES.map((cat) => (
         <button
           key={cat.id}
@@ -15,8 +15,9 @@ export function CategoryFilter({ activeCategory, onCategoryChange }: CategoryFil
           className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
             activeCategory === cat.id
               ? 'bg-white text-black shadow-md'
-              : 'bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm'
+              : 'glass-card text-white hover:bg-white/20'
           }`}
+          style={{ backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
         >
           {/* Colored pixel dot */}
           <span 

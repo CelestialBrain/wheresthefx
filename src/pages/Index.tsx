@@ -137,8 +137,8 @@ const Index = () => {
       {/* Map (always rendered, revealed after fade) */}
       <div className={`h-screen transition-opacity duration-1000 ${isMapUnlocked ? 'opacity-100' : 'opacity-0'}`}>
         <MapFilters onFilterChange={setFilters} onSearchChange={setSearchQuery} />
-        {/* Category filter chips - Instagram Stories style */}
-        <div className="fixed top-16 left-0 right-0 z-30">
+        {/* Category filter chips - floating below search bar */}
+        <div className="fixed top-[76px] left-0 right-0 z-30">
           <CategoryFilter 
             activeCategory={selectedCategory} 
             onCategoryChange={(cat) => {
