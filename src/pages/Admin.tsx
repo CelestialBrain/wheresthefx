@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { isLoggedIn } from "@/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,7 @@ const AdminPlaceholder = ({ title }: { title: string }) => (
 
 const Admin = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -41,9 +43,9 @@ const Admin = () => {
         description: "Please sign in to access the admin dashboard",
         variant: "destructive",
       });
-      window.location.href = "/auth";
+      navigate("/auth", { replace: true });
     }
-  }, [toast]);
+  }, [toast, navigate]);
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6 lg:p-8 selection:bg-accent/30">

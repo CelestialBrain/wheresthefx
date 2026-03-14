@@ -31,12 +31,16 @@ interface KnownVenue {
 export const KnownVenuesManager = () => {
   const [venues, setVenues] = useState<KnownVenue[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     fetchVenues()
       .then((res) => setVenues((res.data as KnownVenue[]) || []))
-      .catch((err) => console.error("Failed to fetch venues:", err))
+      .catch((err) => {
+        console.error("Failed to fetch venues:", err);
+        setFetchError("Failed to load venues. Please try again.");
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -54,6 +58,14 @@ export const KnownVenuesManager = () => {
     return (
       <div className="flex items-center justify-center p-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <p className="text-destructive text-sm">{fetchError}</p>
       </div>
     );
   }
