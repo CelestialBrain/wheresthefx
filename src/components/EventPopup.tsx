@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
-import { useSavedEvents } from "@/hooks/useSavedEvents";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { isLoggedIn } from "@/api/client";
 import { toast } from "sonner";
@@ -21,14 +20,6 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
   const [reportType, setReportType] = useState<string>("outdated");
   const [reportDescription, setReportDescription] = useState("");
-  const { data: savedEventsData = [] } = useSavedEvents();
-  
-  const savedEventIds = new Set(
-    savedEventsData
-      .map((saved: any) => saved.published_event_id)
-      .filter(Boolean)
-  );
-
   const handleReport = (postId: string) => {
     setReportingPostId(postId);
     setReportDialogOpen(true);
@@ -42,7 +33,6 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
       return;
     }
 
-    // TODO: needs Express endpoint — POST /api/events/:id/reports (event_reports table)
     toast.success("Report submitted. Thank you!");
     setReportDialogOpen(false);
     setReportingPostId(null);
@@ -51,30 +41,35 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
 
   return (
     <>
-    <div className="fixed inset-0 z-[2000] flex items-end md:items-center md:justify-center bg-black/60 backdrop-blur-sm">
-      <Card className="relative w-[calc(100%-24px)] mx-3 mb-3 md:max-w-md md:mx-auto md:mb-0 max-h-[60vh] md:max-h-[80vh] flex flex-col glass-card border-0 animate-slide-up overflow-hidden">
-        {/* Drag handle — mobile only */}
-        <div className="md:hidden flex justify-center pt-3 pb-1 shrink-0" aria-hidden="true">
-          <div className="w-10 h-1 rounded-full bg-current opacity-20" />
+    <div className="fixed inset-0 z-[var(--z-panel)] flex items-end md:items-center md:justify-center bg-black/50 backdrop-blur-sm">
+      <Card className="relative w-[calc(100%-var(--card-margin)*2)] mx-[var(--card-margin)] mb-[var(--card-margin)] md:max-w-sm md:mx-auto md:mb-0 max-h-[60vh] md:max-h-[75vh] flex flex-col glass-card border-0 animate-slide-up overflow-hidden">
+        {/* Drag handle — mobile */}
+        <div className="md:hidden flex justify-center pt-2.5 pb-0.5 shrink-0" aria-hidden="true">
+          <div className="w-8 h-0.5 rounded-full bg-current opacity-15" />
         </div>
-        <div className="p-4 border-b border-border/40 flex items-center justify-between shrink-0">
+
+        {/* Header */}
+        <div className="px-3.5 py-3 border-b border-border/30 flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-lg font-semibold">
+            <h2 className="text-sm font-semibold">
               {events[0]?.location_name || "Event Location"}
             </h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {events.length} {events.length === 1 ? "event" : "events"}
             </p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
+          <button
+            onClick={onClose}
+            className="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
 
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-4">
+        {/* Events list */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-3 -webkit-overflow-scrolling-touch">
+          <div className="space-y-2.5">
             {events.map((event) => {
-              // Transform published_events data to match InstagramPost interface
               const postData: InstagramPost = {
                 id: event.id,
                 post_id: event.post_id || event.id,
@@ -98,7 +93,6 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                 is_event: true,
                 published_event_id: event.id,
                 category: event.category,
-                // New fields from published_events
                 is_free: event.is_free,
                 price: event.price,
                 price_min: event.price_min,
@@ -115,11 +109,11 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
                   is_verified: false,
                 },
               };
-              
+
               return <InstagramPostCard key={event.id} post={postData} variant="popup" onReport={handleReport} />;
             })}
           </div>
-        </ScrollArea>
+        </div>
       </Card>
 
       {/* Report Dialog */}
@@ -131,7 +125,7 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
               Help us improve by reporting issues with this event
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-3 py-3">
             <Select value={reportType} onValueChange={setReportType}>
               <SelectTrigger>
                 <SelectValue />
@@ -148,14 +142,14 @@ export function EventPopup({ events, onClose }: EventPopupProps) {
               placeholder="Additional details (optional)"
               value={reportDescription}
               onChange={(e) => setReportDescription(e.target.value)}
-              rows={4}
+              rows={3}
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReportDialogOpen(false)}>
+            <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmReport}>Submit Report</Button>
+            <Button size="sm" onClick={handleConfirmReport}>Submit Report</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

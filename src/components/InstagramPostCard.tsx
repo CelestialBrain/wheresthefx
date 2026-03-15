@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
-import { MapPin, Calendar, Heart, MessageCircle, Instagram, ExternalLink, Bookmark, Flag } from "lucide-react";
+import { MapPin, Heart, MessageCircle, ExternalLink, Bookmark, Flag, AtSign } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { isLoggedIn, toggleSaveEvent } from "@/api/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ImageWithSkeleton } from "./ImageWithSkeleton";
-import { formatDateRange, formatTimeRange } from "@/utils/dateUtils";
+
 import { CATEGORY_LABELS, CATEGORY_COLORS } from "@/constants/categoryColors";
 import { EventStatusBadge, EventStatus } from "./EventStatusBadge";
 import { AvailabilityBadge, AvailabilityStatus } from "./AvailabilityBadge";
@@ -40,16 +39,13 @@ export interface InstagramPost {
   location_lng?: number | null;
   published_event_id?: string | null;
   category?: string | null;
-  // Event lifecycle fields
   event_status?: string | null;
   availability_status?: string | null;
-  // Price fields
   is_free?: boolean;
   price?: number | null;
   price_min?: number | null;
   price_max?: number | null;
   price_notes?: string | null;
-  // Recurring event fields
   is_recurring?: boolean | null;
   recurrence_pattern?: string | null;
   instagram_accounts: {
@@ -72,10 +68,8 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
   const queryClient = useQueryClient();
   const isCancelled = post.event_status === 'cancelled';
 
-  // Initialize saved state — isSaved prop from parent takes priority
   useEffect(() => {
     if (isSaved !== undefined) return;
-    // No Supabase check needed; saved state comes from useSavedEvents hook via parent
   }, [post.id, post.published_event_id, isSaved]);
 
   const handleSave = async (eventId: string) => {
@@ -95,7 +89,6 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
 
     const isCurrentlySaved = savedEvents.has(eventId);
 
-    // Optimistic update
     if (isCurrentlySaved) {
       setSavedEvents(prev => {
         const newSet = new Set(prev);
@@ -112,7 +105,6 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
       queryClient.invalidateQueries({ queryKey: ['saved-events-count'] });
       toast.success(isCurrentlySaved ? "Event removed from saved" : "Event saved!");
     } catch {
-      // Revert optimistic update
       if (isCurrentlySaved) {
         setSavedEvents(prev => new Set(prev).add(eventId));
       } else {
@@ -126,45 +118,28 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
     }
   };
 
-  const formatDate = (dateStr: string, endDateStr?: string | null) => {
-    if (!endDateStr) {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-    return formatDateRange(dateStr, endDateStr);
-  };
-
-  const formatTime = (timeStr: string | null, endTimeStr?: string | null): string => {
-    return formatTimeRange(timeStr, endTimeStr);
-  };
-
   const formatEngagement = (count: number) => {
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`;
-    }
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
     return count.toString();
   };
 
   const formatDistance = (distanceKm: number | undefined): string | null => {
     if (distanceKm === undefined) return null;
-    
-    if (distanceKm < 1.0) {
-      return `${Math.round(distanceKm * 1000)}m`;
-    }
+    if (distanceKm < 1.0) return `${Math.round(distanceKm * 1000)}m`;
     return `${distanceKm.toFixed(1)} km`;
   };
 
   return (
-    <Card 
-      className={`p-3 hover:shadow-md transition-shadow cursor-pointer border-border/50 ${isCancelled ? 'opacity-60 grayscale' : ''}`}
-      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 200px" }}
+    <Card
+      className={`p-2.5 border-border/30 shadow-none hover:bg-muted/30 transition-colors cursor-pointer ${isCancelled ? 'opacity-50 grayscale' : ''}`}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 180px", transitionDuration: 'var(--duration-fast)' }}
     >
-      {/* Top Row: Image + Username/Title */}
-      <div className="flex gap-3 mb-2">
-        {/* Image */}
+      {/* Top: Image + Meta */}
+      <div className="flex gap-2.5">
+        {/* Thumbnail */}
         {(post.stored_image_url || post.image_url) && (
           variant === 'popup' ? (
-            <div className="w-20 flex-shrink-0">
+            <div className="w-16 flex-shrink-0">
               <AspectRatio ratio={1 / 1}>
                 <ImageWithSkeleton
                   src={post.stored_image_url || post.image_url}
@@ -177,37 +152,37 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
             <ImageWithSkeleton
               src={post.stored_image_url || post.image_url}
               alt={post.event_title || "Event"}
-              className="w-20 h-20 rounded-md flex-shrink-0 bg-muted"
+              className="w-16 h-16 rounded-md flex-shrink-0 bg-muted"
             />
           )
         )}
 
-        {/* Username + Title (right of image) */}
-        <div className="flex-1 min-w-0 space-y-1">
+        {/* Title block */}
+        <div className="flex-1 min-w-0 space-y-0.5">
           <div className="flex items-center gap-1">
-            <Instagram className="h-3.5 w-3.5 text-accent flex-shrink-0" />
+            <AtSign className="h-3 w-3 text-accent flex-shrink-0" />
             <a
               href={`https://instagram.com/${post.instagram_accounts.username}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-semibold text-xs hover:underline truncate"
+              className="font-medium text-[11px] text-muted-foreground hover:underline truncate"
             >
               @{post.instagram_accounts.username}
             </a>
             {post.instagram_accounts.is_verified && (
-              <Badge variant="secondary" className="text-[10px] px-1 py-0 leading-none">
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 leading-none h-3.5">
                 ✓
               </Badge>
             )}
           </div>
-          
-          <h3 className={`font-semibold text-sm leading-tight line-clamp-2 ${isCancelled ? 'line-through' : ''}`}>
+
+          <h3 className={`font-semibold text-[13px] leading-snug line-clamp-2 ${isCancelled ? 'line-through' : ''}`}>
             {post.event_title || post.caption?.split('\n')[0] || 'Instagram Post'}
           </h3>
-          
-          {/* Status badges */}
+
+          {/* Status badges — only show non-default states */}
           {post.is_event && (post.event_status !== 'confirmed' || post.availability_status !== 'available' || post.is_recurring) && (
-            <div className="flex flex-wrap gap-1 mt-1">
+            <div className="flex flex-wrap gap-1">
               <EventStatusBadge status={post.event_status as EventStatus} size="sm" />
               <AvailabilityBadge status={post.availability_status as AvailabilityStatus} />
               <RecurringEventBadge isRecurring={post.is_recurring} pattern={post.recurrence_pattern} size="sm" />
@@ -216,9 +191,9 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
         </div>
       </div>
 
-      {/* Bottom Section: Details (full width below image) */}
-      <div className="space-y-1.5">
-        {/* Date & Time - use EventDatesDisplay for multi-day support */}
+      {/* Details */}
+      <div className="mt-2 space-y-1">
+        {/* Date & Time */}
         {post.is_event && post.event_date && (
           <EventDatesDisplay
             eventId={post.published_event_id || post.id}
@@ -233,11 +208,11 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
 
         {/* Location + Distance */}
         {post.is_event && post.location_name && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <MapPin className="h-4 w-4 flex-shrink-0" />
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <MapPin className="h-3 w-3 flex-shrink-0" />
             <span className="truncate flex-1">{post.location_name}</span>
             {post.distance !== undefined && (
-              <span className="text-primary text-xs font-medium whitespace-nowrap ml-1">
+              <span className="text-accent text-[11px] font-medium whitespace-nowrap">
                 {formatDistance(post.distance)}
               </span>
             )}
@@ -256,65 +231,59 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
           />
         )}
 
-        {/* Bottom Row: Engagement + Link/Event Badge + Save */}
-        <div className="flex items-center justify-between pt-1">
-          {/* Left: Engagement Stats */}
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Heart className="h-3 w-3" />
-              <span>{formatEngagement(post.likes_count)}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <MessageCircle className="h-3 w-3" />
-              <span>{formatEngagement(post.comments_count)}</span>
-            </div>
+        {/* Footer: engagement + actions */}
+        <div className="flex items-center justify-between pt-0.5">
+          <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
+            {(post.likes_count > 0 || post.comments_count > 0) ? (
+              <>
+                <span className="flex items-center gap-0.5">
+                  <Heart className="h-3 w-3" />
+                  {formatEngagement(post.likes_count)}
+                </span>
+                <span className="flex items-center gap-0.5">
+                  <MessageCircle className="h-3 w-3" />
+                  {formatEngagement(post.comments_count)}
+                </span>
+              </>
+            ) : null}
           </div>
 
-          {/* Right: Report + Save Button + Link Button + Event Badge */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5">
             {post.is_event && onReport && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+              <button
+                className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-destructive transition-colors"
                 onClick={() => onReport(post.id)}
+                style={{ transitionDuration: 'var(--duration-fast)' }}
               >
-                <Flag className="h-3.5 w-3.5" />
-              </Button>
+                <Flag className="h-3 w-3" />
+              </button>
             )}
             {post.is_event && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
+              <button
+                className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-accent transition-colors"
                 onClick={() => handleSave(post.published_event_id || post.id)}
+                style={{ transitionDuration: 'var(--duration-fast)' }}
               >
                 <Bookmark
-                  className={`h-3.5 w-3.5 ${
+                  className={`h-3 w-3 ${
                     savedEvents.has(post.published_event_id || post.id) ? "fill-accent text-accent" : ""
                   }`}
                 />
-              </Button>
+              </button>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
+            <button
+              className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => window.open(post.post_url, '_blank', 'noopener,noreferrer')}
+              style={{ transitionDuration: 'var(--duration-fast)' }}
             >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Button>
+              <ExternalLink className="h-3 w-3" />
+            </button>
             {post.is_event && post.category && CATEGORY_LABELS[post.category] && (
-              <Badge 
-                className="text-[10px] px-1.5 py-1 leading-none rounded-sm text-white"
+              <Badge
+                className="text-[10px] px-1.5 py-0 leading-none rounded h-4 text-white border-0"
                 style={{ backgroundColor: CATEGORY_COLORS[post.category] || '#9E9E9E' }}
               >
                 {CATEGORY_LABELS[post.category]}
-              </Badge>
-            )}
-            {post.is_event && !post.category && (
-              <Badge variant="default" className="text-[10px] px-1.5 py-1 leading-none rounded-sm">
-                Event
               </Badge>
             )}
           </div>

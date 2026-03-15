@@ -2,12 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ============================================================
+   DESIGN SYSTEM — Where's the f(x)?
+
+   All colors MUST be HSL. All spacing uses Tailwind scale.
+   Glass morphism is the primary surface treatment.
+   ============================================================ */
 
 @layer base {
   :root {
+    /* ---- Core palette ---- */
     --background: 0 0% 98%;
     --foreground: 240 10% 15%;
 
@@ -37,25 +41,43 @@ All colors MUST be HSL.
 
     --radius: 0.5rem;
 
-    /* Custom tokens for mathematical theme */
-    --math-primary: 240 10% 15%;
-    --math-accent: 280 85% 55%;
-    --math-muted: 240 5% 65%;
+    /* ---- Semantic status colors ---- */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
 
-    /* Transitions */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* ---- Transitions ---- */
+    --duration-fast: 150ms;
+    --duration-normal: 250ms;
+    --duration-slow: 400ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 
-    /* Frosted glass effects */
-    --glass-bg: 255 255 255;
-    --glass-bg-dark: 0 0 0;
+    /* ---- Glass surfaces ---- */
+    --glass-bg: rgba(255, 255, 255, 0.88);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --glass-blur: 16px;
+    --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 
-    /* Floating glass card design system */
-    --glass-panel-bg: rgba(245, 245, 250, 0.82);
-    --glass-panel-border: rgba(0, 0, 0, 0.08);
-    --glass-panel-blur: 20px;
-    --glass-panel-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-    --card-radius: 16px;
-    --card-margin: 16px;
+    /* Controls on dark map background */
+    --glass-control-bg: rgba(255, 255, 255, 0.12);
+    --glass-control-border: rgba(255, 255, 255, 0.15);
+    --glass-control-blur: 12px;
+
+    /* ---- Layout ---- */
+    --card-radius: 14px;
+    --card-margin: 12px;
+
+    /* ---- Z-index scale ---- */
+    --z-map: 0;
+    --z-sidebar: 900;
+    --z-panel: 1000;
+    --z-sheet: 1500;
+    --z-controls: 2000;
+    --z-dialog: 9000;
   }
 
   .dark {
@@ -86,28 +108,27 @@ All colors MUST be HSL.
     --border: 240 8% 20%;
     --input: 240 8% 20%;
 
-    /* Floating glass card design system (dark mode) */
-    --glass-panel-bg: rgba(15, 15, 25, 0.75);
-    --glass-panel-border: rgba(255, 255, 255, 0.08);
-    --glass-panel-blur: 20px;
-    --glass-panel-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    --card-radius: 16px;
-    --card-margin: 16px;
+    /* ---- Semantic (dark) ---- */
+    --success: 142 76% 42%;
+    --warning: 38 92% 55%;
+    --info: 217 91% 65%;
+
+    /* ---- Glass (dark) ---- */
+    --glass-bg: rgba(12, 12, 20, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-blur: 16px;
+    --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.32);
+
+    --glass-control-bg: rgba(0, 0, 0, 0.35);
+    --glass-control-border: rgba(255, 255, 255, 0.12);
   }
 }
 
-/* Performance optimizations */
-.performance-optimized {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 500px;
-}
-
-/* Smooth scrolling performance */
+/* ---- Reset ---- */
 * {
   scroll-behavior: smooth;
 }
 
-/* GPU acceleration for transforms */
 .will-change-transform {
   will-change: transform;
 }
@@ -121,113 +142,95 @@ All colors MUST be HSL.
     @apply bg-background text-foreground antialiased;
   }
 
-  /* Math notation styling */
+  /* Math notation styling — used for f(x) branding */
   .math-function {
     font-family: "Georgia", "Times New Roman", serif;
     font-style: italic;
   }
 
-  /* Map transition animation */
-  @keyframes zoomIntoFx {
-    0% {
-      transform: scale(1);
-      opacity: 1;
-    }
-    100% {
-      transform: scale(15);
-      opacity: 0;
-    }
+  /* ---- Glass surface classes ---- */
+
+  /* Panels: sidebar, popup cards, drawers */
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
+    border-radius: var(--card-radius);
   }
 
-  .animate-zoom-into-fx {
-    animation: zoomIntoFx 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  /* Controls on dark map: search bar, filter buttons, pills */
+  .glass-control {
+    background: var(--glass-control-bg);
+    border: 1px solid var(--glass-control-border);
+    backdrop-filter: blur(var(--glass-control-blur));
+    -webkit-backdrop-filter: blur(var(--glass-control-blur));
+    border-radius: var(--radius);
+    transition: background var(--duration-fast) var(--ease-out);
   }
 
-  /* Frosted glass utility classes */
-  .frosted-glass {
-    @apply backdrop-blur-md bg-white/80 dark:bg-black/40 border border-gray-200/60 dark:border-white/20 shadow-sm;
+  .glass-control:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .dark .glass-control:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-control:focus-within {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .dark .glass-control:focus-within {
+    background: rgba(0, 0, 0, 0.45);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  /* Accent glass (for sheet close, accent buttons) */
+  .glass-accent {
+    @apply backdrop-blur-md border;
+    background: hsl(var(--accent) / 0.2);
+    border-color: hsl(var(--accent) / 0.3);
+    color: white;
+  }
+
+  /* Legacy compat — keep for existing usages during migration */
+  .frosted-glass-button {
+    @apply glass-control;
   }
 
   .frosted-glass-purple {
-    @apply backdrop-blur-md bg-purple-500/20 border border-purple-400/30 text-white;
+    @apply glass-accent;
   }
 
-  .frosted-glass-button {
-    @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 transition-all duration-200 shadow-none;
-  }
+  /* ---- Animations ---- */
 
-  .frosted-glass-button:autofill,
-  .frosted-glass-button:-webkit-autofill,
-  .frosted-glass-button:-webkit-autofill:hover,
-  .frosted-glass-button:-webkit-autofill:focus {
-    -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
-    -webkit-text-fill-color: inherit !important;
-    transition: background-color 5000s ease-in-out 0s;
-  }
-
-  /* Gradient blur for bottom edges */
-  .blur-gradient-bottom {
-    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-  }
-
-  /* Slide in animation */
   @keyframes slide-in-from-top {
-    from {
-      transform: translateY(-100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
+    from { transform: translateY(-100%); opacity: 0; }
+    to   { transform: translateY(0);     opacity: 1; }
   }
 
-  .animate-slide-in-from-top {
-    animation: slide-in-from-top 0.3s ease-out;
-  }
-
-  /* Slide in from right animation */
   @keyframes slide-in-right {
-    from {
-      transform: translateX(100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateX(0);
-      opacity: 1;
-    }
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
   }
 
-  .animate-slide-in-right {
-    animation: slide-in-right 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  /* Slide up from bottom animation */
   @keyframes slide-up {
-    from {
-      transform: translateY(100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
   }
 
-  .animate-slide-up {
-    animation: slide-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  @keyframes zoomIntoFx {
+    0%   { transform: scale(1);  opacity: 1; }
+    100% { transform: scale(15); opacity: 0; }
   }
 
-  /* Floating glass card */
-  .glass-card {
-    background: var(--glass-panel-bg);
-    border: 1px solid var(--glass-panel-border);
-    backdrop-filter: blur(var(--glass-panel-blur));
-    -webkit-backdrop-filter: blur(var(--glass-panel-blur));
-    box-shadow: var(--glass-panel-shadow);
-    border-radius: var(--card-radius);
-  }
+  .animate-slide-in-from-top { animation: slide-in-from-top var(--duration-normal) var(--ease-out); }
+  .animate-slide-in-right    { animation: slide-in-right    var(--duration-normal) var(--ease-out); }
+  .animate-slide-up          { animation: slide-up          var(--duration-normal) var(--ease-out); }
+  .animate-zoom-into-fx      { animation: zoomIntoFx 1.5s var(--ease-smooth) forwards; }
 
   @media (prefers-reduced-motion: reduce) {
     .animate-slide-in-right,
@@ -237,7 +240,16 @@ All colors MUST be HSL.
     }
   }
 
-  /* Remove search input decorations */
+  /* ---- Scrollbar ---- */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ---- Search input cleanup ---- */
   input[type="search"]::-webkit-search-decoration,
   input[type="search"]::-webkit-search-cancel-button,
   input[type="search"]::-webkit-search-results-button,
@@ -245,43 +257,23 @@ All colors MUST be HSL.
     display: none;
   }
 
-  /* Stable focus styles for frosted glass inputs */
-  .frosted-glass-button:focus {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .dark .frosted-glass-button:focus {
-    background-color: rgba(0, 0, 0, 0.3);
-  }
-
-  /* Hide Leaflet attribution (watermark) */
+  /* ---- Leaflet overrides ---- */
   .leaflet-control-attribution {
     display: none !important;
   }
 
-  /* Hide scrollbar for category filter and other horizontal scrolls */
-  .scrollbar-hide {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
-  }
-
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;  /* Chrome, Safari, Opera */
-  }
-
-  /* ---- Leaflet fixes: remove tile "grid" lines & match sea gray ---- */
   .leaflet-container,
   .leaflet-pane,
   .leaflet-tile-pane,
   .leaflet-layer {
-    background: #1f2124 !important; /* sea gray - prevents white flash & hides seams while loading */
+    background: #1a1a1f !important;
   }
 
   .leaflet-container .leaflet-tile {
     border: 0 !important;
-    outline: 1px solid transparent; /* masks subpixel gaps that can appear as grid lines */
+    outline: 1px solid transparent;
     opacity: 0;
-    transition: opacity 0.3s ease-in-out;
+    transition: opacity var(--duration-normal) ease-in-out;
   }
 
   .leaflet-container .leaflet-tile.leaflet-tile-loaded {
@@ -292,34 +284,35 @@ All colors MUST be HSL.
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Smooth zoom transitions */
   .leaflet-zoom-animated {
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform var(--duration-normal) var(--ease-smooth);
   }
 
-  /* Smooth marker transitions */
   .leaflet-marker-icon,
   .leaflet-marker-shadow {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-in-out;
+    transition:
+      transform var(--duration-normal) var(--ease-smooth),
+      opacity var(--duration-normal) ease-in-out;
   }
-  /* ------------------------------------------------------------------ */
 
-  /* User location marker with pulsating animation */
+  /* ---- User location marker ---- */
   .user-location-marker {
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: white;
     box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
-    animation: location-pulse 1s ease-out infinite;
+    animation: location-pulse 1.5s ease-out infinite;
   }
 
   @keyframes location-pulse {
-    0% {
-      box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
-    }
-    100% {
-      box-shadow: 0 0 0 12px rgba(255, 255, 255, 0);
-    }
+    0%   { box-shadow: 0 0 0 0   rgba(255, 255, 255, 0.7); }
+    100% { box-shadow: 0 0 0 14px rgba(255, 255, 255, 0); }
+  }
+
+  /* ---- Gradient blur for bottom edges ---- */
+  .blur-gradient-bottom {
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
   }
 }

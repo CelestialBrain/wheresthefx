@@ -11,12 +11,11 @@ interface EventDatesDisplayProps {
   isPublishedEvent?: boolean;
 }
 
-export function EventDatesDisplay({ 
-  primaryDate, 
+export function EventDatesDisplay({
+  primaryDate,
   primaryEndDate,
   primaryTime,
   primaryEndTime,
-  primaryVenue,
 }: EventDatesDisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -36,11 +35,11 @@ export function EventDatesDisplay({
     const l = new Date(last);
     const fMonth = f.toLocaleDateString('en-PH', { month: 'short' });
     const lMonth = l.toLocaleDateString('en-PH', { month: 'short' });
-    
+
     if (fMonth === lMonth) {
-      return `${fMonth} ${f.getDate()}-${l.getDate()}`;
+      return `${fMonth} ${f.getDate()}–${l.getDate()}`;
     }
-    return `${fMonth} ${f.getDate()} - ${lMonth} ${l.getDate()}`;
+    return `${fMonth} ${f.getDate()} – ${lMonth} ${l.getDate()}`;
   };
 
   const formatTime = (timeStr: string | null) => {
@@ -57,7 +56,7 @@ export function EventDatesDisplay({
     if (!start) return null;
     const end = formatTime(endTime);
     if (!end) return start;
-    return `${start} - ${end}`;
+    return `${start} – ${end}`;
   };
 
   const calculateDaySpan = (startDate: string, endDate: string): number => {
@@ -78,43 +77,44 @@ export function EventDatesDisplay({
     return dates;
   };
 
-  // Multi-day event
+  // Multi-day
   if (isMultiDay && primaryDate && primaryEndDate) {
     const daySpan = calculateDaySpan(primaryDate, primaryEndDate);
     const timeRangeStr = formatTimeRange(primaryTime, primaryEndTime);
     const displayDates = generateDateRange(primaryDate, primaryEndDate);
 
     return (
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 text-xs w-full text-left hover:bg-muted/50 -mx-1 px-1 py-0.5 rounded transition-colors"
+          className="flex items-center gap-1.5 text-[11px] w-full text-left hover:bg-muted/30 -mx-0.5 px-0.5 py-0.5 rounded transition-colors"
+          style={{ transitionDuration: 'var(--duration-fast)' }}
         >
-          <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <Calendar className="h-3 w-3 text-muted-foreground flex-shrink-0" />
           <span className="font-medium">{formatDateRange(primaryDate, primaryEndDate)}</span>
-          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-medium">
+          <span className="text-[10px] text-muted-foreground bg-muted/50 px-1 py-0 rounded font-medium">
             {daySpan}d
           </span>
           {timeRangeStr && (
-            <span className="flex items-center gap-1 text-muted-foreground">
-              <Clock className="h-3 w-3" />
+            <span className="flex items-center gap-0.5 text-muted-foreground">
+              <Clock className="h-2.5 w-2.5" />
               {timeRangeStr}
             </span>
           )}
-          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`h-3 w-3 text-muted-foreground/50 ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
         </button>
 
         {isExpanded && (
-          <div className="mt-2 rounded-lg border border-border bg-muted/30 p-2 space-y-1">
+          <div className="rounded-md border border-border/30 bg-muted/20 p-1.5 space-y-0.5">
             {displayDates.map((dateStr, index) => (
               <div
                 key={`${dateStr}-${index}`}
-                className="flex items-center justify-between text-xs px-2 py-1"
+                className="flex items-center justify-between text-[11px] px-1.5 py-0.5"
               >
                 <span className="text-foreground">{formatDate(dateStr)}</span>
                 {timeRangeStr && (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Clock className="h-3 w-3" />
+                  <span className="flex items-center gap-0.5 text-muted-foreground">
+                    <Clock className="h-2.5 w-2.5" />
                     {timeRangeStr}
                   </span>
                 )}
@@ -126,24 +126,23 @@ export function EventDatesDisplay({
     );
   }
 
-  // Single day event
+  // Single day
   const timeRangeStr = formatTimeRange(primaryTime, primaryEndTime);
 
   return (
-    <div className="flex items-center gap-4 text-xs">
+    <div className="flex items-center gap-3 text-[11px]">
       {primaryDate && (
-        <div className="flex items-center gap-1.5">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-1">
+          <Calendar className="h-3 w-3 text-muted-foreground" />
           <span className="font-medium">{formatDate(primaryDate)}</span>
         </div>
       )}
       {timeRangeStr && (
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Clock className="h-4 w-4" />
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <Clock className="h-3 w-3" />
           <span>{timeRangeStr}</span>
         </div>
       )}
-
     </div>
   );
 }

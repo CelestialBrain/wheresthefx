@@ -153,7 +153,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
 
   return (
     <>
-      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-0 bg-[#262626]" />
+      <div ref={containerRef} className="fixed inset-0 w-full h-screen z-[var(--z-map)] bg-[#1a1a1f]" />
 
       {selectedMarker && (
         <>

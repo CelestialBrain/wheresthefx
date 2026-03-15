@@ -47,36 +47,33 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
       return;
     }
 
-    // TODO: needs Express endpoint — POST /api/events/:id/reports (event_reports table)
     toast.success("Event reported successfully");
     setReportDialogOpen(false);
     setReportingPostId(null);
   };
 
-
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-full sm:max-w-md glass-card border-l-0 sm:mr-[var(--card-margin,16px)] sm:mt-[var(--card-margin,16px)] sm:mb-[var(--card-margin,16px)] sm:rounded-[var(--card-radius,16px)] sm:h-[calc(100vh-32px)]">
+      <SheetContent side="right" className="w-full sm:max-w-sm glass-card border-l-0 sm:mr-[var(--card-margin)] sm:mt-[var(--card-margin)] sm:mb-[var(--card-margin)] sm:rounded-[var(--card-radius)] sm:h-[calc(100vh-var(--card-margin)*2)]">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Heart className="h-5 w-5 fill-accent text-accent" />
+          <SheetTitle className="flex items-center gap-2 text-sm">
+            <Heart className="h-4 w-4 fill-accent text-accent" />
             Saved Events ({savedEvents.length})
           </SheetTitle>
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-100px)] mt-6">
+        <ScrollArea className="h-[calc(100vh-80px)] mt-4">
           {savedEvents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <Heart className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No saved events yet</p>
-              <p className="text-sm text-muted-foreground mt-2">
+            <div className="flex flex-col items-center justify-center h-52 text-center">
+              <Heart className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm text-muted-foreground">No saved events yet</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">
                 Save events to view them here
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2.5 pr-3">
               {savedEvents.map((event: any) => {
-                // Transform EventData from Express API to InstagramPost interface
                 const postData: InstagramPost = {
                   id: String(event.id),
                   post_id: String(event.id),
@@ -132,7 +129,7 @@ export function SavedEventsDrawer({ open, onClose }: SavedEventsDrawerProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmReport} className="bg-red-500 hover:bg-red-600">
+            <AlertDialogAction onClick={handleConfirmReport} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
               Report
             </AlertDialogAction>
           </AlertDialogFooter>

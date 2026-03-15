@@ -137,8 +137,8 @@ const Index = () => {
       {/* Map (always rendered, revealed after fade) */}
       <div className={`h-screen transition-opacity duration-1000 ${isMapUnlocked ? 'opacity-100' : 'opacity-0'}`}>
         <MapFilters onFilterChange={setFilters} onSearchChange={setSearchQuery} />
-        {/* Category filter chips - floating below search bar */}
-        <div className="fixed top-[76px] left-0 right-0 z-30">
+        {/* Category filter chips — flush below search bar, clear sidebar on desktop */}
+        <div className="fixed top-[42px] left-0 right-0 lg:right-[calc(theme(width.72)+var(--card-margin))] z-[var(--z-controls)]">
           <CategoryFilter 
             activeCategory={selectedCategory} 
             onCategoryChange={(cat) => {

@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
-import { MapPin, Search, Filter } from "lucide-react";
+import { MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { fetchEvents, EventData } from "@/api/client";
 import { toast as sonnerToast } from "sonner";
 
@@ -181,52 +180,54 @@ export const EventSidebar = () => {
   };
 
   return (
-    <aside className="fixed top-[var(--card-margin,16px)] right-[var(--card-margin,16px)] bottom-[var(--card-margin,16px)] w-80 z-[900] glass-card flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - 32px)' }}>
-      <div className="p-6 space-y-4 shrink-0 border-b border-border/30">
+    <aside className="fixed top-[var(--card-margin)] right-[var(--card-margin)] bottom-[var(--card-margin)] w-72 z-[var(--z-sidebar)] glass-card flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - var(--card-margin) * 2)' }}>
+      {/* Header */}
+      <div className="px-3.5 py-3 space-y-2.5 shrink-0 border-b border-border/30">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             Functions Near You
           </h2>
           {!locationGranted && (
-            <Button variant="ghost" size="sm" onClick={requestLocation} disabled={isLoading} className="text-xs">
+            <Button variant="ghost" size="sm" onClick={requestLocation} disabled={isLoading} className="text-[11px] h-6 px-2">
               <MapPin className="h-3 w-3 mr-1" />
               Enable
             </Button>
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
           {locationGranted
             ? userLocation
-              ? `Quezon City • Sorted by distance${lastUpdate ? ` • Updated ${lastUpdate}` : ""}`
-              : "Quezon City • Location denied"
+              ? `Quezon City \u00b7 By distance${lastUpdate ? ` \u00b7 ${lastUpdate}` : ""}`
+              : "Quezon City \u00b7 Location denied"
             : "Enable location to see events near you"}
         </p>
 
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Search events..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9"
+            className="pl-8 h-8 text-xs"
           />
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      {/* Event list */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
         {!locationGranted ? (
-          <div className="text-center py-12 space-y-3">
-            <MapPin className="h-12 w-12 mx-auto text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">
-              Enable location to discover functions happening near you
+          <div className="text-center py-10 space-y-3">
+            <MapPin className="h-10 w-10 mx-auto text-muted-foreground/20" />
+            <p className="text-xs text-muted-foreground">
+              Enable location to discover functions near you
             </p>
-            <Button onClick={requestLocation} disabled={isLoading}>
+            <Button size="sm" onClick={requestLocation} disabled={isLoading}>
               {isLoading ? "Requesting..." : "Enable Location"}
             </Button>
           </div>
         ) : isLoadingPosts ? (
-          <div className="text-center py-8 text-sm text-muted-foreground">Loading events...</div>
+          <div className="text-center py-8 text-xs text-muted-foreground">Loading events...</div>
         ) : (
           <>
             {filteredPosts.slice(0, displayLimit).map((post) => (
@@ -234,15 +235,15 @@ export const EventSidebar = () => {
             ))}
 
             {filteredPosts.length > displayLimit && (
-              <div ref={loadMoreRef} className="py-4">
-                <div className="text-center text-sm text-muted-foreground">
+              <div ref={loadMoreRef} className="py-3">
+                <div className="text-center text-[11px] text-muted-foreground">
                   {isLoadingMore ? "Loading more..." : "Scroll for more"}
                 </div>
               </div>
             )}
 
             {filteredPosts.length === 0 && (
-              <div className="text-center py-8 text-sm text-muted-foreground">No events found</div>
+              <div className="text-center py-8 text-xs text-muted-foreground">No events found</div>
             )}
           </>
         )}

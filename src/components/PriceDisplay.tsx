@@ -10,54 +10,51 @@ interface PriceDisplayProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-export function PriceDisplay({ 
-  isFree, 
-  price, 
-  priceMin, 
-  priceMax, 
-  priceNotes,
-  size = 'md' 
-}: PriceDisplayProps) {
-  
-  const sizeClasses = {
-    sm: 'text-sm',
-    md: 'text-base',
-    lg: 'text-lg font-semibold'
-  };
+const sizeClasses = {
+  sm: 'text-[11px]',
+  md: 'text-xs',
+  lg: 'text-sm font-semibold',
+};
 
-  // FREE event
+export function PriceDisplay({
+  isFree,
+  price,
+  priceMin,
+  priceMax,
+  priceNotes,
+  size = 'md'
+}: PriceDisplayProps) {
+
   if (isFree) {
     return (
-      <div className={`flex items-center gap-1.5 text-green-600 ${sizeClasses[size]}`}>
-        <Gift className="h-4 w-4" />
-        <span className="font-bold">FREE</span>
+      <div className={`flex items-center gap-1 text-success ${sizeClasses[size]}`}>
+        <Gift className="h-3 w-3" />
+        <span className="font-semibold">FREE</span>
       </div>
     );
   }
 
-  // Price range (new schema)
   if (priceMin != null && priceMax != null) {
     const hasTiers = priceMin !== priceMax;
-    
+
     return (
-      <div className={`flex items-center gap-1.5 ${sizeClasses[size]}`}>
-        <Banknote className="h-4 w-4 text-muted-foreground" />
-        <span className="font-semibold">
+      <div className={`flex items-center gap-1 text-muted-foreground ${sizeClasses[size]}`}>
+        <Banknote className="h-3 w-3" />
+        <span className="font-medium">
           {hasTiers ? (
-            <>₱{priceMin.toLocaleString()} - ₱{priceMax.toLocaleString()}</>
+            <>₱{priceMin.toLocaleString()} – ₱{priceMax.toLocaleString()}</>
           ) : (
             <>₱{priceMin.toLocaleString()}</>
           )}
         </span>
-        
+
         {priceNotes && (
           <Tooltip>
             <TooltipTrigger>
-              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+              <Info className="h-3 w-3 text-muted-foreground/60 cursor-help" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              <p className="font-medium mb-1">Pricing Details:</p>
-              <p className="text-sm whitespace-pre-wrap">{priceNotes}</p>
+              <p className="text-xs whitespace-pre-wrap">{priceNotes}</p>
             </TooltipContent>
           </Tooltip>
         )}
@@ -65,18 +62,16 @@ export function PriceDisplay({
     );
   }
 
-  // Legacy single price fallback
   if (price != null) {
     return (
-      <div className={`flex items-center gap-1.5 ${sizeClasses[size]}`}>
-        <Banknote className="h-4 w-4 text-muted-foreground" />
-        <span className="font-semibold">₱{price.toLocaleString()}</span>
+      <div className={`flex items-center gap-1 text-muted-foreground ${sizeClasses[size]}`}>
+        <Banknote className="h-3 w-3" />
+        <span className="font-medium">₱{price.toLocaleString()}</span>
       </div>
     );
   }
 
-  // No price info
   return (
-    <span className="text-muted-foreground italic text-sm">Price TBA</span>
+    <span className="text-muted-foreground/60 italic text-[11px]">Price TBA</span>
   );
 }

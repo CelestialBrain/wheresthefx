@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Search, Calendar, User, Bookmark, Settings as SettingsIcon, DollarSign, LogOut, Bug, Info, Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -47,10 +46,10 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   const handleDateChange = (value: string) => {
     setSelectedDate(value);
     let dateRange;
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     switch (value) {
       case "today":
         dateRange = { start: today, end: today };
@@ -75,17 +74,17 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
         dateRange = { start: today, end: monthEnd };
         break;
     }
-    
+
     onFilterChange({ dateRange, priceFilter: selectedPrice });
   };
 
   const handlePriceChange = (value: string) => {
     setSelectedPrice(value);
-    
+
     let dateRange;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     switch (selectedDate) {
       case "today":
         dateRange = { start: today, end: today };
@@ -110,8 +109,8 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
         dateRange = { start: today, end: monthEnd };
         break;
     }
-    
-    onFilterChange({ 
+
+    onFilterChange({
       priceFilter: value,
       dateRange
     });
@@ -125,133 +124,122 @@ export function MapFilters({ onFilterChange, onSearchChange }: MapFiltersProps) 
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[1000] pointer-events-none">
-      <div className="container mx-auto px-[var(--card-margin,16px)] py-[var(--card-margin,16px)]" style={{ maxWidth: '1200px' }}>
-        {/* Floating glass bar */}
-        <div className="flex items-center gap-2 pointer-events-auto glass-card px-3 py-2">
-          {/* Left Side - Search and Filters */}
-          <div className="flex items-center gap-2 flex-1">
-            {/* Search - Always visible with dynamic width */}
-            <div className="flex-1 min-w-[100px]">
-              <div className="relative h-9 rounded-md frosted-glass-button">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/70 pointer-events-none z-20" />
-                <input
-                  className="absolute inset-0 w-full h-full bg-transparent pl-9 pr-4 text-sm text-white placeholder:text-white/60 focus:outline-none"
-                  placeholder="Search events, places, or accounts..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-
-            {/* Date Filter */}
-            <Select value={selectedDate} onValueChange={handleDateChange}>
-              <SelectTrigger className="md:w-[180px] w-10 bg-white dark:bg-neutral-900 text-foreground border border-white/20 dark:border-white/10 shadow-sm [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
-                <div className="flex items-center gap-2 w-full">
-                  <Calendar className="h-4 w-4 shrink-0" />
-                  <span className="hidden md:block">
-                    <SelectValue placeholder="Date" />
-                  </span>
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Dates</SelectItem>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="weekend">This Weekend</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Price Filter */}
-            <Select value={selectedPrice} onValueChange={handlePriceChange}>
-              <SelectTrigger className="md:w-[150px] w-10 bg-white dark:bg-neutral-900 text-foreground border border-white/20 dark:border-white/10 shadow-sm [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block">
-                <div className="flex items-center gap-2 w-full">
-                  <DollarSign className="h-4 w-4 shrink-0" />
-                  <span className="hidden md:block">
-                    <SelectValue placeholder="Price" />
-                  </span>
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Prices</SelectItem>
-                <SelectItem value="free">Free Only</SelectItem>
-                <SelectItem value="paid">Paid Events</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Right Side - User Menu Only */}
-          <div className="flex items-center">
-            {isUserLoggedIn ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="icon"
-                    className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 relative shadow-none"
-                  >
-                    <User className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                    Signed In
-                  </div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setSavedDrawerOpen(true)}>
-                    <Bookmark className="h-4 w-4 mr-2" />
-                    Saved Events
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast.info("Coming soon!")}>
-                    <SettingsIcon className="h-4 w-4 mr-2" />
-                    Account Settings
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-                    {theme === 'dark' ? (
-                      <>
-                        <Sun className="h-4 w-4 mr-2" />
-                        Light Mode
-                      </>
-                    ) : (
-                      <>
-                        <Moon className="h-4 w-4 mr-2" />
-                        Dark Mode
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast.info("Use the feedback button to report bugs")}>
-                    <Bug className="h-4 w-4 mr-2" />
-                    Report a Bug
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toast.info("Where's the f(x)? - Event Discovery App")}>
-                    <Info className="h-4 w-4 mr-2" />
-                    About
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sign Out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Button
-                size="icon"
-                className="frosted-glass-button backdrop-blur-xl bg-white/15 dark:bg-black/40 relative shadow-none"
-                onClick={() => navigate('/auth')}
-              >
-                <User className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+    <div className="fixed top-0 left-0 right-0 z-[var(--z-controls)]">
+      <div className="flex items-center gap-1.5 px-3 py-2.5">
+        {/* Search */}
+        <div className="relative flex-1 min-w-0 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/50 pointer-events-none" />
+          <input
+            className="w-full h-8 glass-control rounded-lg pl-8 pr-3 text-xs text-white placeholder:text-white/40 focus:outline-none"
+            placeholder="Search events..."
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            autoComplete="off"
+          />
         </div>
+
+        {/* Date Filter */}
+        <Select value={selectedDate} onValueChange={handleDateChange}>
+          <SelectTrigger className="md:w-[140px] w-8 h-8 glass-control bg-transparent text-white text-xs border-0 px-2 [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block md:[&>svg.lucide-chevron-down]:h-3 md:[&>svg.lucide-chevron-down]:w-3 md:[&>svg.lucide-chevron-down]:opacity-40">
+            <div className="flex items-center gap-1.5 w-full">
+              <Calendar className="h-3.5 w-3.5 shrink-0 opacity-70" />
+              <span className="hidden md:block truncate">
+                <SelectValue placeholder="Date" />
+              </span>
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Dates</SelectItem>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="week">This Week</SelectItem>
+            <SelectItem value="weekend">This Weekend</SelectItem>
+            <SelectItem value="month">This Month</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Price Filter */}
+        <Select value={selectedPrice} onValueChange={handlePriceChange}>
+          <SelectTrigger className="md:w-[120px] w-8 h-8 glass-control bg-transparent text-white text-xs border-0 px-2 [&>svg.lucide-chevron-down]:hidden md:[&>svg.lucide-chevron-down]:block md:[&>svg.lucide-chevron-down]:h-3 md:[&>svg.lucide-chevron-down]:w-3 md:[&>svg.lucide-chevron-down]:opacity-40">
+            <div className="flex items-center gap-1.5 w-full">
+              <DollarSign className="h-3.5 w-3.5 shrink-0 opacity-70" />
+              <span className="hidden md:block truncate">
+                <SelectValue placeholder="Price" />
+              </span>
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Prices</SelectItem>
+            <SelectItem value="free">Free Only</SelectItem>
+            <SelectItem value="paid">Paid Events</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* User Menu */}
+        {isUserLoggedIn ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="h-8 w-8 glass-control rounded-lg inline-flex items-center justify-center text-white/70 hover:text-white">
+                <User className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                Signed In
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setSavedDrawerOpen(true)}>
+                <Bookmark className="h-3.5 w-3.5 mr-2" />
+                Saved Events
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => toast.info("Coming soon!")}>
+                <SettingsIcon className="h-3.5 w-3.5 mr-2" />
+                Account Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                {theme === 'dark' ? (
+                  <>
+                    <Sun className="h-3.5 w-3.5 mr-2" />
+                    Light Mode
+                  </>
+                ) : (
+                  <>
+                    <Moon className="h-3.5 w-3.5 mr-2" />
+                    Dark Mode
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => toast.info("Use the feedback button to report bugs")}>
+                <Bug className="h-3.5 w-3.5 mr-2" />
+                Report a Bug
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => toast.info("Where's the f(x)? - Event Discovery App")}>
+                <Info className="h-3.5 w-3.5 mr-2" />
+                About
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                <LogOut className="h-3.5 w-3.5 mr-2" />
+                Sign Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <button
+            className="h-8 w-8 glass-control rounded-lg inline-flex items-center justify-center text-white/70 hover:text-white"
+            onClick={() => navigate('/auth')}
+          >
+            <User className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
-      <SavedEventsDrawer 
-        open={savedDrawerOpen} 
-        onClose={() => setSavedDrawerOpen(false)} 
+      <SavedEventsDrawer
+        open={savedDrawerOpen}
+        onClose={() => setSavedDrawerOpen(false)}
       />
     </div>
   );

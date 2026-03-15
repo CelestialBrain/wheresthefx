@@ -16,45 +16,44 @@ const availabilityConfig: Record<AvailabilityStatus, {
   available: {
     label: 'Available',
     icon: Ticket,
-    className: 'bg-green-500/10 text-green-600 border-green-500/20'
+    className: 'bg-success/10 text-success border-success/20',
   },
   sold_out: {
     label: 'SOLD OUT',
     icon: AlertTriangle,
-    className: 'bg-red-600 text-white border-red-700 font-bold'
+    className: 'bg-destructive text-destructive-foreground border-destructive font-semibold',
   },
   waitlist: {
-    label: 'Waitlist Only',
+    label: 'Waitlist',
     icon: Clock,
-    className: 'bg-purple-500/10 text-purple-600 border-purple-500/20'
+    className: 'bg-accent/10 text-accent border-accent/20',
   },
   limited: {
-    label: 'Limited Slots',
+    label: 'Limited',
     icon: Users,
-    className: 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+    className: 'bg-warning/10 text-warning border-warning/20',
   },
   few_left: {
-    label: '🔥 Few Left!',
+    label: 'Few Left',
     icon: AlertTriangle,
-    className: 'bg-orange-500 text-white border-orange-600 animate-pulse font-semibold'
-  }
+    className: 'bg-warning text-warning-foreground border-warning font-semibold',
+  },
 };
 
 export function AvailabilityBadge({ status, showIcon = true }: AvailabilityBadgeProps) {
   const safeStatus = status ?? 'available';
   const config = availabilityConfig[safeStatus];
-  
-  // Don't show badge for available (default state)
+
   if (safeStatus === 'available') return null;
 
   const Icon = config.icon;
 
   return (
-    <Badge 
+    <Badge
       variant="outline"
-      className={`${config.className} flex items-center gap-1`}
+      className={`${config.className} text-[10px] px-1.5 py-0 h-4 inline-flex items-center gap-0.5`}
     >
-      {showIcon && <Icon className="h-3 w-3" />}
+      {showIcon && <Icon className="h-2.5 w-2.5" />}
       {config.label}
     </Badge>
   );

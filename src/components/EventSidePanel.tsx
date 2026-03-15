@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { isLoggedIn } from "@/api/client";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
-import { useQueryClient } from "@tanstack/react-query";
 
 interface EventSidePanelProps {
   events: any[];
@@ -20,8 +18,6 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
   const [reportingEventId, setReportingEventId] = useState<string | null>(null);
   const [reportType, setReportType] = useState<string>("outdated");
   const [reportDescription, setReportDescription] = useState("");
-  const queryClient = useQueryClient();
-
 
   const handleReport = async () => {
     if (!isLoggedIn()) {
@@ -29,7 +25,6 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
       return;
     }
 
-    // TODO: needs Express endpoint — POST /api/events/:id/reports (event_reports table)
     toast.success("Report submitted. Thank you!");
     setReportDialogOpen(false);
     setReportDescription("");
@@ -37,26 +32,29 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
 
   return (
     <>
-      <div className="fixed top-[var(--card-margin,16px)] right-[var(--card-margin,16px)] bottom-[var(--card-margin,16px)] w-[calc(100%-32px)] md:w-[420px] z-[2000] glass-card flex flex-col animate-slide-in-right overflow-hidden" style={{ maxHeight: 'calc(100vh - 32px)' }}>
+      <div className="fixed top-[52px] right-[var(--card-margin)] bottom-[var(--card-margin)] w-[calc(100%-var(--card-margin)*2)] md:w-[380px] z-[var(--z-panel)] glass-card flex flex-col animate-slide-in-right overflow-hidden">
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="p-4 border-b border-border flex items-center justify-between">
+          <div className="px-3.5 py-3 border-b border-border/30 flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold">
+              <h2 className="text-sm font-semibold">
                 {events[0]?.location_name || "Event Location"}
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {events.length} {events.length === 1 ? "event" : "events"}
               </p>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
+            <button
+              onClick={onClose}
+              className="h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
 
           {/* Event List */}
-          <ScrollArea className="flex-1 p-4">
-            <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-3 -webkit-overflow-scrolling-touch">
+            <div className="space-y-2.5">
               {events.map((event) => {
                 const postData: InstagramPost = {
                   id: event.source_post_id || event.post_id,
@@ -80,7 +78,6 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                   signup_url: event.signup_url,
                   is_event: true,
                   category: event.category,
-                  // New fields
                   is_free: event.is_free,
                   price: event.price,
                   price_min: event.price_min,
@@ -99,19 +96,19 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
                 };
 
                 return (
-                  <InstagramPostCard 
-                    key={event.id} 
-                    post={postData} 
+                  <InstagramPostCard
+                    key={event.id}
+                    post={postData}
                     variant="popup"
                     onReport={(postId) => {
                       setReportingEventId(postId);
                       setReportDialogOpen(true);
-                    }} 
+                    }}
                   />
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </div>
 
@@ -124,7 +121,7 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
               Help us improve by reporting issues with this event
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-3 py-3">
             <Select value={reportType} onValueChange={setReportType}>
               <SelectTrigger>
                 <SelectValue />
@@ -141,14 +138,14 @@ export function EventSidePanel({ events, onClose }: EventSidePanelProps) {
               placeholder="Additional details (optional)"
               value={reportDescription}
               onChange={(e) => setReportDescription(e.target.value)}
-              rows={4}
+              rows={3}
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReportDialogOpen(false)}>
+            <Button variant="outline" size="sm" onClick={() => setReportDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleReport}>Submit Report</Button>
+            <Button size="sm" onClick={handleReport}>Submit Report</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
