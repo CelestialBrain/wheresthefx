@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { InstagramPostCard, InstagramPost } from "./InstagramPostCard";
 import { MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { fetchEvents, EventData } from "@/api/client";
+import { useQuery } from "@tanstack/react-query";
 import { toast as sonnerToast } from "sonner";
 
 const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
@@ -63,16 +64,56 @@ const toInstagramPost = (e: EventData): InstagramPost => ({
 export const EventSidebar = () => {
   const [locationGranted, setLocationGranted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [instagramPosts, setInstagramPosts] = useState<InstagramPostWithDistance[]>([]);
-  const [filteredPosts, setFilteredPosts] = useState<InstagramPostWithDistance[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>("");
   const [displayLimit, setDisplayLimit] = useState(20);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+  // Use React Query instead of raw useEffect fetch
+  const { data: allPosts = [], isLoading: isLoadingPosts } = useQuery({
+    queryKey: ['sidebar-events'],
+    queryFn: async () => {
+      const res = await fetchEvents({ is_event: "true" });
+      return (res.data || []).map(toInstagramPost);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Filter + sort client-side (memoized)
+  const filteredPosts = useMemo(() => {
+    let filtered: InstagramPostWithDistance[] = allPosts;
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (post) =>
+          post.caption?.toLowerCase().includes(q) ||
+          post.event_title?.toLowerCase().includes(q)
+      );
+    }
+
+    if (userLocation) {
+      filtered = filtered
+        .map((post) => {
+          if (!post.location_lat || !post.location_lng) return null;
+          const distance = calculateDistance(
+            userLocation.lat, userLocation.lng,
+            Number(post.location_lat), Number(post.location_lng)
+          );
+          return { ...post, distance };
+        })
+        .filter((post): post is InstagramPostWithDistance & { distance: number } => post !== null)
+        .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+    } else {
+      filtered = filtered.filter((post) => post.location_lat && post.location_lng);
+    }
+
+    return filtered;
+  }, [searchQuery, allPosts, userLocation]);
+
+  // Intersection observer for infinite scroll
   useEffect(() => {
     const loadMoreElement = loadMoreRef.current;
     if (!loadMoreElement || isLoadingMore) return;
@@ -94,52 +135,6 @@ export const EventSidebar = () => {
     return () => observer.disconnect();
   }, [displayLimit, filteredPosts.length, isLoadingMore]);
 
-  useEffect(() => {
-    fetchEvents({ is_event: "true" })
-      .then((res) => {
-        const posts = (res.data || []).map(toInstagramPost);
-        setInstagramPosts(posts);
-        setFilteredPosts(posts);
-      })
-      .catch((err) => {
-        console.error("Error fetching events:", err);
-        sonnerToast.error("Failed to load events.");
-      })
-      .finally(() => setIsLoadingPosts(false));
-  }, []);
-
-  useEffect(() => {
-    let filtered = instagramPosts;
-
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (post) =>
-          post.caption?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          post.event_title?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    if (userLocation) {
-      filtered = filtered
-        .map((post) => {
-          if (!post.location_lat || !post.location_lng) return null;
-          const distance = calculateDistance(
-            userLocation.lat,
-            userLocation.lng,
-            Number(post.location_lat),
-            Number(post.location_lng)
-          );
-          return { ...post, distance };
-        })
-        .filter((post): post is InstagramPostWithDistance & { distance: number } => post !== null)
-        .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
-    } else {
-      filtered = filtered.filter((post) => post.location_lat && post.location_lng);
-    }
-
-    setFilteredPosts(filtered);
-  }, [searchQuery, instagramPosts, userLocation]);
-
   const requestLocation = () => {
     setIsLoading(true);
     if ("geolocation" in navigator) {
@@ -151,26 +146,13 @@ export const EventSidebar = () => {
           setIsLoading(false);
           setLastUpdate(new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }));
           sonnerToast.success("Location enabled - showing events near you");
-
-          const intervalId = setInterval(() => {
-            navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                setLastUpdate(new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }));
-              },
-              (err) => console.log("Background location update failed:", err),
-              { enableHighAccuracy: false, maximumAge: 300000 }
-            );
-          }, 300000);
-
-          return () => clearInterval(intervalId);
         },
         () => {
           setIsLoading(false);
           sonnerToast.error("Location access denied - showing all QC events");
           setLocationGranted(true);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
       );
     } else {
       setIsLoading(false);

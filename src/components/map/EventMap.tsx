@@ -3,7 +3,7 @@ import L, { LatLngExpression, Map as LeafletMap, LayerGroup } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { createMiddleFingerIcon, type LocationMarker } from "@/utils/markerUtils";
 import { EventPopup, EventSidePanel } from "@/components/events";
-import { useEventMarkers, useMostPopularEvent } from "@/hooks/useEventMarkers";
+import { useEventMarkers } from "@/hooks/useEventMarkers";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface EventMapProps {
@@ -16,10 +16,9 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
   const mapRef = useRef<LeafletMap | null>(null);
   const markersLayerRef = useRef<LayerGroup | null>(null);
   const userLocationMarkerRef = useRef<L.Marker | null>(null);
+  const hasCenteredRef = useRef(false);
 
   const [selectedMarker, setSelectedMarker] = useState<LocationMarker | null>(null);
-  const [mapCenter, setMapCenter] = useState<LatLngExpression>([14.5995, 120.9842]); // Manila default
-  const [isMapLoading, setIsMapLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
 
   const isMobile = useIsMobile();
@@ -29,7 +28,6 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     ...filters,
     searchQuery,
   });
-  const { data: popularEvent } = useMostPopularEvent();
 
   // Initialize map once
   useEffect(() => {
@@ -41,10 +39,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       zoomControl: false,
       attributionControl: false,
       minZoom: 3,
-      maxBounds: [
-        [-90, -180],
-        [90, 180],
-      ],
+      maxBounds: [[-90, -180], [90, 180]],
       maxBoundsViscosity: 1.0,
       zoomAnimation: true,
       zoomAnimationThreshold: 4,
@@ -54,61 +49,58 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       inertiaDeceleration: 3000,
       inertiaMaxSpeed: Infinity,
       worldCopyJump: false,
-      zoomSnap: 1,              // Snap to integer zoom levels (clear tiles)
-      zoomDelta: 1,             // Each action = 1 zoom level
-      wheelPxPerZoomLevel: 60,  // Default sensitivity
-      wheelDebounceTime: 40,    // Responsive
+      zoomSnap: 1,
+      zoomDelta: 1,
+      wheelPxPerZoomLevel: 60,
+      wheelDebounceTime: 40,
     });
 
-    const tileLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       crossOrigin: true,
       updateWhenZooming: true,
       updateWhenIdle: false,
-      keepBuffer: 6,
+      keepBuffer: 3,
       maxNativeZoom: 19,
       maxZoom: 19,
       className: "eventmap-tiles",
     }).addTo(map);
 
-    // Remove loading indicators to prevent flash
-    tileLayer.off('loading');
-    tileLayer.off('load');
-
     markersLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
-  }, []); // run once
+  }, []);
 
-  // Update center based on geolocation or most popular event (run once on load)
+  // Center map — geolocation first, fallback to first marker. Run once.
   useEffect(() => {
+    if (hasCenteredRef.current) return;
+
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const center: [number, number] = [position.coords.latitude, position.coords.longitude];
-          setMapCenter(center);
           setUserLocation(center);
           mapRef.current?.setView(center, 12);
+          hasCenteredRef.current = true;
         },
         () => {
-          if (popularEvent?.location_lat && popularEvent?.location_lng) {
-            const center: [number, number] = [Number(popularEvent.location_lat), Number(popularEvent.location_lng)];
-            setMapCenter(center);
-            mapRef.current?.setView(center, 12);
+          // Geolocation denied — use first marker as fallback
+          if (markers.length > 0) {
+            mapRef.current?.setView([markers[0].lat, markers[0].lng], 12);
+            hasCenteredRef.current = true;
           }
         },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
       );
-    } else if (popularEvent?.location_lat && popularEvent?.location_lng) {
-      const center: [number, number] = [Number(popularEvent.location_lat), Number(popularEvent.location_lng)];
-      setMapCenter(center);
-      mapRef.current?.setView(center, 12);
+    } else if (markers.length > 0) {
+      mapRef.current?.setView([markers[0].lat, markers[0].lng], 12);
+      hasCenteredRef.current = true;
     }
-  }, [popularEvent]);
+  }, [markers]);
 
-  // Add user location marker
+  // User location marker
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !userLocation) return;
 
-    // Remove existing user location marker if any
     userLocationMarkerRef.current?.remove();
 
     const userIcon = L.divIcon({
@@ -130,7 +122,7 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     };
   }, [userLocation]);
 
-  // Render markers whenever data changes
+  // Render markers
   useEffect(() => {
     const map = mapRef.current;
     const layer = markersLayerRef.current;
@@ -139,9 +131,8 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
     layer.clearLayers();
 
     markers.forEach((m) => {
-      // Get primary category from first event (most common in cluster)
       const primaryCategory = m.events[0]?.category || 'other';
-      
+
       const marker = L.marker([m.lat, m.lng], {
         icon: createMiddleFingerIcon(m.eventCount, primaryCategory),
       });
@@ -155,13 +146,11 @@ export function EventMap({ filters, searchQuery }: EventMapProps) {
       <div ref={containerRef} className="fixed inset-0 w-full h-screen z-[var(--z-map)] bg-[#1a1a1f]" />
 
       {selectedMarker && (
-        <>
-          {isDesktop ? (
-            <EventSidePanel events={selectedMarker.events} onClose={() => setSelectedMarker(null)} />
-          ) : (
-            <EventPopup events={selectedMarker.events} onClose={() => setSelectedMarker(null)} />
-          )}
-        </>
+        isDesktop ? (
+          <EventSidePanel events={selectedMarker.events} onClose={() => setSelectedMarker(null)} />
+        ) : (
+          <EventPopup events={selectedMarker.events} onClose={() => setSelectedMarker(null)} />
+        )
       )}
     </>
   );

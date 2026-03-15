@@ -9,9 +9,9 @@ export function useSavedEvents() {
       const res = await fetchSavedEvents();
       return res.data || [];
     },
-    staleTime: 30 * 1000,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 }

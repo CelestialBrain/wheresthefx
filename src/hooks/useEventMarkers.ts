@@ -17,7 +17,6 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
   return useQuery({
     queryKey: ['event-markers', options],
     queryFn: async (): Promise<LocationMarker[]> => {
-      // Build query params for the Express API
       const params = new URLSearchParams();
 
       if (options.dateRange) {
@@ -46,7 +45,6 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const json = await res.json();
 
-      // API returns snake_case with all fields needed by sidebar cards
       const transformedData = (json.data || []).map((event: any) => ({
         id: event.id,
         post_id: null,
@@ -85,26 +83,6 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
 
       return groupEventsByProximity(transformedData, 100);
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-}
-
-export function useMostPopularEvent() {
-  return useQuery({
-    queryKey: ['most-popular-event'],
-    queryFn: async () => {
-      const today = new Date().toISOString().split('T')[0];
-      const res = await fetch(`${API_BASE}/api/events/map?date_from=${today}`);
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const json = await res.json();
-
-      if (json.data && json.data.length > 0) {
-        return {
-          location_lat: json.data[0].venue_lat,
-          location_lng: json.data[0].venue_lng,
-        };
-      }
-      return null;
-    },
+    staleTime: 5 * 60 * 1000,
   });
 }
