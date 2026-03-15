@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { WordCloud } from "./WordCloud";
-import { InterestTagSelector } from "./InterestTagSelector";
+import { WordCloud } from "@/components/shared";
+import { InterestTagSelector } from "@/components/shared/InterestTagSelector";
 import { usePopularAccounts } from "@/hooks/usePopularAccounts";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { Button } from "@/components/ui/button";

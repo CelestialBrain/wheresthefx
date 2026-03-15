@@ -13,17 +13,17 @@ import {
   TrendingUp,
   Database,
 } from "lucide-react";
-import { ConsolidatedReviewQueue } from "@/components/ConsolidatedReviewQueue";
-import { PublishedEventsManager } from "@/components/PublishedEventsManager";
-import { LocationTemplatesManager } from "@/components/LocationTemplatesManager";
-import { PatternManager } from "@/components/PatternManager";
-import { ScraperLogs } from "@/components/ScraperLogs";
-import { KnownVenuesManager } from "@/components/KnownVenuesManager";
-import { LocationCorrectionsViewer } from "@/components/LocationCorrectionsViewer";
-import { AccountVenueStatsViewer } from "@/components/AccountVenueStatsViewer";
-import { UnmatchedVenuesViewer } from "@/components/UnmatchedVenuesViewer";
-import { GeoConfigurationManager } from "@/components/GeoConfigurationManager";
-import { InstagramHandlesViewer } from "@/components/InstagramHandlesViewer";
+import { ConsolidatedReviewQueue } from "@/components/admin/ConsolidatedReviewQueue";
+import { PublishedEventsManager } from "@/components/admin/PublishedEventsManager";
+import { LocationTemplatesManager } from "@/components/admin/LocationTemplatesManager";
+import { PatternManager } from "@/components/admin/PatternManager";
+import { ScraperLogs } from "@/components/admin/ScraperLogs";
+import { KnownVenuesManager } from "@/components/admin/KnownVenuesManager";
+import { LocationCorrectionsViewer } from "@/components/admin/LocationCorrectionsViewer";
+import { AccountVenueStatsViewer } from "@/components/admin/AccountVenueStatsViewer";
+import { UnmatchedVenuesViewer } from "@/components/admin/UnmatchedVenuesViewer";
+import { GeoConfigurationManager } from "@/components/admin/GeoConfigurationManager";
+import { InstagramHandlesViewer } from "@/components/admin/InstagramHandlesViewer";
 
 const AdminPlaceholder = ({ title }: { title: string }) => (
   <div className="rounded-lg border border-border bg-card p-6 text-center space-y-2">

@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SavedEventsDrawer } from "./SavedEventsDrawer";
+import { SavedEventsDrawer } from "@/components/events";
 import { useNavigate } from "react-router-dom";
 import { isLoggedIn, logout } from "@/api/client";
 import { toast } from "sonner";

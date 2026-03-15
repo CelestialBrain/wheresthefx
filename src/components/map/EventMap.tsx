@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L, { LatLngExpression, Map as LeafletMap, LayerGroup } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { createMiddleFingerIcon, type LocationMarker } from "@/utils/markerUtils";
-import { EventPopup } from "./EventPopup";
-import { EventSidePanel } from "./EventSidePanel";
+import { EventPopup, EventSidePanel } from "@/components/events";
 import { useEventMarkers, useMostPopularEvent } from "@/hooks/useEventMarkers";
 import { useIsMobile } from "@/hooks/use-mobile";
 

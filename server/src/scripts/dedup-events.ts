@@ -8,25 +8,20 @@
  *   keep highest completeness_score.
  *
  * Pass 2 — Fuzzy venue+date match:
- *   Group remaining events by (normalized_venue, event_date).
- *   Within each group, cluster events whose titles share ≥40% of words
- *   (Jaccard similarity). Keep the best-scored event per cluster.
+ *   Group remaining events by normalized_venue.
+ *   Within each group, cluster events whose titles share ≥35% of words
+ *   (Jaccard similarity) AND have overlapping date ranges.
+ *   Keep the best-scored event per cluster.
  *
  * Usage:
  *   npx tsx src/scripts/dedup-events.ts          # Dry run (default)
  *   npx tsx src/scripts/dedup-events.ts --apply   # Actually delete duplicates
+ *
+ * Also exported as `runDedup(sql)` for use in the ingest pipeline.
  */
 
 import 'dotenv/config';
 import postgres from 'postgres';
-
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  throw new Error('DATABASE_URL is required');
-}
-
-const sql = postgres(DATABASE_URL);
-const APPLY = process.argv.includes('--apply');
 
 // ────────────────────────────────────────────────────────────────────────────
 // Normalization helpers
@@ -91,6 +86,7 @@ interface EventRow {
   id: number;
   title: string;
   event_date: string;
+  event_end_date: string | null;
   venue_name: string | null;
   source_username: string | null;
   completeness_score: number | null;
@@ -98,6 +94,15 @@ interface EventRow {
   event_hash: string | null;
   source_post_id: number | null;
   created_at: string;
+}
+
+/** Check if two events have overlapping date ranges */
+function datesOverlap(a: EventRow, b: EventRow): boolean {
+  const aStart = a.event_date;
+  const aEnd = a.event_end_date || a.event_date;
+  const bStart = b.event_date;
+  const bEnd = b.event_end_date || b.event_date;
+  return aStart <= bEnd && bStart <= aEnd;
 }
 
 function scoreSorter(a: EventRow, b: EventRow): number {
@@ -110,11 +115,128 @@ function scoreSorter(a: EventRow, b: EventRow): number {
   return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Core dedup function (importable)
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface DedupResult {
+  totalEvents: number;
+  exactDuplicates: number;
+  fuzzyDuplicates: number;
+  deleted: number;
+  remaining: number;
+}
+
+/**
+ * Run two-pass deduplication on the event table.
+ * Always applies deletions (no dry-run mode when called programmatically).
+ */
+export async function runDedup(conn: ReturnType<typeof postgres>): Promise<DedupResult> {
+  const events: EventRow[] = await conn`
+    SELECT id, title, event_date::text, event_end_date::text, venue_name, source_username,
+           completeness_score, confidence, event_hash, source_post_id,
+           created_at::text
+    FROM event
+    WHERE event_status = 'confirmed'
+    ORDER BY event_date, title
+  `;
+
+  const idsToDelete = new Set<number>();
+
+  // Pass 1: Exact normalized title + date
+  const exactGroups = new Map<string, EventRow[]>();
+  for (const row of events) {
+    const key = `${normalizeTitle(row.title)}||${row.event_date}`;
+    if (!exactGroups.has(key)) exactGroups.set(key, []);
+    exactGroups.get(key)!.push(row);
+  }
+
+  let pass1Count = 0;
+  for (const [_, group] of exactGroups) {
+    if (group.length <= 1) continue;
+    group.sort(scoreSorter);
+    for (const dupe of group.slice(1)) {
+      idsToDelete.add(dupe.id);
+      pass1Count++;
+    }
+  }
+
+  // Pass 2: Fuzzy venue + overlapping date
+  const remaining = events.filter(e => !idsToDelete.has(e.id));
+  const venueGroups = new Map<string, EventRow[]>();
+  for (const row of remaining) {
+    const key = normalizeVenue(row.venue_name);
+    if (!venueGroups.has(key)) venueGroups.set(key, []);
+    venueGroups.get(key)!.push(row);
+  }
+
+  const JACCARD_THRESHOLD = 0.35;
+  let pass2Count = 0;
+
+  for (const [_, group] of venueGroups) {
+    if (group.length <= 1) continue;
+
+    const assigned = new Set<number>();
+    for (let i = 0; i < group.length; i++) {
+      if (assigned.has(group[i].id)) continue;
+      const cluster: EventRow[] = [group[i]];
+      assigned.add(group[i].id);
+      const wordsI = titleWords(group[i].title);
+
+      for (let j = i + 1; j < group.length; j++) {
+        if (assigned.has(group[j].id)) continue;
+        if (!datesOverlap(group[i], group[j])) continue;
+        const wordsJ = titleWords(group[j].title);
+        if (jaccardSimilarity(wordsI, wordsJ) >= JACCARD_THRESHOLD) {
+          cluster.push(group[j]);
+          assigned.add(group[j].id);
+        }
+      }
+
+      if (cluster.length > 1) {
+        cluster.sort(scoreSorter);
+        for (const dupe of cluster.slice(1)) {
+          idsToDelete.add(dupe.id);
+          pass2Count++;
+        }
+      }
+    }
+  }
+
+  // Apply deletions
+  if (idsToDelete.size > 0) {
+    const idArr = [...idsToDelete];
+    await conn`DELETE FROM sub_event WHERE event_id = ANY(${idArr})`;
+    await conn`DELETE FROM saved_event WHERE event_id = ANY(${idArr})`;
+    await conn`DELETE FROM event WHERE id = ANY(${idArr})`;
+  }
+
+  return {
+    totalEvents: events.length,
+    exactDuplicates: pass1Count,
+    fuzzyDuplicates: pass2Count,
+    deleted: idsToDelete.size,
+    remaining: events.length - idsToDelete.size,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// CLI entry point (with verbose logging + dry-run support)
+// ────────────────────────────────────────────────────────────────────────────
+
 async function main() {
+  const DATABASE_URL = process.env.DATABASE_URL;
+  if (!DATABASE_URL) {
+    throw new Error('DATABASE_URL is required');
+  }
+
+  const sql = postgres(DATABASE_URL);
+  const APPLY = process.argv.includes('--apply');
+
   console.log(`\n🔍 Event Deduplication v2 (${APPLY ? '⚠️  APPLY MODE' : '🔒 DRY RUN'})\n`);
 
   const events: EventRow[] = await sql`
-    SELECT id, title, event_date::text, venue_name, source_username, 
+    SELECT id, title, event_date::text, event_end_date::text, venue_name, source_username,
            completeness_score, confidence, event_hash, source_post_id,
            created_at::text
     FROM event
@@ -126,11 +248,8 @@ async function main() {
 
   const idsToDelete = new Set<number>();
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PASS 1: Exact normalized title + date
-  // ══════════════════════════════════════════════════════════════════════════
+  // Pass 1: Exact
   console.log('\n═══ Pass 1: Exact Title Match ═══\n');
-
   const exactGroups = new Map<string, EventRow[]>();
   for (const row of events) {
     const key = `${normalizeTitle(row.title)}||${row.event_date}`;
@@ -154,29 +273,21 @@ async function main() {
   }
   console.log(`Pass 1 found: ${pass1Count} duplicates\n`);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PASS 2: Fuzzy — same venue + same date, title word overlap ≥ 40%
-  // ══════════════════════════════════════════════════════════════════════════
+  // Pass 2: Fuzzy
   console.log('═══ Pass 2: Fuzzy Venue+Date Match ═══\n');
-
-  // Only consider events not already marked for deletion
   const remaining = events.filter(e => !idsToDelete.has(e.id));
-
   const venueGroups = new Map<string, EventRow[]>();
   for (const row of remaining) {
-    const key = `${normalizeVenue(row.venue_name)}||${row.event_date}`;
+    const key = normalizeVenue(row.venue_name);
     if (!venueGroups.has(key)) venueGroups.set(key, []);
     venueGroups.get(key)!.push(row);
   }
 
-  const JACCARD_THRESHOLD = 0.35; // 35% word overlap = likely same event
+  const JACCARD_THRESHOLD = 0.35;
   let pass2Count = 0;
 
-  for (const [venueKey, group] of venueGroups) {
+  for (const [_, group] of venueGroups) {
     if (group.length <= 1) continue;
-
-    // Cluster events by title similarity
-    const clusters: EventRow[][] = [];
     const assigned = new Set<number>();
 
     for (let i = 0; i < group.length; i++) {
@@ -187,40 +298,32 @@ async function main() {
 
       for (let j = i + 1; j < group.length; j++) {
         if (assigned.has(group[j].id)) continue;
+        if (!datesOverlap(group[i], group[j])) continue;
         const wordsJ = titleWords(group[j].title);
-        const sim = jaccardSimilarity(wordsI, wordsJ);
-        if (sim >= JACCARD_THRESHOLD) {
+        if (jaccardSimilarity(wordsI, wordsJ) >= JACCARD_THRESHOLD) {
           cluster.push(group[j]);
           assigned.add(group[j].id);
         }
       }
 
       if (cluster.length > 1) {
-        clusters.push(cluster);
+        cluster.sort(scoreSorter);
+        const keeper = cluster[0];
+        console.log(`  🔗 Venue "${keeper.venue_name}" (${keeper.event_date})`);
+        console.log(`     KEEP: id=${keeper.id} "${keeper.title}" score=${keeper.completeness_score}`);
+        for (const dupe of cluster.slice(1)) {
+          const sim = jaccardSimilarity(titleWords(keeper.title), titleWords(dupe.title));
+          console.log(`     DEL:  id=${dupe.id} "${dupe.title}" score=${dupe.completeness_score} (sim=${sim.toFixed(2)})`);
+          idsToDelete.add(dupe.id);
+          pass2Count++;
+        }
+        console.log('');
       }
-    }
-
-    for (const cluster of clusters) {
-      cluster.sort(scoreSorter);
-      const keeper = cluster[0];
-      const dupes = cluster.slice(1);
-
-      console.log(`  🔗 Venue "${keeper.venue_name}" (${keeper.event_date})`);
-      console.log(`     KEEP: id=${keeper.id} "${keeper.title}" score=${keeper.completeness_score}`);
-      for (const dupe of dupes) {
-        const sim = jaccardSimilarity(titleWords(keeper.title), titleWords(dupe.title));
-        console.log(`     DEL:  id=${dupe.id} "${dupe.title}" score=${dupe.completeness_score} (sim=${sim.toFixed(2)})`);
-        idsToDelete.add(dupe.id);
-        pass2Count++;
-      }
-      console.log('');
     }
   }
   console.log(`Pass 2 found: ${pass2Count} fuzzy duplicates\n`);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // Summary & Apply
-  // ══════════════════════════════════════════════════════════════════════════
+  // Summary
   const totalToDelete = idsToDelete.size;
   console.log(`\n📊 Summary: ${totalToDelete} total duplicates (${pass1Count} exact + ${pass2Count} fuzzy)`);
   console.log(`   ${events.length} → ${events.length - totalToDelete} events\n`);
@@ -249,7 +352,11 @@ async function main() {
   await sql.end();
 }
 
-main().catch(err => {
-  console.error('❌ Error:', err);
-  process.exit(1);
-});
+// Only run main() when executed directly (not imported)
+const isDirectRun = process.argv[1]?.includes('dedup-events');
+if (isDirectRun) {
+  main().catch(err => {
+    console.error('❌ Error:', err);
+    process.exit(1);
+  });
+}

@@ -1,11 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { MathVerification } from "@/components/MathVerification";
-import { EventSidebar } from "@/components/EventSidebar";
-import { EventMap } from "@/components/EventMap";
-import { MapFilters } from "@/components/MapFilters";
-import { UserOnboarding } from "@/components/UserOnboarding";
-import { CategoryFilter } from "@/components/CategoryFilter";
+import { MathVerification, UserOnboarding } from "@/components/auth";
+import { EventSidebar } from "@/components/events";
+import { EventMap, MapFilters, CategoryFilter } from "@/components/map";
 import { Button } from "@/components/ui/button";
 import { UserCircle } from "lucide-react";
 import { useUserPreferences } from "@/hooks/useUserPreferences";

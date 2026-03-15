@@ -62,6 +62,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import { runDedup } from './dedup-events.js';
 
 // ============================================================================
 // CONFIGURATION
@@ -600,6 +601,15 @@ async function main() {
     const subEventsSynced = await syncSubEvents();
     console.log(`   ✅ ${subEventsSynced} sub-events`);
 
+    // Run fuzzy dedup after sync
+    console.log('🔍 Running deduplication...');
+    const dedupResult = await runDedup(sql);
+    if (dedupResult.deleted > 0) {
+      console.log(`   ✅ Removed ${dedupResult.deleted} duplicates (${dedupResult.exactDuplicates} exact + ${dedupResult.fuzzyDuplicates} fuzzy) → ${dedupResult.remaining} events`);
+    } else {
+      console.log(`   ✅ No duplicates found`);
+    }
+
     // Update sync log
     await db.update(schema.syncLog)
       .set({
@@ -615,7 +625,7 @@ async function main() {
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`\n✅ Sync completed in ${duration}s`);
-    console.log(`   Summary: ${venuesSynced} venues, ${accountsSynced} accounts, ${postsSynced} posts, ${eventsSynced} events, ${subEventsSynced} sub-events`);
+    console.log(`   Summary: ${venuesSynced} venues, ${accountsSynced} accounts, ${postsSynced} posts, ${eventsSynced} events, ${subEventsSynced} sub-events, ${dedupResult.deleted} deduped`);
 
   } catch (err) {
     // Log error

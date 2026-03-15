@@ -6,14 +6,10 @@ import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { isLoggedIn, toggleSaveEvent } from "@/api/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { ImageWithSkeleton } from "./ImageWithSkeleton";
+import { ImageWithSkeleton } from "@/components/shared";
 
 import { CATEGORY_LABELS, CATEGORY_COLORS } from "@/constants/categoryColors";
-import { EventStatusBadge, EventStatus } from "./EventStatusBadge";
-import { AvailabilityBadge, AvailabilityStatus } from "./AvailabilityBadge";
-import { PriceDisplay } from "./PriceDisplay";
-import { RecurringEventBadge } from "./RecurringEventBadge";
-import { EventDatesDisplay } from "./EventDatesDisplay";
+import { EventStatusBadge, EventStatus, AvailabilityBadge, AvailabilityStatus, PriceDisplay, RecurringEventBadge, EventDatesDisplay } from "@/components/badges";
 
 export interface InstagramPost {
   id: string;
