@@ -49,9 +49,10 @@ const sizeClasses = {
 
 export function EventStatusBadge({ status, showIcon = true, size = 'md' }: EventStatusBadgeProps) {
   const safeStatus = status ?? 'confirmed';
-  const config = statusConfig[safeStatus];
-
   if (safeStatus === 'confirmed') return null;
+
+  const config = statusConfig[safeStatus as EventStatus];
+  if (!config) return null;
 
   const Icon = config.icon;
 

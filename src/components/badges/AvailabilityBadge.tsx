@@ -42,9 +42,10 @@ const availabilityConfig: Record<AvailabilityStatus, {
 
 export function AvailabilityBadge({ status, showIcon = true }: AvailabilityBadgeProps) {
   const safeStatus = status ?? 'available';
-  const config = availabilityConfig[safeStatus];
-
   if (safeStatus === 'available') return null;
+
+  const config = availabilityConfig[safeStatus as AvailabilityStatus];
+  if (!config) return null;
 
   const Icon = config.icon;
 
