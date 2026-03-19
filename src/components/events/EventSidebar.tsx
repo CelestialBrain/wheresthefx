@@ -28,7 +28,7 @@ const toInstagramPost = (e: EventData): InstagramPost => ({
   id: String(e.id),
   post_id: `event-${e.id}`,
   caption: e.description || null,
-  post_url: e.signup_url || null,
+  post_url: e.source_post_url || e.source_post?.post_url || e.signup_url || null,
   image_url: e.image_url || null,
   stored_image_url: null,
   posted_at: e.event_date,

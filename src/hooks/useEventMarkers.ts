@@ -49,7 +49,7 @@ export function useEventMarkers(options: UseEventMarkersOptions = {}) {
         id: event.id,
         post_id: null,
         source_post_id: null,
-        post_url: null,
+        post_url: event.source_post_url || null,
         caption: null,
         event_title: event.title,
         event_date: event.event_date,

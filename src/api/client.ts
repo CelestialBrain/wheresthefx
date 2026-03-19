@@ -144,6 +144,9 @@ export interface EventData {
   source_username?: string | null;
   event_hash?: string | null;
   is_saved?: boolean;
+  // Source post info (for image proxy shortcode fallback)
+  source_post_shortcode?: string | null;
+  source_post_url?: string | null;
   venue?: any;
   sub_events?: any[];
   source_post?: any;

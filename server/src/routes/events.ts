@@ -112,6 +112,9 @@ router.get('/', optionalAuth, async (req: Request, res: Response) => {
         sourceAccount: {
           columns: { username: true, fullName: true },
         },
+        sourcePost: {
+          columns: { shortcode: true, postUrl: true },
+        },
         subEvent: true,
       },
       orderBy: [asc(event.eventDate), asc(event.eventTime)],
@@ -245,8 +248,11 @@ router.get('/map', async (req: Request, res: Response) => {
         recurrencePattern: event.recurrencePattern,
         priceMin: event.priceMin,
         priceMax: event.priceMax,
+        sourcePostShortcode: sourcePost.shortcode,
+        sourcePostUrl: sourcePost.postUrl,
       })
       .from(event)
+      .leftJoin(sourcePost, eq(event.sourcePostId, sourcePost.id))
       .where(and(...conditions))
       .orderBy(asc(event.eventDate));
 
