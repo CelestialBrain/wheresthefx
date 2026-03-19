@@ -111,11 +111,13 @@ Typical sync times:
 Images are **not** copied during ingest. Instead:
 
 1. Events store Instagram CDN URLs (`image_url`)
-2. The API has an image proxy endpoint (`/api/images/proxy`)
-3. The proxy first tries the CDN URL
-4. If expired (403/410), falls back to blead's local cache (`BLEAD_IMAGE_DIR/{shortcode}/`)
+2. The `/api/events/map` and `/api/events` endpoints include `source_post_shortcode` and `source_post_url` from the joined `source_post` table
+3. The frontend builds proxy URLs: `/api/images/proxy?url=<cdn_url>&shortcode=<code>`
+4. The proxy checks **local cache first** (`BLEAD_IMAGES_PATH/{shortcode}/`) for instant response
+5. Falls back to CDN if no local copy exists (with 5s timeout)
+6. Local cache responses are cached for 7 days; CDN responses for 24 hours
 
-This avoids duplicating image storage while ensuring images remain accessible even after CDN URLs expire.
+This avoids duplicating image storage while ensuring images remain accessible even after CDN URLs expire (most do within hours).
 
 ## Conventions
 

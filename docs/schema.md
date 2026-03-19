@@ -6,7 +6,7 @@ All column names follow **snake_case** convention. Tables use **singular nouns**
 
 ### event_category
 
-Values: `nightlife`, `music`, `art_culture`, `markets`, `food`, `comedy`, `workshops`, `community`, `other`
+Values: `nightlife`, `music`, `art_culture`, `markets`, `food`, `comedy`, `workshops`, `community`, `sports`, `gaming`, `fitness`, `film`, `tech`, `other`
 
 ### event_status
 
