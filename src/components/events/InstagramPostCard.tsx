@@ -3,7 +3,7 @@ import { MapPin, Heart, MessageCircle, ExternalLink, Bookmark, Flag, AtSign } fr
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { isLoggedIn, toggleSaveEvent } from "@/api/client";
+import { isLoggedIn, toggleSaveEvent, getImageUrl } from "@/api/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ImageWithSkeleton } from "@/components/shared";
@@ -133,12 +133,12 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
       {/* Top: Image + Meta */}
       <div className="flex gap-2.5">
         {/* Thumbnail */}
-        {(post.stored_image_url || post.image_url) && (
+        {(getImageUrl(post.stored_image_url, post.image_url, post.post_url)) && (
           variant === 'popup' ? (
             <div className="w-16 flex-shrink-0">
               <AspectRatio ratio={1 / 1}>
                 <ImageWithSkeleton
-                  src={post.stored_image_url || post.image_url}
+                  src={getImageUrl(post.stored_image_url, post.image_url, post.post_url)}
                   alt={post.event_title || "Event"}
                   className="w-full h-full rounded-md object-cover bg-muted"
                 />
@@ -146,7 +146,7 @@ export const InstagramPostCard = ({ post, variant = 'default', onReport, isSaved
             </div>
           ) : (
             <ImageWithSkeleton
-              src={post.stored_image_url || post.image_url}
+              src={getImageUrl(post.stored_image_url, post.image_url, post.post_url)}
               alt={post.event_title || "Event"}
               className="w-16 h-16 rounded-md flex-shrink-0 bg-muted"
             />

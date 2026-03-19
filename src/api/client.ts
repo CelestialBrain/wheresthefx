@@ -88,6 +88,32 @@ export function logout() {
 }
 
 // ============================================================================
+// IMAGE PROXY
+// ============================================================================
+
+/**
+ * Build the best available image URL for an event.
+ * Priority: stored_image_url > proxy (CDN + blead cache fallback) > null
+ */
+export function getImageUrl(
+  storedUrl: string | null | undefined,
+  cdnUrl: string | null | undefined,
+  postUrl?: string | null
+): string | null {
+  if (storedUrl) return storedUrl;
+  if (!cdnUrl) return null;
+  // Already a local/relative URL — use as-is
+  if (cdnUrl.startsWith('/')) return cdnUrl;
+
+  // Extract shortcode from post URL for blead cache fallback
+  const shortcode = postUrl?.match(/\/p\/([^/?]+)/)?.[1] || '';
+  const params = new URLSearchParams({ url: cdnUrl });
+  if (shortcode) params.set('shortcode', shortcode);
+
+  return `${API_BASE}/api/images/proxy?${params.toString()}`;
+}
+
+// ============================================================================
 // EVENTS
 // ============================================================================
 
@@ -209,16 +235,3 @@ export async function updatePreferences(categories: string[]) {
 // IMAGE PROXY
 // ============================================================================
 
-/**
- * Get proxied image URL. Handles expired Instagram CDN URLs by
- * routing through our backend proxy which falls back to local cache.
- */
-export function getImageUrl(imageUrl?: string | null, shortcode?: string | null): string {
-  if (!imageUrl) return '/placeholder.svg';
-  // If it's already a local/relative URL, use as-is
-  if (imageUrl.startsWith('/')) return imageUrl;
-  // Proxy through backend
-  const params = new URLSearchParams({ url: imageUrl });
-  if (shortcode) params.set('shortcode', shortcode);
-  return `${API_BASE}/api/images/proxy?${params}`;
-}
