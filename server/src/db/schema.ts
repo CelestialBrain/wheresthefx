@@ -100,6 +100,11 @@ export const eventCategoryEnum = pgEnum('event_category', [
   'community',
   'workshops',
   'comedy',
+  'sports',
+  'gaming',
+  'fitness',
+  'film',
+  'tech',
   'other',
 ]);
 

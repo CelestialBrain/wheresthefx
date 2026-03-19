@@ -35,6 +35,11 @@ const CATEGORY_META: Record<string, { label: string; emoji: string }> = {
   community: { label: 'Community', emoji: '🤝' },
   workshops: { label: 'Workshops', emoji: '🎓' },
   comedy: { label: 'Comedy', emoji: '😂' },
+  sports: { label: 'Sports', emoji: '🏀' },
+  gaming: { label: 'Gaming', emoji: '🎮' },
+  fitness: { label: 'Fitness', emoji: '💪' },
+  film: { label: 'Film', emoji: '🎬' },
+  tech: { label: 'Tech', emoji: '💻' },
   other: { label: 'Other', emoji: '📌' },
 };
 
