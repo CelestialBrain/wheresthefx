@@ -109,22 +109,8 @@ app.get('/api/images/proxy', async (req, res) => {
       return;
     }
 
-    // Try to fetch from CDN first
-    try {
-      const cdnResponse = await fetch(url);
-      if (cdnResponse.ok) {
-        const contentType = cdnResponse.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // 24h cache
-        const buffer = Buffer.from(await cdnResponse.arrayBuffer());
-        res.send(buffer);
-        return;
-      }
-    } catch {
-      // CDN failed, try local cache
-    }
-
-    // Fallback: try local cache
+    // Try local cache FIRST — instant, no network.
+    // Most CDN URLs are expired so checking them first just adds latency.
     if (shortcode && BLEAD_IMAGES_PATH) {
       const cacheDir = join(BLEAD_IMAGES_PATH, shortcode);
       if (existsSync(cacheDir)) {
@@ -134,14 +120,32 @@ app.get('/api/images/proxy', async (req, res) => {
         if (files.length > 0) {
           const filePath = join(cacheDir, files[0]);
           res.setHeader('Content-Type', 'image/jpeg');
-          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.setHeader('Cache-Control', 'public, max-age=604800'); // 7 days
           createReadStream(filePath).pipe(res);
           return;
         }
       }
     }
 
-    // Both CDN and cache failed
+    // Fallback: try CDN (may still work for recent posts)
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const cdnResponse = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (cdnResponse.ok) {
+        const contentType = cdnResponse.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        const buffer = Buffer.from(await cdnResponse.arrayBuffer());
+        res.send(buffer);
+        return;
+      }
+    } catch {
+      // CDN failed or timed out
+    }
+
+    // Both failed
     res.status(404).json({ error: 'Image not found' });
   } catch (err) {
     console.error('Image proxy error:', err);
