@@ -94,17 +94,19 @@ import { relations } from 'drizzle-orm';
 export const eventCategoryEnum = pgEnum('event_category', [
   'nightlife',
   'music',
-  'art_culture',
-  'markets',
-  'food',
-  'community',
-  'workshops',
-  'comedy',
-  'sports',
-  'gaming',
-  'fitness',
+  'arts',
   'film',
+  'comedy',
+  'food',
+  'markets',
+  'sports',
+  'fitness',
+  'workshops',
   'tech',
+  'community',
+  // Legacy values kept for backward compat during migration
+  'art_culture',
+  'gaming',
   'other',
 ]);
 

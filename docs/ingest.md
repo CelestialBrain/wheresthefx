@@ -68,6 +68,15 @@ cd server
 npm run ingest
 ```
 
+### From blead (local → VPS → production, one command)
+
+```bash
+cd /Users/angelonrevelo/Antigravity/blead
+bash scripts/ig-events/sync-to-production.sh
+```
+
+This rsyncs the local SQLite DB to VPS, runs ingest on VPS, and restarts the API.
+
 ## Sync Logging
 
 Every ingest run is logged to the `sync_log` table:

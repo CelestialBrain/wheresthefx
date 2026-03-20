@@ -28,19 +28,17 @@ const router = Router();
 /** Display metadata for each category */
 const CATEGORY_META: Record<string, { label: string; emoji: string }> = {
   nightlife: { label: 'Nightlife', emoji: '🌙' },
-  music: { label: 'Live Music', emoji: '🎵' },
-  art_culture: { label: 'Art & Culture', emoji: '🎨' },
-  markets: { label: 'Markets & Fairs', emoji: '🛍️' },
-  food: { label: 'Food & Drinks', emoji: '🍜' },
-  community: { label: 'Community', emoji: '🤝' },
-  workshops: { label: 'Workshops', emoji: '🎓' },
-  comedy: { label: 'Comedy', emoji: '😂' },
-  sports: { label: 'Sports', emoji: '🏀' },
-  gaming: { label: 'Gaming', emoji: '🎮' },
-  fitness: { label: 'Fitness', emoji: '💪' },
+  music: { label: 'Music', emoji: '🎵' },
+  arts: { label: 'Arts', emoji: '🎨' },
   film: { label: 'Film', emoji: '🎬' },
+  comedy: { label: 'Comedy', emoji: '😂' },
+  food: { label: 'Food', emoji: '🍜' },
+  markets: { label: 'Markets', emoji: '🛍️' },
+  sports: { label: 'Sports', emoji: '🏀' },
+  fitness: { label: 'Fitness', emoji: '💪' },
+  workshops: { label: 'Workshops', emoji: '🎓' },
   tech: { label: 'Tech', emoji: '💻' },
-  other: { label: 'Other', emoji: '📌' },
+  community: { label: 'Community', emoji: '🤝' },
 };
 
 /**
